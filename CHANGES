@@ -1,4 +1,172 @@
-Changes in 0.8.2
+Changes in 0.8.7
+----------------
+
+o snailmeter (speed indicator on the screen) is disabled automatically
+  when the host computer is fast enough for emulating the Atari800 at 
+  full speed.
+
+o Atari_Scanline() function was optimized - should be up to twice as fast
+  as was before.
+
+o Falcon: keyboard emulation of joystick was fixed once more. Now you can
+  hold down several keys at once and it works OK.
+
+o DOS: joystick is autodetected. If not present, keyboard emulates joy1.
+  If real joy is detected, keyboard emulates joy2. If "-joyswap" command
+  on command line is used, the joy1 and joy2 are exchanged.
+
+Changes in 0.8.6
+----------------
+
+o improved IRQ handling in CPU (CLI instruction) - now Rescue on Fractalus
+  reacts on keyboard presses
+
+o Falcon: real DMA sound with interrupt driven buffer recalculation using
+  Ron Fries POKEY 2.3
+
+o DOS: keyboard fix of HASH mark (Shift-3)
+
+o Falcon: keyboard fix of joystick emulation
+
+o DOS version starts even when sound card is not initialized (emulator is now
+  able to run under WindowsNT 4.0)
+
+o Falcon detects current video mode and doesn't touch VIDEL registers 
+  if it's 320/352/384x240x8bp (see the -resolution switch) - Atari800 should
+  now run on RGB monitors as well.
+
+o fixed little typo in BACK_SLASH (thanks Perry)
+
+o improved DOS and Falcon keyboard emulation (common KEYPRESSED and SHIFT_KEY)
+  DOS version now recognizes extended keys properly - joystick emulation is OK
+  (Chimera, BruceLee and others are now playable)
+
+o XL operating system is turned on in Coldstart routine.
+
+o keyboard IRQ are set only if allowed by IRQEN
+
+o DOS port emulates TAB and HELP key (HELP is mapped to F10 - not optimal,
+  should be changed to another key - perhaps F6, which is useless in XL mode)
+
+o DOS port has faster screen update with dosmemputl (Perry)
+
+o files on virtual drive are opened in binary mode (Perry)
+  and are listed in uppercase (Raster's suggestion)
+
+o fixed bug in SIO_Mount causing crashes when mounting drives in Disk management
+
+o in System menu (F1) copy font from operating system and not from shadow RAM
+  (another XL related bug fix)
+
+o added support for '\\' in file paths (see #define BACK_SLASH)
+
+Changes in 0.8.4
+----------------
+
+o fixed bug in vertical scrolling (visible for example in Archon intro) - 
+  thanks to Perry McFarlane
+
+
+o DMA sound for Falcon version (using POKEY 2.2). Buffer recalculation is
+  not interrupt driven yet.
+
+o Error messages are buffered until the original text mode is restored
+  (see #define BACKUP_MSG)
+
+o Falcon version supports up to two joysticks
+
+o Snailmeter :-) A kind of indicator for slow machines - it shows you
+  how many times is the emulator slower than real Atari800. On my
+  Afterburner (68040 @ 40 MHz) it's about three or four times slower
+  than original :-( If your machine is fast enough, the snailmeter
+  is not visible. So watch the lower bottom of screen! :-)
+
+Changes in 0.8.3
+----------------
+
+o Radek Sterba (raster@infos.cz) did a marvelous work on discovering
+  unofficial 6502 instructions. This CPU.C has implemented _all_ 256
+  opcodes! He added more than 70 unofficial instructions, many of them
+  were even unkown before. ESC code had to be changed from 0xff to 0xf2
+  (0xff is a kind of 'regular' instruction, while 0xf2 is the CIM).
+  Atari800 is the world's first 6502 emulator with full instruction set!
+  100% software compatibility with original 6502.
+
+o I've integrated his code and fixed JMP (addr) for addr crossing 
+  page boundary (6502 was 'buggy', though 65C02 should had this fixed).
+
+o IRQ variable has been changed from int to UBYTE (for C it shouldn't matter
+  and it helps in the m68k asm code).
+
+o Disk images created by XFormer and its utilities (having extension
+  .XFD or .DD) may be of double density - I implemented it in sio.c
+  (see #ifdef ORIGINAL_XFD_CODE). Tested and works (glad to get it working,
+  because I have a lot of XFD images).
+
+o In DOS/VGA version you can move the 320x200 screen around with Ctrl-Arrows
+  to see full 384x240 resolution of original Atari800. To restore the VGA
+  screen back to center press F10.
+
+o DOS/VGA version supports one real PC joystick (emulated in port 1).
+  You still can use the numeric keypad as emulated joystick - by default
+  in port 1, or in port 2 with "-joyswap" command line switch. Joystick
+  doesn't have the ghost-moves (interrupts are disabled during joy reading).
+  Also joystick is not read whenever the Atari800 wants it, but only in the
+  keyboard routine (i.e. regularly 50 times per second, basically in VBL).
+  This was important to prevent a game reading joy port too often to hang
+  or slow the emulation down (reading of PC joystick takes some time).
+
+o DOS port has finally got wonderfully clear sound, thanks to Ron Fries'
+  SoundBlaster Driver 1.2 and new, little/big-endian aware POKEY 2.2 routines.
+
+o New monitor S command for searching a value in memory.
+
+o The best news: found the reason why so many games didn't work in XL mode.
+  Fixed one MMU bug (XL didn't have TRIG2 and TRIG3 was connected to
+  cartridge) and introduced one MMU workaround (many 800-only games put
+  zero to PORTB. That's why Tapper and other games didn't work). Now the
+  compatibility ratio of Atari800 in XL/XE mode is at 97% or higher - 
+  definitely the most compatible Atari800/XL/XE emulator in the world.
+
+Changes in 0.8.2Petr
+----------------
+
+o Fixed wrong missile width (all missiles had the same width) - now River
+  Raid looks much better.
+
+o Added 28 cycles in Antic after executing DLI - it was absolutely needed,
+  because otherwise the interrupt routine was executed too late and the
+  effects (color or font change) occured with another Antic line - now
+  Pitfall II has the score displayed in numbers and not in characters.
+
+o Added several checks into SIO code for seeking() after end of file - 
+  on Falcon it caused enlarging of disk images (for example the well
+  known MENU.ATR has original size 1296 bytes, but after rebooting
+  of Atari800 the file was enlarged to 2598672 bytes). Maybe it's
+  a hidden endianess problem in SIO code? It happened on Amiga, too.
+
+o Added a method of invoking Monitor - by pressing the F8 key anytime
+  during emulation.
+
+o Added BREAK command into Monitor. Now it's possible to enter monitor,
+  use command BREAK <addr> and then CONT. The emulator then runs until
+  the PC (program counter) is exactly <addr>. Then the monitor is invoked
+  again.
+
+o DOS version has got joystick support and also sound support using Ron
+  Fries Pokey Emulation 2.0. The joystick is OK, but the sound is not
+  clear - need to change to interrupt driven sound buffer generating.
+
+o Atari800 has been ported to Atari Falcon (32-bit machine with MC68030
+  or MC68040 and flexible graphics processor). Besides the port this
+  Falcon version contains special CPU 6502 emulation written in pure
+  MC68030 assembler by Empty Head (Karel Rous), special very fast routines
+  for chunky2planar conversion (written by Douglas Little @ Black Scorpion)
+  and special code for VIDEL programming (provided by Douglas as well).
+  The keyboard and joystick emulation, the port itself and the fixes 
+  mentioned above were done by me, Petr Stehlik (stehlik@cas3.zlin.vutbr.cz).
+
+Changes in 0.8.2David
 ----------------
 
 o New Monitor READ command to load file into memory.

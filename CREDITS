@@ -95,4 +95,16 @@ Nathan Monson <nathan@polaristel.net>
   operations.
 
 Petr Stehlik <stehlik@cas3.zlin.vutbr.cz>
-o Added support for Atari Falcon
+- Added support for Atari Falcon
+- Added sound, keyboard and joystick support for DOS version
+
+Karel Rous <Empty Head>
+- rewrote CPU.C to optimized MC68030 assembler
+
+Radek Sterba <raster@infos.cz>
+- Added all missing CPU 6502 instructions
+- Works on DLI
+
+Perry McFarlane <ce596@freenet.toronto.on.ca>
+- Antic fix in vertical scroll
+- Works on complete Antic rewrite

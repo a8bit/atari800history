@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static char *rcsid = "$Id: list.c,v 1.1 1997/03/30 19:36:19 david Exp $";
+static char *rcsid = "$Id: list.c,v 1.3 1998/02/21 14:56:45 david Exp $";
 
 #include "list.h"
 
@@ -27,526 +27,479 @@ static char *rcsid = "$Id: list.c,v 1.1 1997/03/30 19:36:19 david Exp $";
 #define	TRUE 1
 
 /*+
-  Creates an empty List
+   Creates an empty List
 
-  List *ListCreate Returns an empty list.
-+*/
+   List *ListCreate Returns an empty list.
+   + */
 
-List *ListCreate (void)
+List *ListCreate(void)
 {
-  List *list;
+	List *list;
 
-  list = (List*)malloc(sizeof(List));
-  if (list)
-    {
-      list->head = NULL;
-      list->tail = NULL;
-      list->current = NULL;
-      list->next = NULL;
-    }
-
-  return list;
-}
-
-/*+
-  Releases all storages allocated by the supplied List. The data contained
-  in each node should be released by the function specified in the
-  argument list.
-
-  int ListFree returns TRUE on success and FALSE on failure.
-
-  List *list The List to deallocate.
-
-  void (*func)() The function that deallocates the data. The deallocation
-  function is called with a single argument (the data). The free() function
-  can be specified if the data is a pointer to an array of characters. A
-  NULL value can be supplied if a deallocation function is not necessary.
-  +*/
-
-int ListFree (List *list, void (*func)())
-{
-  struct list_entry *temp;
-  struct list_entry *next;
-
-  int ok = FALSE;
-
-  if (list)
-    {
-      for (temp=list->head;temp;temp=next)
-	{
-	  next = temp->next;
-	  if (func) (*func) (temp->data);
-	  free (temp);
+	list = (List *) malloc(sizeof(List));
+	if (list) {
+		list->head = NULL;
+		list->tail = NULL;
+		list->current = NULL;
+		list->next = NULL;
 	}
-
-      free (list);
-
-      ok = TRUE;
-    }
-
-  return ok;
+	return list;
 }
 
 /*+
-  Adds the supplied data item to Head of List.
+   Releases all storages allocated by the supplied List. The data contained
+   in each node should be released by the function specified in the
+   argument list.
 
-  int ListAddHead Returns TRUE on success and FALSE on failure.
+   int ListFree returns TRUE on success and FALSE on failure.
 
-  List *list The list that the data item is to be added to.
+   List *list The List to deallocate.
 
-  void *data Data item that is added to the list. This can be a pointer to
-  anything, and with care a simple integer value.
-  +*/
+   void (*func)() The function that deallocates the data. The deallocation
+   function is called with a single argument (the data). The free() function
+   can be specified if the data is a pointer to an array of characters. A
+   NULL value can be supplied if a deallocation function is not necessary.
+   + */
 
-int ListAddHead (List *list, void *data)
+int ListFree(List * list, void (*func) ())
 {
-  struct list_entry *temp;
+	struct list_entry *temp;
+	struct list_entry *next;
 
-  int ok = FALSE;
+	int ok = FALSE;
 
-  if (list)
-    {
-      temp = (struct list_entry*)malloc(sizeof(struct list_entry));
-      if (temp)
-	{
-	  temp->prev = NULL;
-	  temp->next = list->head;
-	  temp->data = data;
-
-	  if (list->head)
-	    {
-	      list->head->prev = temp;
-	      list->head = temp;
-	    }
-	  else
-	    {
-	      list->head = list->tail = temp;
-	    }
-
-	  ok = TRUE;
-	}
-    }
-
-  return ok;
-}
-
-/*+
-  Adds the supplied data item to Tail of List.
-
-  int ListAddTail Returns TRUE on success and FALSE on failure.
-
-  List *list The list that the data item is to be added to.
-
-  void *data Data item that is added to the list. This can be a pointer to
-  anything, and with care a simple integer value.
-  +*/
-
-int ListAddTail (List *list, void *data)
-{
-  struct list_entry *temp;
-
-  int ok = FALSE;
-
-  if (list)
-    {
-      temp = (struct list_entry*)malloc(sizeof(struct list_entry));
-      if (temp)
-	{
-	  temp->prev = list->tail;
-	  temp->next = NULL;
-	  temp->data = data;
-
-	  if (list->tail)
-	    {
-	      list->tail->next = temp;
-	      list->tail = temp;
-	    }
-	  else
-	    {
-	      list->head = list->tail = temp;
-	    }
-
-	  ok = TRUE;
-	}
-    }
-
-  return ok;
-}
-
-/*+
-  Merges list1 and list2. This is performed by appending list2 onto
-  list1. On return from this routine, list2 will have been de-allocated
-  and the return value will be the same as list1.
-
-  List *ListMerge list1 with list2 appended.
-
-  List *list1 This is the primary list.
-
-  List *list2 This is list that will be appended to the primary list.
-  +*/
-
-List *ListMerge (List *list1, List *list2)
-{
-  if (!list1->head)
-    {
-      list1->head = list2->head;
-      list1->tail = list2->tail;
-    }
-  else if (list2->head)
-    {
-      list1->tail->next = list2->head;
-      list2->head->prev = list1->tail;
-      list1->tail = list2->tail;
-    }
-
-  list2->head = NULL;
-  list2->tail = NULL;
-
-  ListFree (list2, NULL);
-
-  return list1;
-}
-
-/*+
-  ListSort() is called to sort a list into order.
-
-  List *list List that is to be sorted.
-
-  int (*func)() Pointer to a function that compares two entries in the list.
-  The function should return -1 if entry1 < entry2, 0 if entry1 = entry2
-  and +1 if entry1 > entry2.
-  +*/
-
-void ListSort (List *list, int (*func)())
-{
-  struct list_entry *next;
-  struct list_entry *temp;
-
-  void *data;
-  int done;
-  int result;
-
-  if (list->head)
-    {
-      done = FALSE;
-
-      while (!done)
-	{
-	  done = TRUE;
-
-	  for (temp=list->head,next=temp->next;next;temp=next,next=temp->next)
-	    {
-	      result = (*func) (temp->data, next->data);
-	      if (result == 1)
-		{
-		  data = temp->data;
-		  temp->data = next->data;
-		  next->data = data;
-
-		  done = FALSE;
+	if (list) {
+		for (temp = list->head; temp; temp = next) {
+			next = temp->next;
+			if (func)
+				(*func) (temp->data);
+			free(temp);
 		}
-	    }
+
+		free(list);
+
+		ok = TRUE;
 	}
-    }
+	return ok;
 }
 
 /*+
-  Resets current node back to head node.
+   Adds the supplied data item to Head of List.
 
-  int ListReset returns TRUE on success and FALSE on failure.
+   int ListAddHead Returns TRUE on success and FALSE on failure.
 
-  List *list The list to be reset.
-  +*/
+   List *list The list that the data item is to be added to.
 
-int ListReset (List *list)
+   void *data Data item that is added to the list. This can be a pointer to
+   anything, and with care a simple integer value.
+   + */
+
+int ListAddHead(List * list, void *data)
 {
-  int status = FALSE;
+	struct list_entry *temp;
 
-  if (list)
-    {
-      list->current = NULL;
-      list->prev = list->tail;
-      list->next = list->head;
-      status = TRUE;
-    }
+	int ok = FALSE;
 
-  return status;
+	if (list) {
+		temp = (struct list_entry *) malloc(sizeof(struct list_entry));
+		if (temp) {
+			temp->prev = NULL;
+			temp->next = list->head;
+			temp->data = data;
+
+			if (list->head) {
+				list->head->prev = temp;
+				list->head = temp;
+			}
+			else {
+				list->head = list->tail = temp;
+			}
+
+			ok = TRUE;
+		}
+	}
+	return ok;
 }
 
 /*+
-  This routine is used to traverse a list. Each time it is called the
-  next item in the list is returned. If ListReset() is called beforehand
-  then ListTraverse() returns the head node.
+   Adds the supplied data item to Tail of List.
 
-  int ListTraverse Returns TRUE indicates that the next entry has been
-  returned. FALSE indicates that the end of the list has been
-  reached and no entry has been returned.
+   int ListAddTail Returns TRUE on success and FALSE on failure.
 
-  List *list The list to be traversed.
+   List *list The list that the data item is to be added to.
 
-  void **entry This is an output variable and is used to store the address
-  of the next data item in the list.
-  +*/
+   void *data Data item that is added to the list. This can be a pointer to
+   anything, and with care a simple integer value.
+   + */
 
-int ListTraverse (List *list, void **entry /*+ Current Entry +*/)
+int ListAddTail(List * list, void *data)
 {
-  struct list_entry *next;
+	struct list_entry *temp;
 
-  int status;
+	int ok = FALSE;
 
-  next = list->next;
-  if (next)
-    {
-      *entry = next->data;
-      list->current = next;
-      list->prev = next->prev;
-      list->next = next->next;
-      status = TRUE;
-    }
-  else
-    {
-      status = FALSE;
-    }
+	if (list) {
+		temp = (struct list_entry *) malloc(sizeof(struct list_entry));
+		if (temp) {
+			temp->prev = list->tail;
+			temp->next = NULL;
+			temp->data = data;
 
-  return status;
+			if (list->tail) {
+				list->tail->next = temp;
+				list->tail = temp;
+			}
+			else {
+				list->head = list->tail = temp;
+			}
+
+			ok = TRUE;
+		}
+	}
+	return ok;
 }
 
 /*+
-  This routine is used to traverse a list. Each time it is called the
-  previous item in the list is returned. If ListReset() is called
-  beforehand then ListTraverseBck() returns the tail node.
+   Merges list1 and list2. This is performed by appending list2 onto
+   list1. On return from this routine, list2 will have been de-allocated
+   and the return value will be the same as list1.
 
-  int ListTraverseBck Returns TRUE indicates that the previous entry has
-  been returned. FALSE indicates that the begining of the list has been
-  reached and no entry has been returned.
+   List *ListMerge list1 with list2 appended.
 
-  List *list The list to be traversed.
+   List *list1 This is the primary list.
 
-  void **entry This is an output variable and is used to store the address
-  of the previous data item in the list.
-  +*/
+   List *list2 This is list that will be appended to the primary list.
+   + */
 
-int ListTraverseBck (List *list, void **entry /*+ Current Entry +*/)
+List *ListMerge(List * list1, List * list2)
 {
-  struct list_entry *prev;
+	if (!list1->head) {
+		list1->head = list2->head;
+		list1->tail = list2->tail;
+	}
+	else if (list2->head) {
+		list1->tail->next = list2->head;
+		list2->head->prev = list1->tail;
+		list1->tail = list2->tail;
+	}
+	list2->head = NULL;
+	list2->tail = NULL;
 
-  int status;
+	ListFree(list2, NULL);
 
-  prev = list->prev;
-  if (prev)
-    {
-      *entry = prev->data;
-      list->current = prev;
-      list->prev = prev->prev;
-      list->next = prev->next;
-      status = TRUE;
-    }
-  else
-    {
-      status = FALSE;
-    }
+	return list1;
+}
 
-  return status;
+/*+
+   ListSort() is called to sort a list into order.
+
+   List *list List that is to be sorted.
+
+   int (*func)() Pointer to a function that compares two entries in the list.
+   The function should return -1 if entry1 < entry2, 0 if entry1 = entry2
+   and +1 if entry1 > entry2.
+   + */
+
+void ListSort(List * list, int (*func) ())
+{
+	struct list_entry *next;
+	struct list_entry *temp;
+
+	void *data;
+	int done;
+	int result;
+
+	if (list->head) {
+		done = FALSE;
+
+		while (!done) {
+			done = TRUE;
+
+			for (temp = list->head, next = temp->next; next; temp = next, next = temp->next) {
+				result = (*func) (temp->data, next->data);
+				if (result == 1) {
+					data = temp->data;
+					temp->data = next->data;
+					next->data = data;
+
+					done = FALSE;
+				}
+			}
+		}
+	}
+}
+
+/*+
+   Resets current node back to head node.
+
+   int ListReset returns TRUE on success and FALSE on failure.
+
+   List *list The list to be reset.
+   + */
+
+int ListReset(List * list)
+{
+	int status = FALSE;
+
+	if (list) {
+		list->current = NULL;
+		list->prev = list->tail;
+		list->next = list->head;
+		status = TRUE;
+	}
+	return status;
+}
+
+/*+
+   This routine is used to traverse a list. Each time it is called the
+   next item in the list is returned. If ListReset() is called beforehand
+   then ListTraverse() returns the head node.
+
+   int ListTraverse Returns TRUE indicates that the next entry has been
+   returned. FALSE indicates that the end of the list has been
+   reached and no entry has been returned.
+
+   List *list The list to be traversed.
+
+   void **entry This is an output variable and is used to store the address
+   of the next data item in the list.
+   + */
+
+int ListTraverse(List * list, void **entry /*+ Current Entry + */ )
+{
+	struct list_entry *next;
+
+	int status;
+
+	next = list->next;
+	if (next) {
+		*entry = next->data;
+		list->current = next;
+		list->prev = next->prev;
+		list->next = next->next;
+		status = TRUE;
+	}
+	else {
+		status = FALSE;
+	}
+
+	return status;
+}
+
+/*+
+   This routine is used to traverse a list. Each time it is called the
+   previous item in the list is returned. If ListReset() is called
+   beforehand then ListTraverseBck() returns the tail node.
+
+   int ListTraverseBck Returns TRUE indicates that the previous entry has
+   been returned. FALSE indicates that the begining of the list has been
+   reached and no entry has been returned.
+
+   List *list The list to be traversed.
+
+   void **entry This is an output variable and is used to store the address
+   of the previous data item in the list.
+   + */
+
+int ListTraverseBck(List * list, void **entry /*+ Current Entry + */ )
+{
+	struct list_entry *prev;
+
+	int status;
+
+	prev = list->prev;
+	if (prev) {
+		*entry = prev->data;
+		list->current = prev;
+		list->prev = prev->prev;
+		list->next = prev->next;
+		status = TRUE;
+	}
+	else {
+		status = FALSE;
+	}
+
+	return status;
 }
 
 /*
    =====================================================
    Routines to be called from within a ListTraverse Loop
    =====================================================
-*/
+ */
 
 /*+
-  Deletes the current entry in the supplied linked list. Used in
-  conjunction with ListTraverse().
+   Deletes the current entry in the supplied linked list. Used in
+   conjunction with ListTraverse().
 
-  int ListDeleteEntry Returns TRUE on success and FALSE on failure.
+   int ListDeleteEntry Returns TRUE on success and FALSE on failure.
 
-  List *list The current entry in this list will be deleted.
-  +*/
+   List *list The current entry in this list will be deleted.
+   + */
 
-int ListDeleteEntry (List *list)
+int ListDeleteEntry(List * list)
 {
-  int status = FALSE;
+	int status = FALSE;
 
-  if (list)
-    {
-      struct list_entry *current;
+	if (list) {
+		struct list_entry *current;
 
-      current = list->current;
-      if (current)
-	{
-	  struct list_entry *prev;
-	  struct list_entry *next;
+		current = list->current;
+		if (current) {
+			struct list_entry *prev;
+			struct list_entry *next;
 
-	  prev = current->prev;
-	  next = current->next;
+			prev = current->prev;
+			next = current->next;
 
-	  free (current);
+			free(current);
 
-	  if (prev)
-	    prev->next = next;
-	  else
-	    list->head = next;
+			if (prev)
+				prev->next = next;
+			else
+				list->head = next;
 
-	  if (next)
-	    next->prev = prev;
-	  else
-	    list->tail = prev;
+			if (next)
+				next->prev = prev;
+			else
+				list->tail = prev;
 
-	  status = TRUE;
+			status = TRUE;
+		}
 	}
-    }
-
-  return status;
+	return status;
 }
 
 /*+
-  Inserts the supplied data item just before the current entry in the
-  supplied list. Used in conjunction with ListTraverse().
+   Inserts the supplied data item just before the current entry in the
+   supplied list. Used in conjunction with ListTraverse().
 
-  int ListInsertBefore Returns TRUE on success and FALSE on failure.
+   int ListInsertBefore Returns TRUE on success and FALSE on failure.
 
-  List *list The data item will be inserted before the current entry
-  in this list.
+   List *list The data item will be inserted before the current entry
+   in this list.
 
-  void *data This is the data item that will be inserted into the list.
-  +*/
+   void *data This is the data item that will be inserted into the list.
+   + */
 
-int ListInsertBefore (List *list, void *data)
+int ListInsertBefore(List * list, void *data)
 {
-  int status = FALSE;
+	int status = FALSE;
 
-  if (list)
-    {
-      if (list->current)
-	{
-	  struct list_entry *current;
-	  struct list_entry *prev;
-	  struct list_entry *temp;
+	if (list) {
+		if (list->current) {
+			struct list_entry *current;
+			struct list_entry *prev;
+			struct list_entry *temp;
 
-	  current = list->current;
-	  prev = current->prev;
+			current = list->current;
+			prev = current->prev;
 
-	  temp = (struct list_entry*) malloc(sizeof (struct list_entry));
-	  if (temp)
-	    {
-	      temp->prev = prev;
-	      temp->next = current;
-	      temp->data = data;
+			temp = (struct list_entry *) malloc(sizeof(struct list_entry));
+			if (temp) {
+				temp->prev = prev;
+				temp->next = current;
+				temp->data = data;
 
-	      current->prev = temp;
+				current->prev = temp;
 
-	      if (prev)
-		{
-		  prev->next = temp;
+				if (prev) {
+					prev->next = temp;
+				}
+				else {
+					list->head = temp;
+				}
+
+				status = TRUE;
+			}
 		}
-	      else
-		{
-		  list->head = temp;
-		}
-
-	      status = TRUE;
-	    }
 	}
-    }
-
-  return status;
+	return status;
 }
 
 /*+
-  Inserts the supplied data item just after the current entry in the
-  supplied list. Used in conjunction with ListTraverse().
+   Inserts the supplied data item just after the current entry in the
+   supplied list. Used in conjunction with ListTraverse().
 
-  int ListInsertAfter Returns TRUE on success and FALSE on failure.
+   int ListInsertAfter Returns TRUE on success and FALSE on failure.
 
-  List *list The data item will be inserted after the current entry
-  in this list.
+   List *list The data item will be inserted after the current entry
+   in this list.
 
-  void *data This is the data item that will be inserted into the list.
-  +*/
+   void *data This is the data item that will be inserted into the list.
+   + */
 
-int ListInsertAfter (List *list, void *data)
+int ListInsertAfter(List * list, void *data)
 {
-  int status = FALSE;
+	int status = FALSE;
 
-  if (list)
-    {
-      if (list->current)
-	{
-	  struct list_entry *current;
-	  struct list_entry *next;
-	  struct list_entry *temp;
+	if (list) {
+		if (list->current) {
+			struct list_entry *current;
+			struct list_entry *next;
+			struct list_entry *temp;
 
-	  current = list->current;
-	  next = current->next;
+			current = list->current;
+			next = current->next;
 
-	  temp = (struct list_entry*) malloc(sizeof (struct list_entry));
-	  if (temp)
-	    {
-	      temp->prev = current;
-	      temp->next = next;
-	      temp->data = data;
+			temp = (struct list_entry *) malloc(sizeof(struct list_entry));
+			if (temp) {
+				temp->prev = current;
+				temp->next = next;
+				temp->data = data;
 
-	      current->next = temp;
+				current->next = temp;
 
-	      if (next)
-		{
-		  next->prev = temp;
+				if (next) {
+					next->prev = temp;
+				}
+				else {
+					list->tail = temp;
+				}
+
+				status = TRUE;
+			}
 		}
-	      else
-		{
-		  list->tail = temp;
-		}
-
-	      status = TRUE;
-	    }
 	}
-    }
-
-  return status;
+	return status;
 }
 
 /*+
-  Swaps two adjacent items in the list. The two items that are swapped are
-  the current entry and the next entry. Used in conjunction with
-  ListTraverse().
+   Swaps two adjacent items in the list. The two items that are swapped are
+   the current entry and the next entry. Used in conjunction with
+   ListTraverse().
 
-  int ListSwapEntry Returns TRUE on success and FALSE on failure.
+   int ListSwapEntry Returns TRUE on success and FALSE on failure.
 
-  List *list List containing the items to be swapped.
-  +*/
+   List *list List containing the items to be swapped.
+   + */
 
-int ListSwapEntry (List *list)
+int ListSwapEntry(List * list)
 {
-  int status = FALSE;
+	int status = FALSE;
 
-  if (list)
-    {
-      if (list->current)
-	{
-	  struct list_entry *current;
+	if (list) {
+		if (list->current) {
+			struct list_entry *current;
 
-	  current = list->current;
+			current = list->current;
 
-	  if (current)
-	    {
-	      struct list_entry	*prev;
+			if (current) {
+				struct list_entry *prev;
 
-	      prev = current->prev;
+				prev = current->prev;
 
-	      if (prev)
-		{
-		  void *temp;
+				if (prev) {
+					void *temp;
 
-		  temp = prev->data;
-		  prev->data = current->data;
-		  current->data = temp;
+					temp = prev->data;
+					prev->data = current->data;
+					current->data = temp;
 
-		  status = TRUE;
+					status = TRUE;
+				}
+			}
 		}
-	    }
 	}
-    }
-
-  return status;
+	return status;
 }

@@ -1,18 +1,9 @@
 Bugs and Known Problems
 -----------------------
 
-2. A few programs cause the emulator to enter its built in debugger. The
-   reason for this is unknown at the moment. It might be use of undocumented
-   instructions. (Atari Tennis)
+1. DLI is not 100% yet
+
+3. Sound should be disabled before entering Monitor...
 
 8. Player/Missiles are not displayed over a GTIA [sub]playfield -
    Not really a bug since its not been implemented yet!
-
-9. The Linux XVIEW (a.out) version generates a segmentation faults when
-   linked with the Network Audio System. The fault occurs simply by
-   linking the NAS routines with the XVIEW version, you do not even
-   need to execute a single line of code added to support sound. At the
-   moment I believe that this is a conflict between the current version
-   of XVIEW I am using (XVIEW 3.2 Linux Rel. 5 + X11R6) and the Network
-   Audio System. XVIEW and NAS work OK together under Solaris and
-   Linux/ELF.

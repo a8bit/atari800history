@@ -122,9 +122,18 @@ but I suppose that's all you need).
 
 If you have GCC, the second thing to do is rename Makefile to Makefile.org
 and Makefile.dos to Makefile. Now type "make vga", answer the questions
-required by "configure" and wait for gcc to build atari800.exe. To run
-this binary, you'll need to set the following environment variables:
+required by "configure" and wait for gcc to build atari800.exe.
 
-Also, if you run it in DOS mode and you have not installed DJGPP, but you
-want to run the binary files, you'll need to install CWSDPMI by
-typing cwsdpmi -p. To unload cpsdmi, type cwsdpmi -u.
+Since the source code contains files with long file names, you must unpack
+and compile the source on a filesystem supporting long file names (for example
+VFAT of Windows95). An additional change of DJGPP setting is required:
+open the DJGPP.ENV file in editor and change the LFN= line to LFN=y
+
+Building the Emulator for Falcon
+--------------------------------
+
+You need a recent GCC, for example 2.7.2, running on a filesystem with long
+file names (either minix-fs of MiNT, or VFAT of MagiC). Unpack the source
+archive and copy all files from falcon/ subdirectory to the main source
+files directory. Then just rename Makefile.falcon to Makefile and type
+"make videl" or just "make" to see the list of possible versions.

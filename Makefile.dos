@@ -1,6 +1,6 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O6 -DGNU_C
+CFLAGS		= -c -O2 -DGNU_C
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
@@ -19,15 +19,15 @@ default :
 	@echo To install the Emulator, type:
 
 basic :
-	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
+	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o sound.o"
 	@echo Finished.
 
 pdcurses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o"
+	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o sound.o"
 	@echo Finished.
 
 vga :
-	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o"
+	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o sound_dos.o pokey23.o sbdrv.o"
 	@echo Finished.
 
 #
@@ -53,12 +53,12 @@ INCLUDES        =       Makefile \
 			platform.h
 
 config config.h	:	configure
-	configur
+	configure
 
 configure	:	configure.o prompts.o
 	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
 
-configure.o	:	configur.c
+configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS =       atari.o \
@@ -74,9 +74,7 @@ OBJECTS =       atari.o \
                 prompts.o \
                 rt-config.o \
                 ui.o \
-                list.o \
-		sound.o \
-		pokey11.o
+                list.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -129,6 +127,12 @@ sound.o		:       sound.c $(INCLUDES)
 pokey11.o	:       pokey11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
 
+sound_dos.o		:       sound_dos.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sound_dos.c
+
+pokey23.o	:       pokey23.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokey23.c
+
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
 
@@ -145,8 +149,8 @@ nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
 clean   :
-	del configur.exe
-	del configur
+	del configure.exe
+	del configure
 	del config.h
 	del core
 	del *.o

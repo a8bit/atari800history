@@ -3,6 +3,6 @@
 
 #include "atari.h"
 
-int SuperCart_PutByte (UWORD addr, UBYTE byte);
+int SuperCart_PutByte(UWORD addr, UBYTE byte);
 
 #endif

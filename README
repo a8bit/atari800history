@@ -1,5 +1,5 @@
-Atari 800 Emulator for Unix, Amiga and MS-DOS, Version 0.8.2
-------------------------------------------------------------
+Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.8.7
+--------------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
 
@@ -8,8 +8,8 @@ Atari 800 Emulator for Unix, Amiga and MS-DOS, Version 0.8.2
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.8.0 of my Atari 800, 800XL, 130XE and 5200 emulator
-for Unix, Amiga and MS-DOS. My main objective is to create a freely
+This is the version 0.8.7 of my Atari 800, 800XL, 130XE and 5200 emulator
+for Unix, Amiga, MS-DOS and Falcon. My main objective is to create a freely
 distributable portable emulator (i.e. with source code available). It can
 be configured to run in the following ways :-
 
@@ -19,6 +19,7 @@ be configured to run in the following ways :-
 	4. X-Windows + Optional XVIEW or MOTIF User Interface
 	5. CBM Amiga
  	6. MS-DOS
+        7. Atari Falcon
 
 The basic mode is only useful for running programs such as MAC65,
 Atari Basic etc. I have had this version running on Linux,
@@ -39,6 +40,15 @@ user interface. The Linux X Window version can be built with
 joystick support (If joystick module is installed in the kernel).
 
 The Amiga version supports graphics but currently lacks Paddle support.
+
+The MS-DOS version supports 320x200 graphics, sound (SoundBlaster
+compatible sound cards, 8bit, 22 kHz), keyboard and joystick.
+The area which is displayed can be modified using the Control-arrows
+keys.
+
+The Atari Falcon030/040 version supports 320x240, 352x240 and also full
+384x240 graphics, sound (DMA 12.5 kHz) and up to two joysticks (old
+CX-40, Atari800 compatible - not the new paddle-like ones).
 
 From version 0.7.0 all versions supporting bitmapped graphics have
 a User Interface implemented on the emulators "screen". The User
@@ -98,7 +108,9 @@ o Hot Disk and Cartridge swapping.
 
 o Joystick controller using numeric keypad.
 
+o Real joystick support.
+
 o Paddle controller using X-Windows mouse position.
 
 o User Interface on all version supporting bitmapped graphics.
-  i.e. X11, SVGALIB, MS-DOS and Amiga.
+  i.e. X11, SVGALIB, MS-DOS, Amiga and Falcon.

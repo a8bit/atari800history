@@ -119,9 +119,9 @@ extern UBYTE colour_lookup[9];
 extern int colour_translation_table[256];
 extern int next_console_value;
 
-void GTIA_Initialise (int *argc, char *argv[]);
-void Atari_ScanLine (void);
-UBYTE GTIA_GetByte (UWORD addr);
-int GTIA_PutByte (UWORD addr, UBYTE byte);
+void GTIA_Initialise(int *argc, char *argv[]);
+void Atari_ScanLine(void);
+UBYTE GTIA_GetByte(UWORD addr);
+int GTIA_PutByte(UWORD addr, UBYTE byte);
 
 #endif

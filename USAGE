@@ -92,6 +92,17 @@ Dos VGA Options
 
 -interlace	Select this to display only half the scanlines at a
 		time. Gives a performance increase of about 10%.
+-nosound	Use this for disabling sound
+-joyswap	Use this for swapping joy0 and joy1
+
+
+Falcon Options
+--------------
+
+-interlace <n>	Select this to update the Falcon screen less times
+-joyswap	Use this for swapping joy0 and joy1
+-resolution <n>	Choose between 320x240, 352x240 and 384x240 graphics.
+                See INSTALL.falcon for details, please.
 
 Keyboard + Joystick & Paddle Controllers
 ========================================
@@ -226,12 +237,42 @@ F5	Warm Reset
 Shft+F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
 F7	Break Key
-F8	---
+F8	Enter monitor
 F9	EXIT Emulator
-F10	---
+F10	HELP key (800XL/130XE)
 
 Control-C terminates the program; to type Control-c, type ALT-c instead.
 ` is used as the Caps-Lock key, just like the SVGALIB version.
+
+Control-arrows move screen. Control-F10 centers screen.
+
+Joystick 0 is operated by the numeric keypad (make sure that the numeric
+keypad has been enabled).
+ 
+        7 8 9
+         \|/
+        4 5 6
+         /|\
+        1 2 3
+ 
+        And 0 is the fire key.
+ 
+At the moment it is not possible to use a Paddle with this version.
+
+Falcon Keyboard + Joystick & Paddle Controllers
+===============================================
+
+F1	Built in User Interface
+F2	Option
+F3	Select
+F4	Start
+F5	Warm Reset
+Shft+F5	Cold Reset
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
+F7	Break Key
+F8	Enter monitor
+F9	EXIT Emulator
+Help	HELP key (800XL/130XE)
 
 Joystick 0 is operated by the numeric keypad (make sure that the numeric
 keypad has been enabled).

@@ -8,158 +8,144 @@
 #include "atari.h"
 #include "prompts.h"
 
-static char *rcsid = "$Id: configure.c,v 1.18 1997/04/13 21:21:52 david Exp $";
+static char *rcsid = "$Id: configure.c,v 1.20 1998/02/21 14:56:45 david Exp $";
 
 jmp_buf jmpbuf;
 
-void
-bus_err()
+void bus_err()
 {
-  longjmp(jmpbuf, 1);
+	longjmp(jmpbuf, 1);
 }
 
-int
-unaligned_long_ok()
+int unaligned_long_ok()
 {
 #ifdef DJGPP
-  return 1;
+	return 1;
 #else
-  long l[2];
+	long l[2];
 
-  if (setjmp(jmpbuf) == 0)
-    {
-      signal(SIGBUS, bus_err);
-      *((long *) ((char *) l + 1)) = 1;
-      signal(SIGBUS, SIG_DFL);
-      return 1;
-    }
-  else
-    {
-      signal(SIGBUS, SIG_DFL);
-      return 0;
-    }
+	if (setjmp(jmpbuf) == 0) {
+		signal(SIGBUS, bus_err);
+		*((long *) ((char *) l + 1)) = 1;
+		signal(SIGBUS, SIG_DFL);
+		return 1;
+	}
+	else {
+		signal(SIGBUS, SIG_DFL);
+		return 0;
+	}
 #endif
 }
- 
-int main (void)
+
+int main(void)
 {
-  FILE *fp;
-  char config_filename[256];
-  char *home;
+	FILE *fp;
+	char config_filename[256];
+	char *home;
 
-  char config_version[256];
-  char gash[256];
+	char config_version[256];
+	char gash[256];
 
-  char linux_joystick = 'N';
-  char joymouse = 'N';
-  char direct_video = 'N';
-  char voxware = 'N';
-  int allow_unaligned_long = 0;
+	char linux_joystick = 'N';
+	char joymouse = 'N';
+	char direct_video = 'N';
+	char voxware = 'N';
+	int allow_unaligned_long = 0;
 
-  home = getenv ("~");
-  if (!home)
-    home = getenv ("HOME");
-  if (!home)
-    home = ".";
+	home = getenv("~");
+	if (!home)
+		home = getenv("HOME");
+	if (!home)
+		home = ".";
 
 #ifndef DJGPP
-  sprintf (config_filename, "%s/.atari800", home);
+	sprintf(config_filename, "%s/.atari800", home);
 #else
-  sprintf (config_filename, "%s/atari800.cfg", home);
+	sprintf(config_filename, "%s/atari800.cfg", home);
 #endif
 
-  fp = fopen (config_filename, "r");
-  if (fp)
-    {
-      char *ptr;
-      int len;
+	fp = fopen(config_filename, "r");
+	if (fp) {
+		char *ptr;
+		int len;
 
-      printf ("\nReading: %s\n\n", config_filename);
+		printf("\nReading: %s\n\n", config_filename);
 
-      fgets (config_version, 256, fp);
-      RemoveLF (config_version);
+		fgets(config_version, 256, fp);
+		RemoveLF(config_version);
 
-      if (strcmp(ATARI_TITLE, config_version) == 0)
-	{
-	  if (fscanf (fp,"\n%c", &linux_joystick) == 0)
-	    linux_joystick = 'N';
+		if (strcmp(ATARI_TITLE, config_version) == 0) {
+			if (fscanf(fp, "\n%c", &linux_joystick) == 0)
+				linux_joystick = 'N';
 
-	  if (fscanf (fp,"\n%c\n", &direct_video) == 0)
-	    direct_video = 'N';
+			if (fscanf(fp, "\n%c\n", &direct_video) == 0)
+				direct_video = 'N';
 
-	  if (fscanf (fp,"\n%c", &joymouse) == 0)
-	    joymouse = 'N';
+			if (fscanf(fp, "\n%c", &joymouse) == 0)
+				joymouse = 'N';
 
-	  if (fscanf (fp,"\n%c\n", &voxware) == 0)
-	    voxware = 'N';
+			if (fscanf(fp, "\n%c\n", &voxware) == 0)
+				voxware = 'N';
+		}
+		else {
+			printf("Cannot use this configuration file\n");
+		}
+
+		fclose(fp);
 	}
-      else
-        {
-          printf ("Cannot use this configuration file\n");
-        }
+	YesNo("Enable LINUX Joystick [%c] ", &linux_joystick);
+	YesNo("Support for Toshiba Joystick Mouse (Linux SVGALIB Only) [%c] ", &joymouse);
+	YesNo("Enable Direct Video Access [%c] ", &direct_video);
+	YesNo("Enable Voxware Sound Support (Linux) [%c] ", &voxware);
 
-      fclose (fp);
-    }
+	printf("Testing unaligned long accesses...");
+	if ((allow_unaligned_long = unaligned_long_ok())) {
+		printf("OK\n");
+	}
+	else {
+		printf("not OK\n");
+	}
 
-  YesNo ("Enable LINUX Joystick [%c] ", &linux_joystick);
-  YesNo ("Support for Toshiba Joystick Mouse (Linux SVGALIB Only) [%c] ", &joymouse);
-  YesNo ("Enable Direct Video Access [%c] ", &direct_video);
-  YesNo ("Enable Voxware Sound Support (Linux) [%c] ", &voxware);
+	fp = fopen("config.h", "w");
+	if (fp) {
+		fprintf(fp, "#ifndef __CONFIG__\n");
+		fprintf(fp, "#define __CONFIG__\n");
 
-  printf("Testing unaligned long accesses...");
-  if ((allow_unaligned_long = unaligned_long_ok()))
-  {
-    printf("OK\n");
-  }
-  else
-  {
-    printf("not OK\n");
-  }
+		if (linux_joystick == 'Y')
+			fprintf(fp, "#define LINUX_JOYSTICK\n");
 
-  fp = fopen ("config.h", "w");
-  if (fp)
-    {
-      fprintf (fp, "#ifndef __CONFIG__\n");
-      fprintf (fp, "#define __CONFIG__\n");
+		if (direct_video == 'Y')
+			fprintf(fp, "#define DIRECT_VIDEO\n");
 
-      if (linux_joystick == 'Y')
-        fprintf (fp, "#define LINUX_JOYSTICK\n");
+		if (joymouse == 'Y')
+			fprintf(fp, "#define JOYMOUSE\n");
 
-      if (direct_video == 'Y')
-        fprintf (fp, "#define DIRECT_VIDEO\n");
+		if (voxware == 'Y')
+			fprintf(fp, "#define VOXWARE\n");
 
-      if (joymouse == 'Y')
-        fprintf (fp, "#define JOYMOUSE\n");
+		if (allow_unaligned_long == 1)
+			fprintf(fp, "#define UNALIGNED_LONG_OK\n");
 
-      if (voxware == 'Y')
-        fprintf (fp, "#define VOXWARE\n");
+		fprintf(fp, "#endif\n");
 
-      if (allow_unaligned_long == 1)
-	fprintf (fp, "#define UNALIGNED_LONG_OK\n");
+		fclose(fp);
+	}
+	fp = fopen(config_filename, "w");
+	if (fp) {
+		printf("\nWriting: %s\n\n", config_filename);
 
-      fprintf (fp, "#endif\n");
+		fprintf(fp, "%s\n", ATARI_TITLE);
+		fprintf(fp, "%c\n", linux_joystick);
+		fprintf(fp, "%c\n", direct_video);
+		fprintf(fp, "%c\n", joymouse);
+		fprintf(fp, "%c\n", voxware);
 
-      fclose (fp);
-    }
+		fclose(fp);
+	}
+	else {
+		perror(config_filename);
+		exit(1);
+	}
 
-  fp = fopen (config_filename, "w");
-  if (fp)
-    {
-      printf ("\nWriting: %s\n\n", config_filename);
-
-      fprintf (fp, "%s\n", ATARI_TITLE);
-      fprintf (fp, "%c\n", linux_joystick);
-      fprintf (fp, "%c\n", direct_video);
-      fprintf (fp, "%c\n", joymouse);
-      fprintf (fp, "%c\n", voxware);
-
-      fclose (fp);
-    }
-  else
-    {
-      perror (config_filename);
-      exit (1);
-    }
-
-  return 0;
+	return 0;
 }

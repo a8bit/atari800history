@@ -2,10 +2,10 @@
 #define	__ATARI__
 
 /*
-	=================================
-	Define Data Types on Local System
-	=================================
-*/
+   =================================
+   Define Data Types on Local System
+   =================================
+ */
 
 #ifdef VMS
 #define SBYTE char
@@ -21,18 +21,16 @@
 #define	UWORD unsigned short int
 #define	ULONG unsigned long int
 
-typedef enum
-{
-  PAL,
-  NTSC
+typedef enum {
+	PAL,
+	NTSC
 } TVmode;
 
-typedef enum
-{
-  Atari,
-  AtariXL,
-  AtariXE,
-  Atari5200
+typedef enum {
+	Atari,
+	AtariXL,
+	AtariXE,
+	Atari5200
 } Machine;
 
 extern TVmode tv_mode;
@@ -41,7 +39,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.2"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.7"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -51,52 +49,52 @@ extern int verbose;
 #define DB_SUPERCART 5
 #define CARTRIDGE 6
 
-enum ESCAPE
-{
-  ESC_SIOV,
+enum ESCAPE {
+	ESC_SIOV,
 /*
  * These are special device escape codes required by the Basic version
  */
-  ESC_E_OPEN,
-  ESC_E_CLOSE,
-  ESC_E_READ,
-  ESC_E_WRITE,
-  ESC_E_STATUS,
-  ESC_E_SPECIAL,
+	ESC_E_OPEN,
+	ESC_E_CLOSE,
+	ESC_E_READ,
+	ESC_E_WRITE,
+	ESC_E_STATUS,
+	ESC_E_SPECIAL,
 
-  ESC_K_OPEN,
-  ESC_K_CLOSE,
-  ESC_K_READ,
-  ESC_K_WRITE,
-  ESC_K_STATUS,
-  ESC_K_SPECIAL,
+	ESC_K_OPEN,
+	ESC_K_CLOSE,
+	ESC_K_READ,
+	ESC_K_WRITE,
+	ESC_K_STATUS,
+	ESC_K_SPECIAL,
 /*
  * These are Escape codes for the normal device handlers.
  * Some are never used and some are only sometimes used.
  */
 
-  ESC_PHOPEN = 0xb0,
-  ESC_PHCLOS = 0xb1,
-  ESC_PHREAD = 0xb2,
-  ESC_PHWRIT = 0xb3,
-  ESC_PHSTAT = 0xb4,
-  ESC_PHSPEC = 0xb5,
-  ESC_PHINIT = 0xb6,
+	ESC_PHOPEN = 0xb0,
+	ESC_PHCLOS = 0xb1,
+	ESC_PHREAD = 0xb2,
+	ESC_PHWRIT = 0xb3,
+	ESC_PHSTAT = 0xb4,
+	ESC_PHSPEC = 0xb5,
+	ESC_PHINIT = 0xb6,
 
-  ESC_HHOPEN = 0xc0,
-  ESC_HHCLOS = 0xc1,
-  ESC_HHREAD = 0xc2,
-  ESC_HHWRIT = 0xc3,
-  ESC_HHSTAT = 0xc4,
-  ESC_HHSPEC = 0xc5,
-  ESC_HHINIT = 0xc6
+	ESC_HHOPEN = 0xc0,
+	ESC_HHCLOS = 0xc1,
+	ESC_HHREAD = 0xc2,
+	ESC_HHWRIT = 0xc3,
+	ESC_HHSTAT = 0xc4,
+	ESC_HHSPEC = 0xc5,
+	ESC_HHINIT = 0xc6,
+	ESC_BREAK = 0xff
 };
 
 /*
-	=================
-	Joystick Position
-	=================
-*/
+   =================
+   Joystick Position
+   =================
+ */
 
 #define	STICK_LL	0x09
 #define	STICK_BACK	0x0d
@@ -112,7 +110,7 @@ enum ESCAPE
    ===========================
    non-standard keyboard codes
    ===========================
-*/
+ */
 
 #define AKEY_NONE -1
 #define AKEY_WARMSTART -2
@@ -130,7 +128,7 @@ enum ESCAPE
    ===============================
    keyboard codes for numbers 0..9
    ===============================
-*/
+ */
 
 #define AKEY_0 0x32
 #define AKEY_1 0x1f
@@ -310,23 +308,23 @@ enum ESCAPE
 #define AKEY_BACKSLASH 0x46
 #define AKEY_BAR 0x4f
 
-void EnablePILL (void);
-int Insert_8K_ROM (char *filename);
-int Insert_16K_ROM (char *filename);
-int Insert_OSS_ROM (char *filename);
-int Insert_DB_ROM (char *filename);
-int Insert_32K_5200ROM (char *filename);
-int Remove_ROM (void);
-void Coldstart (void);
-void Warmstart (void);
-int Initialise_AtariOSA (void);
-int Initialise_AtariOSB (void);
-int Initialise_AtariXL (void);
-int Initialise_AtariXE (void);
-int Initialise_Atari5200 (void);
-int Atari800_Exit (int run_monitor);
-UBYTE Atari800_GetByte (UWORD addr);
-int Atari800_PutByte (UWORD addr, UBYTE byte);
-void Escape (UBYTE esc_code);
+void EnablePILL(void);
+int Insert_8K_ROM(char *filename);
+int Insert_16K_ROM(char *filename);
+int Insert_OSS_ROM(char *filename);
+int Insert_DB_ROM(char *filename);
+int Insert_32K_5200ROM(char *filename);
+int Remove_ROM(void);
+void Coldstart(void);
+void Warmstart(void);
+int Initialise_AtariOSA(void);
+int Initialise_AtariOSB(void);
+int Initialise_AtariXL(void);
+int Initialise_AtariXE(void);
+int Initialise_Atari5200(void);
+int Atari800_Exit(int run_monitor);
+UBYTE Atari800_GetByte(UWORD addr);
+int Atari800_PutByte(UWORD addr, UBYTE byte);
+void Escape(UBYTE esc_code);
 
 #endif

@@ -12,14 +12,14 @@
 #define Z_FLAG 0x02
 #define C_FLAG 0x01
 
-void CPU_GetStatus (void);
-void CPU_PutStatus (void);
-void CPU_Reset (void);
-void SetRAM (int addr1, int addr2);
-void SetROM (int addr1, int addr2);
-void SetHARDWARE (int addr1, int addr2);
-void NMI (void);
-void GO (int cycles);
+void CPU_GetStatus(void);
+void CPU_PutStatus(void);
+void CPU_Reset(void);
+void SetRAM(int addr1, int addr2);
+void SetROM(int addr1, int addr2);
+void SetHARDWARE(int addr1, int addr2);
+void NMI(void);
+void GO(int cycles);
 
 extern UWORD regPC;
 extern UBYTE regA;
@@ -45,6 +45,9 @@ extern UBYTE regX;
 
 extern UBYTE memory[65536];
 
-extern int IRQ;
+extern UBYTE IRQ;
+
+#define REMEMBER_PC_STEPS 16
+extern UWORD remember_PC[REMEMBER_PC_STEPS];
 
 #endif

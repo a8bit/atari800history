@@ -1,0 +1,58 @@
+                                                               January 1998
+
+    Hi,
+
+this is the Atari 800XL/130XE emulator for Atari Falcon030/040. It's the
+second attempt, so let's call it Falcon version 0.2.
+
+Atari800 has been developed by David Firth. Falcon port was done by me.
+Empty Head (= Karel Rous) helped a lot with his 65C02 emulation written
+in pure MC68030 assembler. Douglas Little's assembler routines for VIDEL
+were used for achieving maximal possible speed and compatibility.
+
+ATARI800.TTP      - atari800 (full C source, GNU C -m68020-40 -O3)
+ATARICPU.TTP      - atari800 (cpu.c rewritten in optimized MC68030 asm)
+
+Currently it works on VGA monitors only (should be fixed soon).
+
+Keyboard emulation works well:
+
+F1 = configuration menu
+F2 = OPTION key of Atari 800XL
+F3 = SELECT key
+F4 = START key
+F5 = PowerON RESET (warm start)
+Shift + F5 = PowerOFF RESET (cold start)
+F6 = BREAK key
+F8 = Invoke Monitor
+F9 = Exit Emulator
+Help = Help key
+
+Joystick emulation works fine. Both real joysticks (CX-40 type) can be
+connected.
+
+Two special command line parameters were introduced in this Falcon port:
+
+- interlace <number>      the <number> is a number of skipped Falcon screens.
+                          Normally the Falcon screen is updated every time
+                          when it's build, i.e. <number> is 0 by default. Higher
+                          <number> should cause faster emulation (because of
+                          less time spent by updating slow Falcon screen).
+
+- resolution <number>     Original Atari800 worked in resolution 384x240.
+                          This Falcon port can use three different screen
+                          resolution (thanks to VIDEL flexibility):
+
+                          <number>=0   320x240 standard VGA mode (31 kHz, 60 Hz)
+                          <number>=1   352x240 VGA - optimal (29 kHz, 56 Hz)
+                          <number>=2   384x240 VGA - full res (29 kHz, 53 Hz)
+
+                          It's not guaranteed your monitor can cope with the
+                          lower frequencies. Test it on your own risk! I am
+                          not responsible for anything!
+
+
+For bugreports of Falcon port please write to me (Petr Stehlik)
+
+e-mail    stehlik@cas3.zlin.vutbr.cz
+WWW       http://cas3.zlin.vutbr.cz/~stehlik

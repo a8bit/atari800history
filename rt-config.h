@@ -23,8 +23,8 @@ extern int enable_c000_ram;
 extern int enable_sio_patch;
 extern int enable_xcolpf1;
 
-int RtConfigLoad (char *rtconfig_filename);
-void RtConfigSave (void);
-void RtConfigUpdate (void);
+int RtConfigLoad(char *rtconfig_filename);
+void RtConfigSave(void);
+void RtConfigUpdate(void);
 
 #endif

@@ -1,8 +1,10 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O2 -fno-strength-reduce -DGNU_C
+CFLAGS		= -c -O2 -m68020-40 -fno-strength-reduce -fomit-frame-pointer -Wall -DGNU_C
+#CFLAGS		= -c -g -m68020-40 -Wall -DGNU_C
 LD		= gcc
 LDFLAGS		=
+#LDFLAGS		= -g
 LDLIBS		=
 
 default :
@@ -10,24 +12,38 @@ default :
 	@echo make version
 	@echo .
 	@echo where version is one of
-	@echo   basic
-	@echo   curses
-	@echo   st
+	@echo "  basic          just plain screen"
+	@echo "  ncurses        ncurses fullscreen emulation"
+	@echo "  videl          VIDEL resolution"
+	@echo "  vidsnd         VIDEL + SOUND"
+	@echo "  asm            VIDEL + CPU in assembler"
+	@echo "  super          VIDEL + SOUND + CPU in assembler"
 	@echo . 
 	@echo To reconfigure options, type: make config
 	@echo To clean directory, type: make clean
-	@echo To install the Emulator, type:
 
 basic :
-	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DBASIC" LDLIBS="-lm" OBJ="cpu.o atari_basic.o"
 	@echo Finished.
 
-curses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurses -lm" OBJ="a_curses.o"
+ncurses :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCURSES -DANSI_NCURSES" LDLIBS="-lncurses -lm" OBJ="cpu.o atari_curses.o"
 	@echo Finished.
 
-st :
-	@make atari800 OBJ="atari_st.o c2p.o videl.o"
+videl :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o"
+	@echo Finished.
+
+vidsnd :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o pokey23.o sound_dma.o"
+	@echo Finished.
+
+asm :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o gtia_asm.o"
+	@echo Finished.
+
+super :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o gtia_asm.o pokey23.o sound_dma.o"
 	@echo Finished.
 
 #
@@ -38,7 +54,6 @@ st :
 
 INCLUDES        =       config.h \
 			rt-config.h \
-			cpu.h \
 			atari.h \
 			colours.h \
 			antic.h \
@@ -61,7 +76,6 @@ configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS =       atari.o \
-		cpu.o \
 		monitor.o \
 		sio.o \
 		devices.o \
@@ -74,17 +88,20 @@ OBJECTS =       atari.o \
                 rtconfig.o \
                 ui.o \
                 list.o \
-		sound.o \
-		pokey11.o
+		sound_falcon.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
+	# strip atari800
 
 atari.o         :       atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o           :       cpu.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c -o cpu.o
+
+cpu_asm.o           :       cpu_asm.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) cpu_asm.c
 
 monitor.o       :       monitor.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
@@ -122,27 +139,51 @@ rtconfig.o     :       rt-config.c $(INCLUDES)
 prompts.o       :       prompts.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
 
-sound.o		:       sound.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
+sound_falcon.o		:       sound_falcon.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sound_falcon.c
 
 c2p.o	:	c2p.s c2pmac.s
 	xgen -L1 c2p.o c2p.s
 	gst2gcc gcc c2p.o
 
+c2p_320.o	:	c2p_320.s c2pmac.s
+	xgen -L1 c2p_320.o c2p_320.s
+	gst2gcc gcc c2p_320.o
+
+c2p_352.o	:	c2p_352.s c2pmac.s
+	xgen -L1 c2p_352.o c2p_352.s
+	gst2gcc gcc c2p_352.o
+
 videl.o	:	videl.s
 	xgen -L1 videl.o videl.s
 	gst2gcc gcc videl.o
 
-pokey11.o	:       pokey11.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
+sound_dma.o	:	sound_dma.s
+	xgen -L1 sound_dma.o sound_dma.s
+	gst2gcc gcc sound_dma.o
+
+ikbd.o	:	ikbd.s
+	xgen -L1 ikbd.o ikbd.s
+	gst2gcc gcc ikbd.o
+
+cpu_m68k.o	:	cpu_m68k.s
+	xgen -L1 cpu_m68k.o cpu_m68k.s
+	gst2gcc gcc cpu_m68k.o
+
+gtia_asm.o	:	gtia_asm.s
+	xgen -L1 gtia_asm.o gtia_asm.s
+	gst2gcc gcc gtia_asm.o
+
+pokey23.o	:       pokey23.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DSIGNED_SAMPLES -DBIG_ENDIAN pokey23.c
 
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
 
-atari_st.o :       atari_st.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari_st.c
+atari_falcon.o :       atari_falcon.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_falcon.c
 
-a_curses.o  :       atari_curses.c $(INCLUDES)
+atari_curses.o  :       atari_curses.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_curses.c
 
 atari_amiga.o   :       atari_amiga.c $(INCLUDES)
