@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Version 0.1.5
+Atari 800 Emulator for Unix, Version 0.2.1
 ------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -8,19 +8,21 @@ Atari 800 Emulator for Unix, Version 0.1.5
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.1.4 of my Atari 800 emulator for Unix (consider
-it an early Alpha). My main objective is to create a portable freely
-distributable emulator (i.e. with source code available). It can be
-configured to run in the following ways :-
+This is the version 0.2.1 of my Atari 800 emulator for Unix. My main
+objective is to create a freely distributable portable emulator (i.e.
+with source code available). It can be configured to run in the
+following ways :-
 
 	1. BASIC mode
 	2. CURSES Mode
 	3. SVGALIB for Linux Systems
 	4. X-Windows
+	5. CBM Amiga
 
 The basic mode is only useful for running programs such as MAC65,
-Atari Basic etc. I have had this version running on Linux, SunOS 4.1.3,
-Solaris 2.4, VAX/VMS, CBM Amiga (Dice C) and the HP-UX 9000/380.
+Atari Basic etc. I have had this version running on Linux,
+SunOS 4.1.3, Solaris 2.4, VAX/VMS, CBM Amiga (Dice C and GNU C)
+and the HP-UX 9000/380.
 
 The CURSES mode is similar to the basic mode, but it also enables full
 screen editing capability. Some computer don't seem to support curses
@@ -33,18 +35,9 @@ Instead SVGALIB displays the core 320x192 pixels.
 The X-Windows version supports graphics but runs *very* slowly. This
 appears to be due to overheads with X-Windows.
 
+The Amiga version supports graphics but currently lacks Paddle support.
+
 ---------------------------------------------------------------------------
-
-Why have I written this emulator instead of using PC Xformer?
-
-A few years ago (85/86) I wrote a small 'test' compiler for the Atari 800
-computer (It was never released commercially but has had a commercial
-game written in it - Enigmatix released by Page 6). For historical reason
-I would always like to be able to keep a usable copy of my first compiler.
-This was not possible using PC Xformer since it only runs on MS-DOS and
-without access to the source code have no chance of porting it to
-future computers. This emulator originally had a text only interface
-which is all I needed, but as so often happens one gets carried away :-)
 
 Features
 --------
@@ -52,6 +45,7 @@ Features
 Note: Not all features are supported on all platforms.
 
 48K/52K Atari 400/800 emulation (optional RAM between 0xc000 and 0xcfff)
+Atari 800XL emulation.
 OSS Super Cartridges.
 Should run on any Unix computer running X-Windows.
 Wide / Normal / Standard Playfields.
@@ -60,37 +54,26 @@ Paddle controller using X-Windows mouse position.
 Display List Interrupts.
 Vertical Blank Interrupts.
 All Antic Display modes.
+GTIA graphics support for *all* Antic modes (GTIA Characters etc.)
 Player Missile Graphics with collision detection.
 Character vertical reflect, invert and blank.
 Files can be stored directly on your host computer via the H: device.
 	(H: replaces the C: device which serves no useful purpose)
-Reads XFD disk files.
+Reads both ATR and XFD disk files.
 Disk swapping (Crude but works - needs to be improved)
 PIL modes - allows memory between 0x8000 and 0xbfff to be toggled
 between RAM and ROM.
-
-Bugs / Known Problems
----------------------
-
-A lot of colours have the wrong RGB values. Contact me if you know a
-way of converting the Atari colours into RGB values. I am using a
-lookup table but a lot are just set to cyan (R=0x00, G=0xff, B=0xff).
-
-A few programs cause the emulator to enter its built in debugger. The
-reason for this is unknown at the moment. It might be use of undocumented
-instructions.
-
-Player missile priority is ignored.
+Horizontal Fine Scrolling
+Playfield and Player/Missile Priorities
 
 Future Atari 800 Enhancements
 -----------------------------
 
-Hardware scrolling - pointless until the screen refresh rate is improved.
-GTIA graphics support for ANTIC modes.
-Atari 800XL/XE emulation.
+Vertical Fine Scrolling
+Atari 800XE emulation.
 Printer support (Print to file + spool on close).
 Paged memory using PORTB.
-Sound possibly through /dev/audio (don't hold your breath though)
+More extensive sound support.
 
 It should be possible to add support for non OSS Super Cartridges. If
 you can forward details on how the cartridge works I'll see what I

@@ -1,3 +1,63 @@
+Porting the emulator to a new platform
+--------------------------------------
+
+The machine specific graphics / user interface sections are all kept
+in separate files. Currently there are four files :-
+
+1. atari_x11.c		File supporting X Windows
+2. atari_svgalib.c	File supporting Linux with SVGALIB
+3. atari_curses.c	File supporting System V Curses (not BSD Curses)
+4. atari_amiga.c	File supporting CBM Amiga 1200
+
+Only one of these files should be linked in at any one time. Each file
+contains the following functions:-
+
+Atari_Initialise()
+
+	Initialises the graphical environment, create screen/window,
+	allocate colours etc.
+
+Atari_Exit()
+
+	Tidies system up just before emulator finishes. Delete all
+	allocated resources (screens, windows etc.)
+
+Atari_PreUpdate ()
+
+	Called just prior to the screen refresh. In the SVGALIB and
+	Amiga version it is used to initialise pointers to the start
+	of screen memory.
+
+Atari_PostUpdate ()
+
+	Called just after the screen has been finished. In the X11
+	version it is used to copy the offscreen image onto the
+	main window.
+
+Atari_ScanLine ()
+
+	Called for each scanline to be displayed.
+
+Atari_Keyboard ()
+
+	You might find the ways this is implemented a bit strange but I
+	wanted to increase the chances of it working on non-ascii
+	keyboards (not that I think its very likely).
+
+Atari_Joystick ()
+
+	Returns value of joystick and trigger. Joystick position is in
+	bits 0-3 and trigger is in bit 4.
+
+	Return 0x1f if the joystick is not available.
+
+Atari_Paddle ()
+
+	Returns value of paddle and trigger. Paddle position is in
+	bits 0-7 and trigger is in bit 8.
+
+	Return 0x100 if the paddle is not available.
+
 Implementation Overview (Very Brief)
 ------------------------------------
 
@@ -37,23 +97,6 @@ Implementation Overview (Very Brief)
 
    Again support for other hardware systems could be inserted
    into this section.
-
-Software Execution Sequence
-===========================
-
-main ()						main.c
-  atari_main ()					atari.c
-    Atari800_Initialise ()			atari_custom.c
-    Install signal handler
-    Parse Atari 800 specific options
-    SIO_Mount					atari_sio.c
-    Atari800_OS ()				atari.c
-      Load and Patch OS with Escape codes
-      Set memory areas to ROM, RAM and HARDWARE
-      Install CPU Escape code handler
-      CPU_Reset ()				cpu.c
-      GO (TRUE) /* Start Processor */		cpu.c
-      monitor () /* If Error detected */	monitor.c
 
 Link Hardware and Operating System to CPU
 =========================================
@@ -97,9 +140,8 @@ CPU pointer functions.
 
 	#include	"cpu.h"
 
-	GetByte = Atari800_GetByte;
-	GetWord = Atari800_GetWord;
-	PutByte = Atari800_PutByte;
+	XGetByte = Atari800_GetByte;
+	XPutByte = Atari800_PutByte;
 	Hardware = Atari800_Hardware;
 	Escape = Atari800_Escape;
 
@@ -113,23 +155,20 @@ e.g. Switching between multiple systems.
 	switch (machine)
 	{
 		case Atari800 :
-			GetByte = Atari800_GetByte;
-			GetWord = Atari800_GetWord;
-			PutByte = Atari800_PutByte;
+			XGetByte = Atari800_GetByte;
+			XPutByte = Atari800_PutByte;
 			Hardware = Atari800_Hardware;
 			Escape = Atari800_Escape;
 			break;
 		case BBC :
-			GetByte = BBC_GetByte;
-			GetWord = BBC_GetWord;
-			PutByte = BBC_PutByte;
+			XGetByte = BBC_GetByte;
+			XPutByte = BBC_PutByte;
 			Hardware = BBC_Hardware;
 			Escape = BBC_Escape;
 			break;
 		case CBM64 :
-			GetByte = CBM64_GetByte;
-			GetWord = CBM64_GetWord;
-			PutByte = CBM64_PutByte;
+			XGetByte = CBM64_GetByte;
+			XPutByte = CBM64_PutByte;
 			Hardware = CBM64_Hardware;
 			Escape = CBM64_Escape;
 			break;
@@ -173,11 +212,6 @@ e.g.
 
 		return byte;
 	}
-
-Obviously the function call overhead for each memory access is a lot,
-but it does allow a lot of flexibility for future extensions. If I
-can increase the screen refresh rate this is likely to be the next
-target for improvement (Inline function in GCC maybe).
 
 Screen Generation
 -----------------

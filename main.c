@@ -10,17 +10,10 @@
 
 #include	"system.h"
 
-#ifdef CURSES
-int	curses_mode;
-#endif
+Machine	machine = Atari;
 
 main (int argc, char **argv)
 {
-	enum
-	{
-		Atari
-	} machine = Atari;
-
 	int     i;
 	int	j;
 /*
@@ -36,31 +29,19 @@ main (int argc, char **argv)
 		{
 			machine = Atari;
 		}
-#ifdef CURSES
-		else if (strcmp(argv[i], "-left") == 0)
-			curses_mode = CURSES_LEFT;
-		else if (strcmp(argv[i], "-central") == 0)
-			curses_mode = CURSES_CENTRAL;
-		else if (strcmp(argv[i], "-right") == 0)
-			curses_mode = CURSES_RIGHT;
-		else if (strcmp(argv[i], "-wide1") == 0)
-			curses_mode = CURSES_WIDE_1;
-		else if (strcmp(argv[i], "-wide2") == 0)
-			curses_mode = CURSES_WIDE_2;
-#endif
+		else if (strcmp(argv[i], "-xl") == 0)
+		{
+			machine = AtariXL;
+		}
+		else if (strcmp(argv[i], "-xe") == 0)
+		{
+			machine = AtariXE;
+		}
 		else
 		{
 			argv[j++] = argv[i];
 		}
 	}
-/*
-	===============================
-	Attach stderr to error.log file
-	===============================
-*/
-#ifndef SVGALIB
-	freopen ("error.log", "w", stderr);
-#endif
 /*
 	=========================
 	Invoke requested emulator
@@ -69,10 +50,12 @@ main (int argc, char **argv)
 	switch (machine)
 	{
 		case Atari :
+		case AtariXL :
+		case AtariXE :
 			atari_main (j, argv);
 			break;
 		default :
-			printf ("Usage: %s [-atari] [-help]\n");
+			printf ("Usage: %s [-atari] [-xl] [-xe] [-help]\n", argv[0]);
 			break;
 	}
 }

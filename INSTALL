@@ -5,39 +5,49 @@ Firstly, I don't know the legal status of the Atari Operating System
 or Atari Basic. I suggest that you obtain the images from the PC Xformer
 package (do an archie search on xf25).
 
-The files you need are 'ataribas.rom' and 'atariosb.rom' which should
-then be placed under a directory called 'object' below the source
-directory. At the moment the emulator must be executed from the
-build directory.
+The files you need are 'ataribas.rom', 'atarixl.rom' and 'atariosb.rom'.
+These files should be either placed under the directory defined by
+ATARI_LIBRARY in the Makefile or placed in a directory pointed to
+by the ATARI_LIBRARY environment variable at run time. If you obtain
+atariosa.rom it should be placed in the same directory.
 
 Note: for case sensitive systems make sure that the filenames and
       directory are all lowercase.
 
-X-Windows Version on a Unix Platform
-------------------------------------
+1. X Window Version (Including SUN OpenWindows) on a Unix Platform
+2. SVGALIB Version on Linux
+3. CURSES version for UNIX
+4. Graphical Version for the Amiga
+7. BASIC version (No Graphics). Should be straightforward to configure
+   for any 32 bit environment supporting ANSI C.
 
-Just type make. It is configured for a double size screen. The smaller
-screen can be selected by removing the -DDOUBLE_SIZE option from the
-Makefile.
+   Note: I don't say 32 bit computer because certain operating systems
+   enforce a 16 bit memory model. No prizes are offered for correctly
+   identifing the OS in question.
 
-Note: You may have to add the X11 include directory to the CPPFLAGS line.
-      On SunOS 4.1.3 and Solaris 2.4 it is /usr/openwin/include.
+Building the Emulator on a Unix Platform
+----------------------------------------
 
-      i.e. CPPFLAGS = -I/usr/openwin/include -DX11
+The Makefile is setup so that the emulator will look for its ROM images
+from /usr/local/lib/atari. To specify another directory you will have
+to define a new value for ATARI_LIBRARY within the Makefile.
 
-SVGALIB Version on Linux
-------------------------
+make basic
+make linux-svga
+make x11
+make linux-ncurses
 
-Uncomment the relevant section in the Makefile before typing make.
-
-Note: The SVGALIB version must be either run as the root user or the
+Note: The linux-svgalib version must be either run as the root user or the
       executable must be owned by root and have its setuid bit set.
 
       To enable the program to be run by any user, login as root
       and type:-
 
-		chown root 6502
-		chmod 4755 6502
+	make install-svgalib
+
+	It is set up to install files in /usr/local/bin and the
+	man page in /usr/local/man/man1. Edit the makefile if
+	you want them elsewhere.
 
 CURSES version for UNIX
 -----------------------
@@ -45,36 +55,66 @@ CURSES version for UNIX
 Uncomment the relevant section in the Makefile before typing make -
 If your using Linux make sure that you uncomment the NCURSES section.
 
-Note: Some version of curses do not work. This is because they are
-      missing a few functions (nodelay, attron, attroff, keypad and
-      curs_set) and the keyboard pre-processor symbols are not
-      defined within <cursor.h>. Two systems I know that are affected
-      by this are SunOS 4.1.3 (Not Solaris 2.x) and Linux. Linux
-      has another package called 'ncurses' that does not have this
-      problem.
+There are three different CURSES configurations stored within the
+Makefile. Please read them all and select the correct one. If you
+are using Solaris 2 make sure that you add -DSOLARIS2 (This fix
+may be required for other system as well - duplicate case values)
 
-BASIC version on VAX/VMS (No Graphics)
---------------------------------------
+Note: You must use a System V Cureses Library. BSD Curses is lacking
+      a few functions and will not work (nodelay, attron, attroff,
+      keypad and curs_set).
 
-type @vmsbuild
+Building the Emulator for VAX/VMS
+---------------------------------
 
-Compiling: Run the command file vmsbuild.com. It is set up to use
-           GNU C (I used version 2.6.1 but don't expect problems
-           with other versions). It will probably compile OK on
-           VAX C.
+This version only support the BASIC text only mode. You will be
+able to run programs such as:- DOS 2.5, DOS XL, MAC65 (disk version),
+Atari Basic and similar programs.
 
-6502 :== $DISK$xxxx:[yyyy]6502.exe
+Note: I have not built this version for a while. Modifications may be
+      required to vmsbuild.
+
+To build type @vmsbuild at the command line. I have compiled it with
+GNU C 2.6.1 but I don't expect problems with other versions. It
+will probably compile OK on VAX C but it will require the appropriate
+compilation options to be inserted into vmsbuild.com
+
+atari800 :== $DISK$xxxx:[yyyy]atari800.exe
 
 	where xxxx is the disk the software is on.
 	      yyyy is the directory the software is in.
 
-BASIC version for CBM Amiga (No Graphics)
------------------------------------------
+Building the Emulator for the CBM Amiga
+---------------------------------------
 
-Uncomment the relevant section in the Makefile before typing make.
-If your using dmake the makefile should be renamed dmakefile.
+Compiler: DICE C + GNU C (Lattice C Untried)
 
-BASIC version for Unix (No Graphics)
-------------------------------------
+There is a separate makefile provided for the Amiga - Makefile.amiga
+By default it is setup for use with GCC. If you are using Dice C you
+will need to comment out the GCC section and remove the comments from
+the Dice section.
 
-Uncomment the relevant section in the Makefile before typing make.
+For GCC be sure that the C_INCLUDE_PATH environment variable is
+pointing to the location of the official Commodore include files
+prior to compiling the emulator.
+
+For example:
+	setenv C_INCLUDE_PATH /path/of/cbm/includes
+
+By default the Operating System ROMs are expected to be installed in
+a directory called 'object' which is a subdirectory under your current
+directory. You will probably want to place these files in a more
+convienient location. Decide where you want to place the ROMs and
+edit the Makefile so that ATARI_LIBRARY points to the directory.
+
+If you are using DICE and dmake the Makefile should be renamed to
+DMakefile.
+
+Build the Emulator by typing "make" (GCC) or "dmake" (DICE)
+Make sure that the Operating System ROM images have been installed
+in the directory defined in ATARI_LIBRARY which is set within the
+Makefile.
+
+The emulator executable should be moved into a more convienient
+location. If your Amiga has the "man" utility you should copy
+the atari800 man page into the man(1) directory.

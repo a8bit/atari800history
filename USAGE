@@ -1,21 +1,28 @@
 Usage
 -----
 
-Usage: 6502 [-atari] [-hprefix/] [-b] [-c] [-d] [-1..9]
-            [disk1.xfd ... disk8.xfd]
-	    [-rom filename]
-	    [-oss filename]
-	    {-left|-central|-right|-wide1|-wide2}
+Usage: atari800 [-atari] [-xl] [-xe] [-hprefix/] [-b] [-c] [-d] [-1..9]
+		[disk1.xfd ... disk8.xfd]
+		[-rom filename]
+		[-oss filename]
+		{-small|-large|-huge}
+		{-sound}
+		{-left|-central|-right|-wide1|-wide2}
 
 -atari	Enable Atari 800 Emulation Mode [default]
+-xl	Enable Atari 800XL Emulation Mode [not complete]
+-xe	Same as -xl at the moment
 
 -rom	Loads the following 8K ROM Cartridge
 -oss	Loads the following OSS Super Cartridge
+-db	Loads the following DB Super Cartridge
+	(Private 32K Cartridge Format - not for general use)
 
--b	Enable BASIC ROM (Loaded from object/ subdirectory)
 -1..9	Trade off between speed and screen refresh rate. The lower the
         number the more often the screen is refreshed and the slower the
         CPU emulation. :-(
+-a	Use object/atariosa.rom
+-b	Use object/atariosb.rom [default]
 -c	Enable RAM between $C000 and $CFFF
 -d	Enable DEBUG Mode. Monitor is entered straight away. Only
 	useful for basic version.
@@ -24,37 +31,180 @@ Usage: 6502 [-atari] [-hprefix/] [-b] [-c] [-d] [-1..9]
 	H1: Store files in native Atari Format
 	H2: Convert linefeed to normal ASCII.
 
+X Window Options
+----------------
+
+-small	Creates a small window where one Atari 800 pixel is represented
+	by a single X Window pixel.
+-large	Creates a large window where one Atari 800 pixel is represented
+	by a 2x2 X Window rectangle.
+-huge	Creates a huge window where one Atari 800 pixel is represented
+	by a 3x3 X Window rectangle.
+
+SVGALIB Options
+---------------
+
+-sound	Select this if you want to try the test sound implementation.
+	You must have the piano1.sbi file in your current directory.
+	The piano1.sbi file can be obtained from sndkit.tar from
+	sunsite.
+
+Amiga Options
+-------------
+
+-ocs	Select this if you are using an OCS based Amiga. Note: This
+	option has only been tested under OCS emulation on an A1200.
+	There could be Workbench compatibility problems on a real OCS
+	Amiga.
+-ecs	Select this if you are using an ECS based Amiga. Note: This
+	option has only been test under ECS emulation on an A1200.
+	There could be Workbench compatibility problems on a real ECS
+	Amiga.
+-aga	Select this if you are using an AGA based Amiga.
+-grey	Produce a grey scale display.
+-colour	Produce a full colour display on AGA Amigas and up to 32
+	simultaneous colours on OCS and ECS Amigas.
+
+Curses Options
+--------------
+
 -left		Use columns 0 to 39
 -central	Use columns 20 to 59
 -right		Use columns 40 to 79
 -wide1		Use columns 0 to 79 (Spaces between characters)
 -wide2		Use columns 0 to 79 (as above but Normal/Reverse spaces)
 
-Keys during use
----------------
+Atari Basic
+===========
 
-These keys will probably be regrouped into a better order. Not all
-of the keys work for all versions.
+Atari Basic is nolonger activated by the '-b' command line option.
+It is now loaded in the same way as every other cartridge. This does
+not affect the XL/XE version which has Atari Basic as standard.
+
+Example 1 - Standard Atari 800 Emulator
+
+	atari800 -rom object/ataribas.rom
+
+Example 2 - Atari 800XL Emulator
+
+	atari800 -xl
+
+Keyboard + Joystick & Paddle Controllers
+========================================
+
+Unlike PC Xformer, I have not tried to emulate the exact keyboard layout,
+instead, I have tried to make your native keyboard work as normal.
+
+Note: The function keys will eventually be changed to a more logical
+      order.
+
+X11 Keyboard + Joystick & Paddle Controllers
+============================================
 
 F1	Warm Reset (This doesn't work under Open Windows)
 F2	Option
 F3	Select
 F4	Start
 F5	Cold Reset
-F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode).
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
 F7	Break Key
-F8	Crude Disk 1 Changer
+F8	---
+F9	Exit Emulator
+F10	---
+F11	---
+F12	---
 
-On the numeric keypad the 1, 2, 3, 4, 5, 6, 7, 8 and 9 keys are used
-as joystick 0. The 0 key is the fire key.
+ALT	Atari Key (Either ALT Key will work)
 
-Either ALT Key will operate as the Atari Key.
+Joystick 0 is operated by the mouse position relative to the center of the
+screen. The mouse button acts as the trigger.
 
-CTRL C breaks into the monitor. Execution can be resumed by typing CONT
-at the prompt (Basic version only).
+Paddle 0 is operated by moving the mouse pointer across the window.
 
-Unlike PC Xformer, I have not tried to emulate the exact keyboard layout,
-instead, I have tried to make your native keyboard work as normal.
+SVGALIB Keyboard + Joystick & Paddle Controllers
+================================================
 
-Note: It will run using two .XFD disks. It should work with upto eight,
-      but I had trouble modifing DOS.
+F1	Warm Reset (This doesn't work under Open Windows)
+F2	Option
+F3	Select
+F4	Start
+F5	Cold Reset
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
+F7	Break Key
+F8	---
+F9	Exit Emulator
+F10	---
+F11	---
+F12	---
+
+`	This character replaces the CAPS lock key because I have not
+	found a way of detecting it. A future solution maybe to
+	automatically issue a CAPS lock key when a transition is
+	made between lower and upper case keys. i.e. If svgalib
+	return 'a' followed by 'A' it could send 'a' 'CAPS' 'A' to
+	the Atari.
+
+The CTRL+SHIFT keyboard combinations are implemented using the left
+ALT key.
+
+Joystick 0 is operated by the numeric keypad (make sure that the numeric
+keypad has been enabled).
+
+	7 8 9
+	 \|/
+	4 5 6
+	 /|\
+	1 2 3
+
+	And 0 is the fire key.
+
+At the moment it is not possible to use a Paddle with the SVGALIB version.
+
+CURSES Keyboard + Joystick & Paddle Controllers
+===============================================
+
+F1	Warm Reset (This doesn't work under Open Windows)
+F2	Option
+F3	Select
+F4	Start
+F5	Cold Reset
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
+F7	Break Key
+F8	---
+F9	Exit Emulator
+F10	---
+F11	---
+F12	---
+
+Some control have special meaning within curses and should not be used.
+
+	Avoid Control + C, J, M, Q, S and Z
+
+The remaining control characters can be typed. Control characters are
+displayed on the screen with the associated upper case character in bold.
+
+No Joystick or Paddle support in this version.
+
+AMIGA Keyboard + Joystick & Paddle Controllers
+==============================================
+
+F1	Warm Reset (This doesn't work under Open Windows)
+F2	Option
+F3	Select
+F4	Start
+F5	Cold Reset
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
+F7	Break Key
+F8	---
+F9	EXIT Emulator
+F10	---
+
+Joystick is operated as normal with joystick plugged into port 2.
+Paddles are not support at the moment.
+
+BASIC Keyboard + Joystick & Paddle Controllers
+==============================================
+
+No Frills text. Upper and Lower case letters, 0-9, !"$% etc.
+No Reset, Option, Select, Start, etc.
+No Joystick or Paddle support in this version.

@@ -18,11 +18,24 @@
 		again, this prevents the pipeline from
 		being broken.
 
+	The 6502 emulation ignore memory attributes for
+	instruction fetch. This is because the instruction
+	must come from either RAM or ROM. A program that
+	executes instructions from within hardware
+	addresses will fail since there is never any
+	usable code there.
+
+	The 6502 emulation also ignores memory attributes
+	for accesses to page 0 and page 1.
+
 	Possible Problems
 	-----------------
 
 	Call to Get Word when accessing stack - it doesn't
 	wrap around at 0x1ff correctly.
+
+	Some instruction that read and modify memory (DEC abcd etc.)
+	may not work if they operate on ROM or HARDWARE addresses.
 */
 
 #include	<stdio.h>
@@ -46,34 +59,20 @@ static UBYTE	S;
 static UBYTE	X;
 static UBYTE	Y;
 
-static UBYTE	N;
+static UBYTE	N;	/* bit7 zero (0) or bit 7 non-zero (1) */
 static UBYTE	V;
 static UBYTE	B;
 static UBYTE	D;
 static UBYTE	I;
-static UBYTE	Z;
-static UBYTE	C;
+static UBYTE	Z;	/* zero (0) or non-zero (1) */
+static UBYTE	C;	/* zero (0) or non-zero (1) */
 
 UBYTE	memory[65536];
 UBYTE	attrib[65536];
 
-int	NMI;
-int	IRQ;
+int	INTERRUPT;
+int	ncycles;
 
-int	countdown = 15000;
-int	count = 0;
-
-/*
-	========================================================
-	Memory is accessed by calling routines from the hardware
-	emulation layer. These are dynamically selected at
-	runtime depending on the machine being emulated.
-	========================================================
-*/
-
-UBYTE (*XGetByte)  (UWORD addr);
-void  (*XPutByte)  (UWORD addr, UBYTE byte);
-void  (*Hardware) (void);
 void  (*Escape)   (UBYTE byte);
 
 /*
@@ -149,8 +148,7 @@ void CPU_Reset (void)
 		BCD_Lookup2[i] = (((i % 100) / 10) << 4) | (i % 10);
 	}
 
-	IRQ = FALSE;
-	NMI = FALSE;
+	INTERRUPT = 0x00;
 
 	D = 0;
 	S = 0xff;
@@ -169,16 +167,16 @@ void PHP (void)
 	data |= I ? 0x04 : 0;
 	data |= (Z == 0) ? 0x02 : 0;
 	data |= C ? 0x01 : 0;
-	PutByte(0x0100 + S, data);
-	S--;
+
+	memory[0x0100 + S--] = data;
 }
 
 void PLP (void)
 {
 	UBYTE	data;
 
-	S++;
-	data = GetByte(0x0100 + S);
+	data = memory[0x0100 + ++S];
+
 	N = (data & 0x80) ? 0x80 : 0;
 	V = (data & 0x40) ? 1 : 0;
 	B = (data & 0x10) ? 1 : 0;
@@ -186,6 +184,81 @@ void PLP (void)
 	I = (data & 0x04) ? 1 : 0;
 	Z = (data & 0x02) ? 0 : 1;
 	C = (data & 0x01) ? 1 : 0;
+}
+
+void ADC (UBYTE data)
+{
+	if (C) C = 1;
+	if (!D)
+	{
+		UBYTE	old_A;
+		UWORD	temp;
+
+		old_A = A;
+
+		temp = (UWORD)A + (UWORD)data + (UWORD)C;
+
+		Z = N = A = temp & 0xff;
+/*
+		C = (temp > 255);
+*/
+		C = temp >> 8;
+		V = (old_A ^ A) & 0x80;
+	}
+	else
+	{
+		UBYTE	old_A;
+		int	bcd1, bcd2;
+
+		old_A = A;
+
+		bcd1 = BCD_Lookup1[A];
+		bcd2 = BCD_Lookup1[data];
+
+		bcd1 += bcd2 + C;
+
+		Z = N = A = BCD_Lookup2[bcd1];
+
+		C = (bcd1 > 99);
+		V = (old_A ^ A) & 0x80;
+	}
+}
+
+void SBC (UBYTE data)
+{
+	if (C) C = 1;
+	if (!D)
+	{
+		UWORD	temp;
+		UBYTE	old_A;
+
+		old_A = A;
+
+		temp = (UWORD)A - (UWORD)data - (UWORD)!C;
+
+		Z = N = A = temp & 0xff;
+
+		C = (old_A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
+		V = (old_A ^ A) & 0x80;
+	}
+	else
+	{
+		int	bcd1, bcd2;
+		UBYTE	old_A;
+
+		old_A = A;
+
+		bcd1 = BCD_Lookup1[A];
+		bcd2 = BCD_Lookup1[data];
+
+		bcd1 = bcd1 - bcd2 - !C;
+
+		if (bcd1 < 0) bcd1 = 100 - (-bcd1);
+		Z = N = A = BCD_Lookup2[bcd1];
+
+		C = (old_A < (data + !C)) ? 0 : 1;
+		V = (old_A ^ A) & 0x80;
+	}
 }
 
 /*
@@ -198,754 +271,1068 @@ void PLP (void)
 	==============================================================
 */
 
-int GO (int CONTINUE)
+int GO (void)
 {
-	int	cpu_status = CPU_STATUS_OK;
+  int	cpu_status = CPU_STATUS_OK;
 
-	UWORD	addr;
-	UBYTE	data;
-	UBYTE	temp;
-	SBYTE	sdata;
+  UWORD	retadr;
+  UWORD	addr;
+  UBYTE	data;
+  SBYTE	sdata;
 
-	UBYTE	instr;
-	UWORD	instr_addr;
+  UBYTE	opcode;
 
-	do
+/*
+   This used to be in the main loop but has been removed to improve
+   execution speed. It does not seem to have any adverse effect on
+   the emulation for two reasons:-
+
+   1. NMI's will can only be raised in atari_custom.c - there is
+      no way an NMI can be generated whilst in this routine.
+
+   2. The timing of the IRQs are not that critical.
+*/
+
+  if (INTERRUPT)
+    {
+      if (INTERRUPT & NMI_MASK)
 	{
-		UWORD	retadr;
+	  retadr = PC;
+	  memory[0x0100 + S--] = retadr >> 8;
+	  memory[0x0100 + S--] = retadr & 0xff;
+	  PHP ();
+	  I = 1;
+	  PC = (memory[0xfffb] << 8) | memory[0xfffa];
+	  INTERRUPT &= ~NMI_MASK;
+	}
 
-		if (!count--)
-		{
-			count = countdown;
-			Hardware ();
-		}
+      if (INTERRUPT & IRQ_MASK)
+	{
+	  if (!I)
+	    {
+	      retadr = PC;
+	      memory[0x0100 + S--] = retadr >> 8;
+	      memory[0x0100 + S--] = retadr & 0xff;
+	      PHP ();
+	      I = 1;
+	      PC = (memory[0xffff] << 8) | memory[0xfffe];
+	      INTERRUPT &= ~IRQ_MASK;
+	    }
+	}
+    }
 
-		if (NMI)
-		{
-			retadr = PC;
-			PutByte (0x0100+S, retadr >> 8);
-			S--;
-			PutByte (0x0100+S, retadr & 0xff);
-			S--;
+  while (ncycles--)
+    {
+#ifdef TRACE
+      disassemble (PC, PC+1);
+#endif
 
-			PHP ();
-			I = 1;
-			PC = (GetByte(0xfffb) << 8) | GetByte(0xfffa);
-			NMI = FALSE;
-		}
-
-		if (IRQ )
-		{
-			if (!I)
-			{
-				retadr = PC;
-				PutByte (0x0100+S, retadr >> 8);
-				S--;
-				PutByte (0x0100+S, retadr & 0xff);
-				S--;
-
-				PHP ();
-				I = 1;
-				PC = (GetByte(0xffff) << 8) | GetByte(0xfffe);
-				IRQ = FALSE;
-			}
-		}
+      opcode = memory[PC++];
 /*
-		if (CONTINUE != -1)
-			disassemble (PC, PC+1);
+   =====================================
+   Extract Address if Required by Opcode
+   =====================================
 */
 
-		instr = GetByte(PC);
-		instr_addr = PC++;
+#define	ABSOLUTE	addr=(memory[PC+1]<<8)|memory[PC];PC+=2;
+#define	ZPAGE		addr=memory[PC++];
+#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)|memory[PC])+(UWORD)X;PC+=2;
+#define ABSOLUTE_Y	addr=((memory[PC+1]<<8)|memory[PC])+(UWORD)Y;PC+=2;
+#define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=GetWord(addr);
+#define	INDIRECT_Y	addr=memory[PC++];addr=GetWord(addr)+(UWORD)Y;
+#define	ZPAGE_X		addr=(memory[PC++]+X)&0xff;
 
 /*
-	=====================================
-	Extract Address if Required by Opcode
-	=====================================
+   ==============
+   Execute Opcode
+   ==============
 */
-		switch (instr)
-		{
-/*
-	=========================
-	Absolute Addressing Modes
-	=========================
-*/
-			case 0x6d :	/* ADC */
-			case 0x2d :	/* AND */
-			case 0x0e :	/* ASL */
-			case 0x2c :	/* BIT */
-			case 0xcd :	/* CMP */
-			case 0xec :	/* CPX */
-			case 0xcc :	/* CPY */
-			case 0xce :	/* DEC */
-			case 0x4d :	/* EOR */
-			case 0xee :	/* INC */
-			case 0x4c :	/* JMP */
-			case 0x20 :	/* JSR */
-			case 0xad :	/* LDA */
-			case 0xae :	/* LDX */
-			case 0xac :	/* LDY */
-			case 0x4e :	/* LSR */
-			case 0x0d :	/* ORA */
-			case 0x2e :	/* ROL */
-			case 0x6e :	/* ROR */
-			case 0xed :	/* SBC */
-			case 0x8d :	/* STA */
-			case 0x8e :	/* STX */
-			case 0x8c :	/* STY */
-				addr = GetWord(PC);
-				PC+=2;
-				break;
-/*
-	======================
-	0-Page Addressing Mode
-	======================
-*/
-			case 0x65 :	/* ADC */
-			case 0x25 :	/* AND */
-			case 0x06 :	/* ASL */
-			case 0x24 :	/* BIT */
-			case 0xc5 :	/* CMP */
-			case 0xe4 :	/* CPX */
-			case 0xc4 :	/* CPY */
-			case 0xc6 :	/* DEC */
-			case 0x45 :	/* EOR */
-			case 0xe6 :	/* INC */
-			case 0xa5 :	/* LDA */
-			case 0xa6 :	/* LDX */
-			case 0xa4 :	/* LDY */
-			case 0x46 :	/* LSR */
-			case 0x05 :	/* ORA */
-			case 0x26 :	/* ROL */
-			case 0x66 :	/* ROR */
-			case 0xe5 :	/* SBC */
-			case 0x85 :	/* STA */
-			case 0x86 :	/* STX */
-			case 0x84 :	/* STY */
-				addr = GetByte(PC);
-				PC++;
-				break;
-/*
-	========================
-	Relative Addressing Mode
-	========================
-*/
-			case 0x90 :	/* BCC */
-			case 0xb0 :	/* BCS */
-			case 0xf0 :	/* BEQ */
-			case 0x30 :	/* BMI */
-			case 0xd0 :	/* BNE */
-			case 0x10 :	/* BPL */
-			case 0x50 :	/* BVC */
-			case 0x70 :	/* BVS */
-				sdata = GetByte(PC);
-				PC++;
-				break;
-/*
-	=========================
-	Immediate Addressing Mode
-	=========================
-*/
-			case 0x69 :	/* ADC */
-			case 0x29 :	/* AND */
-			case 0xc9 :	/* CMP */
-			case 0xe0 :	/* CPX */
-			case 0xc0 :	/* CPY */
-			case 0x49 :	/* EOR */
-			case 0xa9 :	/* LDA */
-			case 0xa2 :	/* LDX */
-			case 0xa0 :	/* LDY */
-			case 0x09 :	/* ORA */
-			case 0xe9 :	/* SBC */
-			case 0xff :	/* ESC */
-				data = GetByte (PC);
-				PC++;
-				break;
-/*
-	=====================
-	ABS,X Addressing Mode
-	=====================
-*/
-			case 0x7d :	/* ADC */
-			case 0x3d :	/* AND */
-			case 0x1e :	/* ASL */
-			case 0xdd :	/* CMP */
-			case 0xde :	/* DEC */
-			case 0x5d :	/* EOR */
-			case 0xfe :	/* INC */
-			case 0xbd :	/* LDA */
-			case 0xbc :	/* LDY */
-			case 0x5e :	/* LSR */
-			case 0x1d :	/* ORA */
-			case 0x3e :	/* ROL */
-			case 0x7e :	/* ROR */
-			case 0xfd :	/* SBC */
-			case 0x9d :	/* STA */
-				addr = GetWord(PC) + (UWORD)X;
-				PC+=2;
-				break;
-/*
-	=====================
-	ABS,Y Addressing Mode
-	=====================
-*/
-			case 0x79 :	/* ADC */
-			case 0x39 :	/* AND */
-			case 0xd9 :	/* CMP */
-			case 0x59 :	/* EOR */
-			case 0xb9 :	/* LDA */
-			case 0xbe :	/* LDX */
-			case 0x19 :	/* ORA */
-			case 0xf9 :	/* SBC */
-			case 0x99 :	/* STA */
-				addr = GetWord(PC) + (UWORD)Y;
-				PC+=2;
-				break;
-/*
-	=======================
-	(IND,X) Addressing Mode
-	=======================
-*/
-			case 0x61 :	/* ADC */
-			case 0x21 :	/* AND */
-			case 0xc1 :	/* CMP */
-			case 0x41 :	/* EOR */
-			case 0xa1 :	/* LDA */
-			case 0x01 :	/* ORA */
-			case 0xe1 :	/* SBC */
-			case 0x81 :	/* STA */
-				addr = (UWORD)GetByte(PC) + (UWORD)X;
-				addr = GetWord(addr);
-				PC++;
-				break;
-/*
-	=======================
-	(IND),Y Addressing Mode
-	=======================
-*/
-			case 0x71 :	/* ADC */
-			case 0x31 :	/* AND */
-			case 0xd1 :	/* CMP */
-			case 0x51 :	/* EOR */
-			case 0xb1 :	/* LDA */
-			case 0x11 :	/* ORA */
-			case 0xf1 :	/* SBC */
-			case 0x91 :	/* STA */
-				addr = GetByte(PC);
-				addr = GetWord(addr) + (UWORD)Y;
-				PC++;
-				break;
-/*
-	========================
-	0-Page,X Addressing Mode
-	========================
-*/
-			case 0x75 :	/* ADC */
-			case 0x35 :	/* AND */
-			case 0x16 :	/* ASL */
-			case 0xd5 :	/* CMP */
-			case 0xd6 :	/* DEC */
-			case 0x55 :	/* EOR */
-			case 0xf6 :	/* INC */
-			case 0xb5 :	/* LDA */
-			case 0xb4 :	/* LDY */
-			case 0x56 :	/* LSR */
-			case 0x15 :	/* ORA */
-			case 0x36 :	/* ROL */
-			case 0x76 :	/* ROR */
-			case 0xf5 :	/* SBC */
-			case 0x95 :	/* STA */
-			case 0x94 :	/* STY */
-				addr = (UWORD)GetByte(PC) + (UWORD)X;
-				addr = addr & 0xff;
-				PC++;
-				break;
-/*
-	========================
-	0-Page,Y Addressing Mode
-	========================
-*/
-			case 0xb6 :	/* LDX */
-			case 0x96 :	/* STX */
-				addr = (UWORD)GetByte(PC) + (UWORD)Y;
-				addr = addr & 0xff;
-				PC++;
-				break;
-/*
-	========================
-	Indirect Addressing Mode
-	========================
-*/
-			case 0x6c :	/* JMP ($xxxx) */
-				addr = GetWord(PC);
-				addr = GetWord(addr);
-				PC+=2;
-				break;
-			default :
-				break;
-		}
-/*
-	==============
-	Execute Opcode
-	==============
-*/
-		switch (instr)
-		{
-/* ADC */		case 0x6d :
-			case 0x65 :
-			case 0x7d :
-			case 0x79 :
-			case 0x61 :
-			case 0x71 :
-			case 0x75 :
-				data = GetByte(addr);
-			case 0x69 :
-				if (!D)
-				{
-					UBYTE	old_A;
-					UWORD	temp;
-
-					old_A = A;
-
-					temp = (UWORD)A + (UWORD)data + (UWORD)C;
-
-					A = temp & 0xff;
-
-					N = A;
-					Z = A;
-					C = (temp > 255);
-					V = ((old_A ^ A) & 0x80) >> 7;
-				}
-				else
-				{
-					UBYTE	old_A;
-					int	bcd1, bcd2;
-
-					old_A = A;
-/*
-					bcd1 = ((A >> 4) & 0xf) * 10 + (A & 0xf);
-					bcd2 = ((data >> 4) & 0xf) * 10 + (data & 0xf);
-*/
-					bcd1 = BCD_Lookup1[A];
-					bcd2 = BCD_Lookup1[data];
-
-					bcd1 += bcd2 + C;
-/*
-					A = (((bcd1 % 100) / 10) << 4) | (bcd1 % 10);
-*/
-					A = BCD_Lookup2[bcd1];
-
-					N = A;
-					Z = A;
-					C = (bcd1 > 99);
-					V = ((old_A ^ A) & 0x80) >> 7;
-				}
-				break;
-/* AND */		case 0x2d :
-			case 0x25 :
-			case 0x3d :
-			case 0x39 :
-			case 0x21 :
-			case 0x31 :
-			case 0x35 :
-				data = GetByte(addr);
-			case 0x29 :
-				Z = N = A = A & data;
-				break;
-/* ASL */		case 0x0a :
-				C = (A >= 128);
-				Z = N = A = A << 1;
-				break;
-			case 0x0e :
-			case 0x06 :
-			case 0x1e :
-			case 0x16 :
-				data = GetByte(addr);
-				C = (data >= 128);
-				Z = N = data = data << 1;
-				PutByte(addr, data);
-				break;
-/* BCC */		case 0x90 :
-				if (!C) PC += (SWORD)sdata;
-				break;
-/* BCS */		case 0xb0 :
-				if (C) PC += (SWORD)sdata;
-				break;
-/* BEQ */		case 0xf0 :
-				if (Z == 0) PC += (SWORD)sdata;
-				break;
-/* BIT */		case 0x2c :
-			case 0x24 :
-				data = GetByte(addr);
-				N = data;
-				V = (data & 0x40) >> 6;
-				Z = (A & data);
-				break;
-/* BMI */		case 0x30 :
-				if (N & 0x80) PC += (SWORD)sdata;
-				break;
-/* BNE */		case 0xd0 :
-				if (Z != 0) PC += (SWORD)sdata;
-				break;
-/* BPL */		case 0x10 :
-				if (!(N & 0x80)) PC += (SWORD)sdata;
-				break;
-/* BRK */		case 0x00 :
-				printf ("BRK: %x\n", PC-1);
-				retadr = PC + 1;
-				PutByte (0x0100+S, retadr >> 8);
-				S--;
-				PutByte (0x0100+S, retadr & 0xff);
-				S--;
-				B = 1;
-				PHP ();
-				I = 1;
-				PC = GetWord (0xfffe);
-				break;
-/* BVC */		case 0x50 :
-				if (!V) PC += (SWORD)sdata;
-				break;
-/* BVS */		case 0x70 :
-				if (V) PC += (SWORD)sdata;
-				break;
-/* CLC */		case 0x18 :
-				C = 0;
-				break;
-/* CLD */		case 0xd8 :
-				D = 0;
-				break;
-/* CLI */		case 0x58 :
-				I = 0;
-				break;
-/* CLV */		case 0xb8 :
-				V = 0;
-				break;
-/* CMP */		case 0xcd :
-			case 0xc5 :
-			case 0xdd :
-			case 0xd9 :
-			case 0xc1 :
-			case 0xd1 :
-			case 0xd5 :
-				data = GetByte (addr);
-			case 0xc9 :
-				temp = A - data;
-				Z = temp;
-				N = temp;
-				C = (A >= data);
-				break;
-/* CPX */		case 0xec :
-			case 0xe4 :
-				data = GetByte (addr);
-			case 0xe0 :
-				temp = X - data;
-				Z = temp;
-				N = temp;
-				C = (X >= data);
-				break;
-/* CPY */		case 0xcc :
-			case 0xc4 :
-				data = GetByte(addr);
-			case 0xc0 :
-				temp = Y - data;
-				Z = temp;
-				N = temp;
-				C = (Y >= data);
-				break;
-/* DEC */		case 0xce :
-			case 0xc6 :
-			case 0xde :
-			case 0xd6 :
-				data = GetByte(addr);
-				data--;
-				PutByte (addr, data);
-				N = data;
-				Z = data;
-				break;
-/* DEX */		case 0xca :
-				X--;
-				Z = N = X;
-				break;
-/* DEY */		case 0x88 :
-				Y--;
-				Z = N = Y;
-				break;
-/* EOR */		case 0x4d :
-			case 0x45 :
-			case 0x5d :
-			case 0x59 :
-			case 0x41 :
-			case 0x51 :
-			case 0x55 :
-				data = GetByte (addr);
-			case 0x49 :
-				Z = N = A = A ^ data;
-				break;
-/* INC */		case 0xee :
-			case 0xe6 :
-			case 0xfe :
-			case 0xf6 :
-				data = GetByte(addr);
-				data++;
-				PutByte(addr, data);
-				N = data;
-				Z = data;
-				break;
-/* INX */		case 0xe8 :
-				X++;
-				Z = N = X;
-				break;
-/* INY */		case 0xc8 :
-				Y++;
-				Z = N = Y;
-				break;
-/* JMP */		case 0x4c :
-			case 0x6c :
-				PC = addr;
-				break;
-/* JSR */		case 0x20 :
-				retadr = PC - 1;
-				PutByte (0x0100+S, retadr >> 8);
-				S--;
-				PutByte (0x0100+S, retadr & 0xff);
-				S--;
-
-				PC = addr;
-				break;
-/* LDA */		case 0xad :
-			case 0xa5 :
-			case 0xbd :
-			case 0xb9 :
-			case 0xa1 :
-			case 0xb1 :
-			case 0xb5 :
-				data = GetByte(addr);
-			case 0xa9 :
-				Z = N = A = data;
-				break;
-/* LDX */		case 0xae :
-			case 0xa6 :
-			case 0xbe :
-			case 0xb6 :
-				data = GetByte (addr);
-			case 0xa2 :
-				Z = N = X = data;
-				break;
-/* LDY */		case 0xac :
-			case 0xa4 :
-			case 0xbc :
-			case 0xb4 :
-				data = GetByte (addr);
-			case 0xa0 :
-				Z = N = Y = data;
-				break;
-/* LSR */		case 0x4a :
-				C = (A & 1);
-				A = A >> 1;
-				N = 0;
-				Z = A;
-				break;
-			case 0x4e :
-			case 0x46 :
-			case 0x5e :
-			case 0x56 :
-				data = GetByte(addr);
-				C = (data & 1);
-				data = data >> 1;
-				N = 0;
-				Z = data;
-				PutByte(addr, data);
-				break;
-/* NOP */		case 0xea :
-				break;
-/* ORA */		case 0x0d :
-			case 0x05 :
-			case 0x1d :
-			case 0x19 :
-			case 0x01 :
-			case 0x11 :
-			case 0x15 :
-				data = GetByte(addr);
-			case 0x09 :
-				Z = N = A = A | data;
-				break;
-/* PHA */		case 0x48 :
-				PutByte(0x0100 + S, A);
-				S--;
-				break;
-/* PHP */		case 0x08 :
-				PHP ();
-				break;
-/* PLA */		case 0x68 :
-				S++;
-				A = GetByte(0x0100 + S);
-				N = A;
-				Z = A;
-				break;
-/* PLP */		case 0x28 :
-				PLP ();
-				break;
-/* ROL */		case 0x2a :
-				temp = (A >= 128);
-				A = (A << 1) | C;
-				C = temp;
-				N = A;
-				Z = A;
-				break;
-			case 0x2e :
-			case 0x26 :
-			case 0x3e :
-			case 0x36 :
-				data = GetByte(addr);
-				temp = (data >= 128);
-				data = (data << 1) | C;
-				C = temp;
-				N = data;
-				Z = data;
-				PutByte(addr, data);
-				break;
-/* ROR */		case 0x6a :
-				temp = (A & 1);
-				A = (A >> 1) | (C << 7);
-				C = temp;
-				N = A;
-				Z = A;
-				break;
-			case 0x6e :
-			case 0x66 :
-			case 0x7e :
-			case 0x76 :
-				data = GetByte(addr);
-				temp = (data & 1);
-				data = (data >> 1) | (C << 7);
-				C = temp;
-				N = data;
-				Z = data;
-				PutByte(addr, data);
-				break;
-/* RTI */		case 0x40 :
-				PLP ();
-				S++;
-				retadr = GetByte (0x0100 + S);
-				S++;
-				retadr |= (GetByte (0x0100 + S) << 8);
-				PC = retadr;
-				if (CONTINUE == -1)
-					CONTINUE = FALSE;
-				break;
-/* RTS */		case 0x60 :
-				S++;
-				retadr = GetByte (0x0100 + S);
-				S++;
-				retadr |= (GetByte (0x0100 + S) << 8);
-				PC = retadr + 1;
-				break;
-/* SBC */		case 0xed :
-			case 0xe5 :
-			case 0xfd :
-			case 0xf9 :
-			case 0xe1 :
-			case 0xf1 :
-			case 0xf5 :
-				data = GetByte(addr);
-			case 0xe9 :
-				if (!D)
-				{
-					UWORD	temp;
-					UBYTE	old_A;
-
-					old_A = A;
-
-					temp = (UWORD)A - (UWORD)data - (UWORD)!C;
-
-					A = temp & 0xff;
-
-					N = A;
-					Z = A;
-					C = (old_A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
-					V = (((old_A ^ A) & 0x80) != 0);
-				}
-				else
-				{
-					int	bcd1, bcd2;
-					UBYTE	old_A;
-
-					old_A = A;
-/*
-					bcd1 = ((A >> 4) & 0xf) * 10 + (A & 0xf);
-					bcd2 = ((data >> 4) & 0xf) * 10 + (data & 0xf);
-*/
-					bcd1 = BCD_Lookup1[A];
-					bcd2 = BCD_Lookup1[data];
-
-					bcd1 = bcd1 - bcd2 - !C;
-/*
-					A = (((bcd1 % 100) / 10) << 4) | (bcd1 % 10);
-*/
-					A = BCD_Lookup2[bcd1];
-
-					N = A;
-					Z = A;
-					C = (old_A < (data + !C)) ? 0 : 1;
-					V = (((old_A ^ A) & 0x80) != 0);
-				}
-				break;
-/* SEC */		case 0x38 :
-				C = 1;
-				break;
-/* SED */		case 0xf8 :
-				D = 1;
-				break;
-/* SEI */		case 0x78 :
-				I = 1;
-				break;
-/* STA */		case 0x8d :
-			case 0x85 :
-			case 0x9d :
-			case 0x99 :
-			case 0x81 :
-			case 0x91 :
-			case 0x95 :
-				PutByte(addr, A);
-				break;
-/* STX */		case 0x8e :
-			case 0x86 :
-			case 0x96 :
-				PutByte(addr, X);
-				break;
-/* STY */		case 0x8c :
-			case 0x84 :
-			case 0x94 :
-				PutByte(addr, Y);
-				break;
-/* TAX */		case 0xaa :
-				Z = N = X = A;
-				break;
-/* TAY */		case 0xa8 :
-				Z = N = Y = A;
-				break;
-/* TSX */		case 0xba :
-				Z = N = X = S;
-				break;
-/* TXA */		case 0x8a :
-				Z = N = A = X;
-				break;
-/* TXS */		case 0x9a :
-				S = X;
-				break;
-/* TYA */		case 0x98 :
-				Z = N = A = Y;
-				break;
-/* ESC */		case 0xff :
-				Escape (data);
-				break;
-			default :
-				fprintf (stderr,"*** Invalid Opcode %02x at address %04x\n",instr,instr_addr);
-				cpu_status = CPU_STATUS_ERR;
-				CONTINUE = FALSE;
-				break;
-		}
-	} while (CONTINUE);
-
-	return cpu_status;
+      switch (opcode)
+	{
+/* BRK */
+	case 0x00 :
+	  retadr = PC + 1;
+	  memory[0x0100 + S--] = retadr >> 8;
+	  memory[0x0100 + S--] = retadr & 0xff;
+	  B = 1;
+	  PHP ();
+	  I = 1;
+	  PC = (memory[0xffff] << 8) | memory[0xfffe];
+	  break;
+/* ORA (ab,x) */
+	case 0x01 :
+	  INDIRECT_X;
+	  Z = N = A = A | GetByte(addr);
+	  break;
+/* ORA ab */
+	case 0x05 :
+	  ZPAGE;
+	  Z = N = A = A | memory[addr];
+	  break;
+/* ASL ab */
+	case 0x06 :
+	  ZPAGE;
+	  data = memory[addr];
+	  C = data & 0x80;
+	  Z = N = data = data << 1;
+	  memory[addr] = data;
+	  break;
+/* PHP */
+	case 0x08 :
+	  PHP ();
+	  break;
+/* ORA #ab */
+	case 0x09 :
+	  Z = N = A = A | memory[PC++];
+	  break;
+/* ASL */
+	case 0x0a :
+	  C = A & 0x80;
+	  Z = N = A = A << 1;
+	  break;
+/* ORA abcd */
+	case 0x0d :
+	  ABSOLUTE;
+	  Z = N = A = A | GetByte(addr);
+	  break;
+/* ASL abcd */
+	case 0x0e :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  C = data & 0x80;
+	  Z = N = data = data << 1;
+	  PutByte(addr, data);
+	  break;
+/* BPL */
+	case 0x10 :
+	  if (!(N & 0x80))
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* ORA (ab),y */
+	case 0x11 :
+	  INDIRECT_Y;
+	  Z = N = A = A | GetByte(addr);
+	  break;
+/* ORA ab,x */
+	case 0x15 :
+	  ZPAGE_X;
+	  Z = N = A = A | memory[addr];
+	  break;
+/* ASL ab,x */
+	case 0x16 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  C = data & 0x80;
+	  Z = N = data = data << 1;
+	  memory[addr] = data;
+	  break;
+/* CLC */
+	case 0x18 :
+	  C = 0;
+	  break;
+/* ORA abcd,y */
+	case 0x19 :
+	  ABSOLUTE_Y;
+	  Z = N = A = A | GetByte(addr);
+	  break;
+/* ORA abcd,x */
+	case 0x1d :
+	  ABSOLUTE_X;
+	  Z = N = A = A | GetByte(addr);
+	  break;
+/* ASL abcd,x */
+	case 0x1e :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  C = data & 0x80;
+	  Z = N = data = data << 1;
+	  PutByte(addr, data);
+	  break;
+/* JSR abcd */
+	case 0x20 :
+	  retadr = PC + 1;
+	  memory[0x0100 + S--] = retadr >> 8;
+	  memory[0x0100 + S--] = retadr & 0xff;
+	  PC = (memory[PC+1] << 8) | memory[PC];
+	  break;
+/* AND (ab,x) */
+	case 0x21 :
+	  INDIRECT_X;
+	  Z = N = A = A & GetByte(addr);
+	  break;
+/* BIT ab */
+	case 0x24 :
+	  ZPAGE;
+	  data = memory[addr];
+	  N = data;
+	  V = data & 0x40;
+	  Z = (A & data);
+	  break;
+/* AND ab */
+	case 0x25 :
+	  ZPAGE;
+	  Z = N = A = A & memory[addr];
+	  break;
+/* ROL ab */
+	case 0x26 :
+	  ZPAGE;
+	  data = memory[addr];
+	  if (C)
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1) | 1;
+	    }
+	  else
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1);
+	    }
+	  memory[addr] = data;
+	  break;
+/* PLP */
+	case 0x28 :
+	  PLP ();
+	  break;
+/* AND #ab */
+	case 0x29 :
+	  Z = N = A = A & memory[PC++];
+	  break;
+/* ROL */
+	case 0x2a :
+	  if (C)
+	    {
+	      C = A & 0x80;
+	      Z = N = A = (A << 1) | 1;
+	    }
+	  else
+	    {
+	      C = A & 0x80;
+	      Z = N = A = (A << 1);
+	    }
+	  break;
+/* BIT abcd */
+	case 0x2c :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  N = data;
+	  V = data & 0x40;
+	  Z = (A & data);
+	  break;
+/* AND abcd */
+	case 0x2d :
+	  ABSOLUTE;
+	  Z = N = A = A & GetByte(addr);
+	  break;
+/* ROL abcd */
+	case 0x2e :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  if (C)
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1) | 1;
+	    }
+	  else
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1);
+	    }
+	  PutByte(addr, data);
+	  break;
+/* BMI */
+	case 0x30 :
+	  if (N & 0x80)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* AND (ab),y */
+	case 0x31 :
+	  INDIRECT_Y;
+	  Z = N = A = A & GetByte(addr);
+	  break;
+/* AND ab,x */
+	case 0x35 :
+	  ZPAGE_X;
+	  Z = N = A = A & memory[addr];
+	  break;
+/* ROL ab,x */
+	case 0x36 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  if (C)
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1) | 1;
+	    }
+	  else
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1);
+	    }
+	  memory[addr] = data;
+	  break;
+/* SEC */
+	case 0x38 :
+	  C = 1;
+	  break;
+/* AND abcd,y */
+	case 0x39 :
+	  ABSOLUTE_Y;
+	  Z = N = A = A & GetByte(addr);
+	  break;
+/* AND abcd,x */
+	case 0x3d :
+	  ABSOLUTE_X;
+	  Z = N = A = A & GetByte(addr);
+	  break;
+/* ROL abcd,x */
+	case 0x3e :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  if (C)
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1) | 1;
+	    }
+	  else
+	    {
+	      C = data & 0x80;
+	      Z = N = data = (data << 1);
+	    }
+	  PutByte(addr, data);
+	  break;
+/* RTI */
+	case 0x40 :
+	  PLP ();
+	  retadr = memory[0x0100 + ++S];
+	  PC = (memory[0x0100 + ++S] << 8) | retadr;
+	  break;
+/* EOR (ab,x) */
+	case 0x41 :
+	  INDIRECT_X;
+	  Z = N = A = A ^ GetByte(addr);
+	  break;
+/* EOR ab */
+	case 0x45 :
+	  ZPAGE;
+	  Z = N = A = A ^ memory[addr];
+	  break;
+/* LSR ab */
+	case 0x46 :
+	  ZPAGE;
+	  data = memory[addr];
+	  C = data & 1;
+	  Z = data = data >> 1;
+	  N = 0;
+	  memory[addr] = data;
+	  break;
+/* PHA */
+	case 0x48 :
+	  memory[0x0100 + S--] = A;
+	  break;
+/* EOR #ab */
+	case 0x49 :
+	  Z = N = A = A ^ memory[PC++];
+	  break;
+/* LSR */
+	case 0x4a :
+	  C = A & 1;
+	  A = A >> 1;
+	  N = 0;
+	  Z = A;
+	  break;
+/* JMP abcd */
+	case 0x4c :
+	  PC = (memory[PC+1] << 8) | memory[PC];
+	  break;
+/* EOR abcd */
+	case 0x4d :
+	  ABSOLUTE;
+	  Z = N = A = A ^ GetByte(addr);
+	  break;
+/* LSR abcd */
+	case 0x4e :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  C = data & 1;
+	  Z = data = data >> 1;
+	  N = 0;
+	  PutByte(addr, data);
+	  break;
+/* BVC */
+	case 0x50 :
+	  if (!V)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* EOR (ab),y */
+	case 0x51 :
+	  INDIRECT_Y;
+	  Z = N = A = A ^ GetByte(addr);
+	  break;
+/* EOR ab,x */
+	case 0x55 :
+	  ZPAGE_X;
+	  Z = N = A = A ^ memory[addr];
+	  break;
+/* LSR ab,x */
+	case 0x56 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  C = data & 1;
+	  Z = data = data >> 1;
+	  N = 0;
+	  memory[addr] = data;
+	  break;
+/* CLI */
+	case 0x58 :
+	  I = 0;
+	  break;
+/* EOR abcd,y */
+	case 0x59 :
+	  ABSOLUTE_Y;
+	  Z = N = A = A ^ GetByte(addr);
+	  break;
+/* EOR abcd,x */
+	case 0x5d :
+	  ABSOLUTE_X;
+	  Z = N = A = A ^ GetByte(addr);
+	  break;
+/* LSR abcd,x */
+	case 0x5e :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  C = data & 1;
+	  Z = data = data >> 1;
+	  N = 0;
+	  PutByte(addr, data);
+	  break;
+/* RTS */
+	case 0x60 :
+	  retadr = memory[0x0100 + ++S];
+	  retadr |= (memory[0x0100 + ++S] << 8);
+	  PC = retadr + 1;
+	  break;
+/* ADC (ab,x) */
+	case 0x61 :
+	  INDIRECT_X;
+	  data = GetByte(addr);
+	  ADC (data);
+	  break;
+/* ADC ab */
+	case 0x65 :
+	  ZPAGE;
+	  data = memory[addr];
+	  ADC (data);
+	  break;
+/* ROR ab */
+	case 0x66 :
+	  ZPAGE;
+	  data = memory[addr];
+	  if (C)
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1) | 0x80;
+	    }
+	  else
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1);
+	    }
+	  memory[addr] = data;
+	  break;
+/* PLA */
+	case 0x68 :
+	  Z = N = A = memory[0x0100 + ++S];
+	  break;
+/* ADC #ab */
+	case 0x69 :
+	  ADC (memory[PC++]);
+	  break;
+/* ROR */
+	case 0x6a :
+	  if (C)
+	    {
+	      C = A & 1;
+	      Z = N = A = (A >> 1) | 0x80;
+	    }
+	  else
+	    {
+	      C = A & 1;
+	      Z = N = A = (A >> 1);
+	    }
+	  break;
+/* JMP (abcd) */
+	case 0x6c :
+	  addr = (memory[PC+1] << 8) | memory[PC];
+	  PC = (memory[addr+1] << 8) | memory[addr];
+	  break;
+/* ADC abcd */
+	case 0x6d :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  ADC (data);
+	  break;
+/* ROR abcd */
+	case 0x6e :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  if (C)
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1) | 0x80;
+	    }
+	  else
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1);
+	    }
+	  PutByte(addr, data);
+	  break;
+/* BVS */
+	case 0x70 :
+	  if (V)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* ADC (ab),y */
+	case 0x71 :
+	  INDIRECT_Y;
+	  data = GetByte(addr);
+	  ADC (data);
+	  break;
+/* ADC ab,x */
+	case 0x75 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  ADC (data);
+	  break;
+/* ROR ab,x */
+	case 0x76 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  if (C)
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1) | 0x80;
+	    }
+	  else
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1);
+	    }
+	  memory[addr] = data;
+	  break;
+/* SEI */
+	case 0x78 :
+	  I = 1;
+	  break;
+/* ADC abcd,y */
+	case 0x79 :
+	  ABSOLUTE_Y;
+	  data = GetByte(addr);
+	  ADC (data);
+	  break;
+/* ADC abcd,x */
+	case 0x7d :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  ADC (data);
+	  break;
+/* ROR abcd,x */
+	case 0x7e :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  if (C)
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1) | 0x80;
+	    }
+	  else
+	    {
+	      C = data & 1;
+	      Z = N = data = (data >> 1);
+	    }
+	  PutByte(addr, data);
+	  break;
+/* STA (ab,x) */
+	case 0x81 :
+	  INDIRECT_X;
+	  PutByte(addr, A);
+	  break;
+/* STY ab */
+	case 0x84 :
+	  ZPAGE;
+	  memory[addr] = Y;
+	  break;
+/* STA ab */
+	case 0x85 :
+	  ZPAGE;
+	  memory[addr] = A;
+	  break;
+/* STX ab */
+	case 0x86 :
+	  ZPAGE;
+	  memory[addr] = X;
+	  break;
+/* DEY */
+	case 0x88 :
+	  Z = N = --Y;
+	  break;
+/* TXA */
+	case 0x8a :
+	  Z = N = A = X;
+	  break;
+/* STY abcd */
+	case 0x8c :
+	  ABSOLUTE;
+	  PutByte(addr, Y);
+	  break;
+/* STA abcd */
+	case 0x8d :
+	  ABSOLUTE;
+	  PutByte(addr, A);
+	  break;
+/* STX abcd */
+	case 0x8e :
+	  ABSOLUTE;
+	  PutByte(addr, X);
+	  break;
+/* BCC */
+	case 0x90 :
+	  if (!C)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* STA (ab),y */
+	case 0x91 :
+	  INDIRECT_Y;
+	  PutByte(addr, A);
+	  break;
+/* STY ab,x */
+	case 0x94 :
+	  ZPAGE_X;
+	  memory[addr] = Y;
+	  break;
+/* STA ab,x */
+	case 0x95 :
+	  ZPAGE_X;
+	  memory[addr] = A;
+	  break;
+/* STX ab,y */
+	case 0x96 :
+	  addr = (UWORD)memory[PC++] + (UWORD)Y;
+	  addr = addr & 0xff;
+	  PutByte(addr, X);
+	  break;
+/* TYA */
+	case 0x98 :
+	  Z = N = A = Y;
+	  break;
+/* STA abcd,y */
+	case 0x99 :
+	  ABSOLUTE_Y;
+	  PutByte(addr, A);
+	  break;
+/* TXS */
+	case 0x9a :
+	  S = X;
+	  break;
+/* STA abcd,x */
+	case 0x9d :
+	  ABSOLUTE_X;
+	  PutByte(addr, A);
+	  break;
+/* LDY #ab */
+	case 0xa0 :
+	  Z = N = Y = memory[PC++];
+	  break;
+/* LDA (ab,x) */
+	case 0xa1 :
+	  INDIRECT_X;
+	  Z = N = A = GetByte(addr);
+	  break;
+/* LDX #ab */
+	case 0xa2 :
+	  Z = N = X = memory[PC++];
+	  break;
+/* LDY ab */
+	case 0xa4 :
+	  ZPAGE;
+	  Z = N = Y = memory[addr];
+	  break;
+/* LDA ab */
+	case 0xa5 :
+	  ZPAGE;
+	  Z = N = A = memory[addr];
+	  break;
+/* LDX ab */
+	case 0xa6 :
+	  ZPAGE;
+	  Z = N = X = memory[addr];
+	  break;
+/* TAY */
+	case 0xa8 :
+	  Z = N = Y = A;
+	  break;
+/* LDA #ab */
+	case 0xa9 :
+	  Z = N = A = memory[PC++];
+	  break;
+/* TAX */
+	case 0xaa :
+	  Z = N = X = A;
+	  break;
+/* LDY abcd */
+	case 0xac :
+	  ABSOLUTE;
+	  Z = N = Y = GetByte (addr);
+	  break;
+/* LDA abcd */
+	case 0xad :
+	  ABSOLUTE;
+	  Z = N = A = GetByte(addr);
+	  break;
+/* LDX abcd */
+	case 0xae :
+	  ABSOLUTE;
+	  Z = N = X = GetByte (addr);
+	  break;
+/* BCS */
+	case 0xb0 :
+	  if (C)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* LDA (ab),y */
+	case 0xb1 :
+	  INDIRECT_Y;
+	  Z = N = A = GetByte(addr);
+	  break;
+/* LDY ab,x */
+	case 0xb4 :
+	  ZPAGE_X;
+	  Z = N = Y = memory[addr];
+	  break;
+/* LDA ab,x */
+	case 0xb5 :
+	  ZPAGE_X;
+	  Z = N = A = memory[addr];
+	  break;
+/* LDX ab,y */
+	case 0xb6 :
+	  addr = (UWORD)memory[PC++] + (UWORD)Y;
+	  addr = addr & 0xff;
+	  Z = N = X = GetByte (addr);
+	  break;
+/* CLV */
+	case 0xb8 :
+	  V = 0;
+	  break;
+/* LDA abcd,y */
+	case 0xb9 :
+	  ABSOLUTE_Y;
+	  Z = N = A = GetByte(addr);
+	  break;
+/* TSX */
+	case 0xba :
+	  Z = N = X = S;
+	  break;
+/* LDY abcd,x */
+	case 0xbc :
+	  ABSOLUTE_X;
+	  Z = N = Y = GetByte (addr);
+	  break;
+/* LDA abcd,x */
+	case 0xbd :
+	  ABSOLUTE_X;
+	  Z = N = A = GetByte(addr);
+	  break;
+/* LDX abcd,y */
+	case 0xbe :
+	  ABSOLUTE_Y;
+	  Z = N = X = GetByte (addr);
+	  break;
+/* CPY #ab */
+	case 0xc0 :
+	  data = memory[PC++];
+	  Z = N = Y - data;
+	  C = (Y >= data);
+	  break;
+/* CMP (ab,x) */
+	case 0xc1 :
+	  INDIRECT_X;
+	  data = GetByte(addr);
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* CPY ab */
+	case 0xc4 :
+	  ZPAGE;
+	  data = memory[addr];
+	  Z = N = Y - data;
+	  C = (Y >= data);
+	  break;
+/* CMP ab */
+	case 0xc5 :
+	  ZPAGE;
+	  data = memory[addr];
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* DEC ab */
+	case 0xc6 :
+	  ZPAGE;
+	  Z = N = --memory[addr];
+	  break;
+/* INY */
+	case 0xc8 :
+	  Z = N = ++Y;
+	  break;
+/* CMP #ab */
+	case 0xc9 :
+	  data = memory[PC++];
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* DEX */
+	case 0xca :
+	  Z = N = --X;
+	  break;
+/* CPY abcd */
+	case 0xcc :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  Z = N = Y - data;
+	  C = (Y >= data);
+	  break;
+/* CMP abcd */
+	case 0xcd :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* DEC abcd */
+	case 0xce :
+	  ABSOLUTE;
+	  if (attrib[addr] == RAM)
+	    Z = N = --memory[addr];
+	  break;
+/* BNE */
+	case 0xd0 :
+	  if (Z != 0)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* CMP (ab),y */
+	case 0xd1 :
+	  INDIRECT_Y;
+	  data = GetByte(addr);
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* CMP ab,x */
+	case 0xd5 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* DEC ab,x */
+	case 0xd6 :
+	  ZPAGE_X;
+	  Z = N = --memory[addr];
+	  break;
+/* CLD */
+	case 0xd8 :
+	  D = 0;
+	  break;
+/* CMP abcd,y */
+	case 0xd9 :
+	  ABSOLUTE_Y;
+	  data = GetByte(addr);
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* CMP abcd,x */
+	case 0xdd :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  Z = N = A - data;
+	  C = (A >= data);
+	  break;
+/* DEC abcd,x */
+	case 0xde :
+	  ABSOLUTE_X;
+	  if (attrib[addr] == RAM)
+	    Z = N = --memory[addr];
+	  break;
+/* CPX #ab */
+	case 0xe0 :
+	  data = memory[PC++];
+	  Z = N = X - data;
+	  C = (X >= data);
+	  break;
+/* SBC (ab,x) */
+	case 0xe1 :
+	  INDIRECT_X;
+	  data = GetByte(addr);
+	  SBC (data);
+	  break;
+/* CPX ab */
+	case 0xe4 :
+	  ZPAGE;
+	  data = memory[addr];
+	  Z = N = X - data;
+	  C = (X >= data);
+	  break;
+/* SBC ab */
+	case 0xe5 :
+	  ZPAGE;
+	  data = memory[addr];
+	  SBC (data);
+	  break;
+/* INC ab */
+	case 0xe6 :
+	  ZPAGE;
+	  Z = N = ++memory[addr];
+	  break;
+/* INX */
+	case 0xe8 :
+	  Z = N = ++X;
+	  break;
+/* SBC #ab */
+	case 0xe9 :
+	  SBC (memory[PC++]);
+	  break;
+/* NOP */
+	case 0xea :
+	  break;
+/* CPX abcd */
+	case 0xec :
+	  ABSOLUTE;
+	  data = GetByte (addr);
+	  Z = N = X - data;
+	  C = (X >= data);
+	  break;
+/* SBC abcd */
+	case 0xed :
+	  ABSOLUTE;
+	  data = GetByte(addr);
+	  SBC (data);
+	  break;
+/* INC abcd */
+	case 0xee :
+	  ABSOLUTE;
+	  if (attrib[addr] == RAM)
+	    Z = N = ++memory[addr];
+	  break;
+/* BEQ */
+	case 0xf0 :
+	  if (Z == 0)
+	    {
+	      sdata = memory[PC++];
+	      PC += (SWORD)sdata;
+	    }
+	  else
+	    {
+	      PC++;
+	    }
+	  break;
+/* SBC (ab),y */
+	case 0xf1 :
+	  INDIRECT_Y;
+	  data = GetByte(addr);
+	  SBC (data);
+	  break;
+/* SBC ab,x */
+	case 0xf5 :
+	  ZPAGE_X;
+	  data = memory[addr];
+	  SBC (data);
+	  break;
+/* INC ab,x */
+	case 0xf6 :
+	  ZPAGE_X;
+	  Z = N = ++memory[addr];
+	  break;
+/* SED */
+	case 0xf8 :
+	  D = 1;
+	  break;
+/* SBC abcd,y */
+	case 0xf9 :
+	  ABSOLUTE_Y;
+	  data = GetByte(addr);
+	  SBC (data);
+	  break;
+/* SBC abcd,x */
+	case 0xfd :
+	  ABSOLUTE_X;
+	  data = GetByte(addr);
+	  SBC (data);
+	  break;
+/* INC abcd,x */
+	case 0xfe :
+	  ABSOLUTE_X;
+	  if (attrib[addr] == RAM)
+	    Z = N = ++memory[addr];
+	  break;
+/* ESC #ab */
+	case 0xff :
+	  Escape (memory[PC++]);
+	  break;
+	default :
+	  fprintf (stderr,"*** Invalid Opcode %02x at address %04x\n", opcode, PC-1);
+	  cpu_status = CPU_STATUS_ERR;
+	  ncycles = 1;
+	  break;
+	}
+    }
+	
+  return cpu_status;
 }

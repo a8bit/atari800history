@@ -1,0 +1,138 @@
+.TH ATARI800 1 "19 October 95"
+.SH NAME
+atari800 \- Atari 800 Emulator, Version 0.2.1
+.SH SYNOPSIS
+\fBatari800\fP [options] [diskfiles...]
+.SH DESCRIPTION
+\fIatari800\fP emulates the Atari 800, Atari 800 XL and eventually the
+Atari 130 XE.
+.SS Options
+.TP
+\fB-a
+Use Atari OS/A.
+.TP
+\fB-b
+Use Atari OS/B.
+.TP
+\fB-xl
+Emulate Atari 800 XL.
+.TP
+\fB-xe
+Emulate Atari 130 XE - Not currently implemented.
+.TP
+\fB-rom
+The following file is a standard 8K ROM cartridge.
+.TP
+\fB-rom16
+The following file is a standard 16K ROM cartridge.
+.TP
+\fB-oss
+The following file is an OSS super-cartridge.
+.TP
+\fB-db
+The following file is a DB super-cartridge.
+.TP
+\fB-c
+Enable RAM between $c000 and $d000.
+.TP
+\fB-h
+The following argument is used as the directory for the H: device.
+.TP
+\fB-v
+Print emulator version.
+.TP
+\fB-refresh
+Controls screen refresh rate. A numerical value follows this option
+which specifies how many emulated screen updates are required before
+the actual screen is updated. This value effects the speed of the
+emulation: A higher value results in faster CPU emulation but a
+less frequently updated screen.
+.TP
+\fB-countdown
+Controls the number of instructions that are executed in the vertical
+blank period. The default value is 4000.
+.SS SVGALIB Options
+.TP
+\fB-sound
+Enable sound using /dev/sequencer
+.SS X Window Options
+.TP
+\fB-small
+Runs the emulator in a small window where each Atari 800 pixel is
+represented by one X Window pixel.
+.TP
+\fB-large
+Runs the emulator in a large window where each Atari 800 pixel is
+represented by a 2x2 X Window rectange. This mode is selected by
+default.
+.TP
+\fB-huge
+Runs the emulator in a huge window where each Atari 800 pixel is
+represented by a 3x3 X Window rectange.
+.SS Amiga Options
+.TP
+\fB-ocs
+Used for OCS based Amigas. It has not been tested on a real OCS
+based computer and there could be problems with regard to Workbench
+versions.
+.TP
+\fB-ecs
+Used for ECS based Amigas. It has not been tested on a real ECS
+based computer and there could be problems with regard to Workbench
+versions.
+.TP
+\fB-aga
+Used for AGA based Amigas. It has been tested on an Amiga 1200 with
+68030 + 4Mb Fast RAM.
+.TP
+\fB-grey
+Produce a grey scale display.
+.TP
+\fB-colour
+Produce a full colour on AGA machines and up to 32 simultaneous
+colours on OCS and ECS machines.
+.TP
+\fB-wb
+Runs the emulator in a Workbench Window. Use a screen mode with
+a minimum of 16 colours for best results.
+.SS Curses Options
+.TP
+\fB-left
+Use columns 0 to 39.
+.TP
+\fB-central
+Use columns 20 to 59.
+.TP
+\fB-right
+Use columns 40 to 79.
+.TP
+\fB-wide1
+Use columns 0 to 79. In this mode only the even character positions
+are used. The odd locations are filled with spaces.
+.TP
+\fB-wide2
+Use columns 0 to 79. This mode is similar to \fB-wide1\fP except that
+the spaces are in reverse video if the previous character was also
+in reverse video.
+.SH FILES
+.TP
+\fI/usr/local/lib/atari/atariosa.rom\fR
+Atari O/S A
+.TP
+\fI/usr/local/lib/atari/atariosb.rom\fR
+Atari O/S B
+.TP
+\fI/usr/local/lib/atari/atarixl.rom\fR
+Atari 800 XL O/S
+.TP
+\fI/usr/local/lib/atari/ataribas.rom\fR
+Atari Basic
+.SH BUGS
+A few programs cause the emulator to enter its built in debugger. The
+reason for this is unknown at the moment.
+
+Antic Modes 2, 3 and f display two true colours and not one colour with
+two luminances. Should this be called a bug or feature, and should
+it be corrected?
+
+Vertical Fine Scrolling has not been implemented yet.

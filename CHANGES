@@ -1,3 +1,124 @@
+Changes in 0.2.1
+----------------
+
+- Created a new Makefile for Unix. The Amiga support is now in
+  Makefile.amiga
+- Sorry, but I renamed the ATARI800 environment variable to ATARI_LIBRARY
+  which points to /usr/local/lib/atari by default.
+- Control + Shift + Key combination for Linux SVGALIB implementation.
+- SVGALIB version can be restarted after entering the monitor.
+- HELP Key available in XL/XE mode
+- Optional XVIEW (V3) Interface for X Window version. Allows disk changes
+  using a file selector, controller configuration and access to performance
+  variables.
+- BREAK Key fixed
+- PC Joysticks can be used with Linux (svgalib, x11 and xview) through the
+  /dev/js0 and /dev/js1 devices. Second button activates the space bar
+  which is very useful in Defender :-) Build with "make <system>" where
+  <system> is one of:- linux-x11-joystick, linux-xview-joystick or
+  linux-svgalib-joystick
+- X11 Joystick emulation using keyboard re-implemented. Straight X11 can
+  use either numeric keypad or cursor keys + space. XVIEW can only use
+  cursor keys + space (Problem using keypad in xview!)
+- Disk selector for Amiga version + controller configuration menu
+- Started code to emulate SERIN and SEROUT registers. At the moment this
+  is ongoing and does not work. New startup option -nopatch disables the
+  SIO patch leaving the normal SIO routine in place.
+
+Changes in 0.2.0
+----------------
+
+- Separated Playfield Scanlines from Player Missile Scanlines
+- Corrected playfield colour errors in Antic modes 8 & 10
+- Horizontal Fine Scrolling
+- Playfield and Player/Missile Priorities
+- Allow Emulator to run either as an Amiga Screen or Window
+- Added Paddle support for Amiga
+
+Changes in 0.1.9
+----------------
+
+- Corrected bug in IRQST and IRQEN
+- Corrected minor bug in player missile collision detection
+- Amiga version is now full screen + Menus
+- Faster disk I/O
+- Added ATARI800 environment variable. This allows the emulator to be
+  run from different directories. If ATARI800 is unset it will still
+  try to load the OS images from object/ below the current working
+  directory.
+- colours.h replaces colours.dat
+- Added man page.
+- New way of handling Joysticks, Triggers, Paddles and Console Keys
+- Corrected handling of CHBASE which was causing K-RAZY ANTIKS to
+  display garbage.
+- Corrected handling of VCOUNT which was causing screen handling
+  errors in Star Raiders (galactic map) and Henri (game screen).
+- Added Sound API. A test sound implementation is available for
+  the Linux SVGALIB version via /dev/sequencer - It's not very good
+  and has only been used to test the API. It is enabled by starting
+  the program with the -sound option. Listen to the title screens
+  of Necromancer, K-Razy Antiks and Henri (these are the best
+  I've heard).
+- argc and argv are passed to the platform specific initialisation
+  code - Atari_Initialise(). This allows platform specific options
+  like -sound on the Linux SVGALIB version.
+- Extra Amiga options -ocs -ecs and -aga. Currently the default is
+  AGA. The -ocs and -ecs have been tested on an A1200 with the
+  OCS and ECS emulation modes enabled. At the moment it is not
+  guaranteed to work on real OCS or ECS equiped machines since it
+  has only been tested under Workbench 3.0. Hopefully someone will
+  provide some feedback.
+- Another two Amiga options -grey and -colour. The -grey option
+  produces a grey scale display on OCS, ECS and AGA machines. The
+  -colour option produces a full colour display on AGA machines and
+  up to 32 simultaneous colours on OCS and ECS machines.
+- The DOUBLE_SIZE compilation flag for the X11 version has been
+  replaced by a runtime options. The runtime options are -small,
+  -large and -huge.
+
+Changes in 0.1.8
+----------------
+
+- Allows direct use of GRAFP0, GRAFP1, GRAFP2, GRAFP3 and GRAFM without
+  using DMA.
+- -rom16 option to load standard 16K ROMs.
+- -a option to load object/atariosa.rom
+- -b [default] option to load object/atariosb.rom
+- Simplified screen generation for host - Player missile graphics
+  collision detection has been moved into 'atari_custom.c'
+- Corrected read from PORTB (XL/XE emulation)
+- GTIA support for *all* antic modes.
+  i.e. GTIA can be enabled in graphics mode 0 (antic mode 2) just like
+       a real 800. POKE 623 with 64, 128 or 192 to test.
+- Amiga version can be compiled using either DICE C or GNU C - see Makefile
+
+Changes in 0.1.7
+----------------
+
+- Issue cpu cycles during screen update (corrects VCOUNT problem)
+    As a result DLI are not occuring on the correct mode line.
+- Support for 256 bytes/sector ATR files
+- Handle Insert, Delete and Tab keys properly
+- Handle Shift + Control + A-Z properly (X11 only)
+- Cartridge support tidied up (Thanks to Dave Bennett)
+
+Changes in 0.1.6
+----------------
+
+- Correct Colours (Thanks to Chris Lam)
+- Fetch correct number of screen bytes with horizontal scrolling enabled
+- Speed improvements for Antic Display Modes
+- Support for ATR files (128 bytes sectors only)
+- Support for XL/XE ROM (Reset etc. do not work???)
+- Corrected Bug in BCD SBC instruction.
+- Added X11 window Expose event (Thanks to Ivo van Poorten)
+- Control characters within CURSES (Thanks to Ivo van Poorten)
+- Improved Portability
+- Remove '-b' flag (Use -rom object/ataribas.rom instead)
+- Graphical Support for Amiga 1200
+- Faster 6502 Emulation
+- X11 Joystick emulation now uses the mouse
+
 Changes in 0.1.5
 ----------------
 

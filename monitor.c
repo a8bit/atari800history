@@ -1,8 +1,13 @@
-#include	<stdio.h>
-#include	<ctype.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <fcntl.h>
 
-#include	"system.h"
-#include	"cpu.h"
+#ifdef VMS
+#include <file.h>
+#endif
+
+#include "system.h"
+#include "cpu.h"
 
 #define FALSE   0
 #define TRUE    1
@@ -67,6 +72,7 @@ int monitor ()
 	UWORD	addr;
 	UWORD	break_addr;
 	char	s[128];
+	int     p;
 
 	addr = 0;
 
@@ -78,6 +84,10 @@ int monitor ()
 
 		printf ("> ");
 		gets (s);
+
+		for (p=0;s[p]!=0;p++)
+		  if (islower(s[p]))
+		    s[p] = toupper(s[p]);
 
 		t = get_token(s);
 
@@ -204,6 +214,52 @@ int monitor ()
 			else
 			{
 				printf ("*** Memory Unchanged (Missing Parameter) ***\n");
+			}
+		}
+		else if (strcmp(t,"WRITE") == 0)
+		{
+			UWORD	addr1;
+			UWORD	addr2;
+
+			int	status;
+
+			status = get_hex (NULL, &addr1);
+			status |= get_hex (NULL, &addr2);
+
+			if (status)
+			{
+				int	fd;
+
+				fd = open ("memdump.dat", O_CREAT | O_TRUNC | O_WRONLY, 0777);
+				if (fd == -1)
+				{
+					perror ("open");
+					Atari800_Exit (FALSE);
+					exit (1);
+				}
+
+				write (fd, &memory[addr1], addr2 - addr1 + 1);
+
+				close (fd);
+			}
+		}
+		else if (strcmp(t,"SUM") == 0)
+		{
+			UWORD	addr1;
+			UWORD	addr2;
+			int status;
+
+			status = get_hex (NULL, &addr1);
+			status |= get_hex (NULL, &addr2);
+
+			if (status)
+			{
+			  int sum = 0;
+			  int i;
+
+			  for (i=addr1;i<=addr2;i++)
+			    sum += (UWORD)memory[i];
+			  printf ("SUM: %x\n", sum);
 			}
 		}
 		else if (strcmp(t,"D") == 0)

@@ -1,0 +1,32 @@
+Bugs and Known Problems
+-----------------------
+
+2. A few programs cause the emulator to enter its built in debugger. The
+   reason for this is unknown at the moment. It might be use of undocumented
+   instructions. (Atari Tennis)
+
+4. Antic Modes 2, 3 and f which display two true colours and not one
+   colour with two luminances. Should this be called a bug or feature? -
+   its easy to fix (for an example type POKE 709,40). Personally I
+   *like* being able to get solid colour antic 2 characters on the
+   blue background (e.g. RED on BLUE) but technically it's wrong.
+
+5. Burried Bucks and Caverns of Khafka player to playfield collision
+   detection is broken. This is a result of only refreshing the screen
+   once every four frames. The collision detection indicates to the
+   program that no collisions have occured during these skiped screens.
+   Both Burried Bucks and Caverns of Khafka use this to drop something
+   until the objects hits a playfield object. The result is that the
+   object drops 3 out of 4 frames even when touching a playfield.
+
+6. Test Sound Implementation for Linux SVGALIB needs a printf("\n")
+   instruction before every note! The program doesn't make any
+   sound if it is removed. I have noticed that the title screen of
+   K-Razy Antiks has different coloured letters depending on whether
+   sound has been enabled.
+
+7. Reset and Coldstart do not work when emulating either the XL or
+   XE.
+
+8. Player/Missiles are not displayed over a GTIA [sub]playfield -
+   Not really a bug since its not been implemented yet!

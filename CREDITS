@@ -6,3 +6,23 @@ Dave Bennett <bennett@halcyon.com>
 
 - Code enabling the use of OSS super cartridges
 - Correction to display list jump instruction
+- Tidied cartridge code up
+
+Chris Lam <lamcw@sun.aston.ac.uk>
+
+- Lookup table containing RGB values for each Atari Colour
+
+Ivo van Poorten <ipoorten@cs.vu.nl>
+
+- Added X11 window Expose Event
+- Made hardware registers repeat within their page.
+- Control Characters in CURSES version
+
+Stephen Firth <stephen@signus.demon.co.uk>
+
+- Graphical Support for Amiga
+
+Rob Funk <rfunk@magnus.acs.ohio-state.edu>
+
+- Tidied up emulator abort code.
+- Case insensitive monitor commands.

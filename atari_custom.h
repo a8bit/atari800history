@@ -83,7 +83,7 @@
 #define	_POTGO		0xd20b
 #define	_PRIOR		0xd01b
 #define	_RANDOM		0xd20a
-#define	_SERIN		0xd20e
+#define	_SERIN		0xd20d
 #define	_SEROUT		0xd20d
 #define	_SIZEM		0xd00c
 #define	_SIZEP0		0xd008

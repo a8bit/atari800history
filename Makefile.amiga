@@ -1,0 +1,71 @@
+#
+# ===========================================
+# Uncomment this section if you are using GCC
+# ===========================================
+#
+
+CC		= gcc
+CPPFLAGS	= -DAMIGA -DGNU_C
+CFLAGS		= -c -O6
+LD		= gcc
+LDFLAGS		=
+LDLIBS		= -lamiga
+
+#
+# ==============================================
+# Uncomment this section if you are using DICE C
+# ==============================================
+#
+
+#CC		= dcc
+#CPPFLAGS	= -DAMIGA -DDICE_C
+#CFLAGS		= -c -mD
+#LD		= dcc
+#LDFLAGS		=
+#LDLIBS		=
+
+#
+# ===================================================
+# If you want to place the OS ROMS elsewhere you will
+# either need to edit the following line or define an
+# environment variable at run time
+# ===================================================
+#
+
+ATARI_LIBRARY	= object
+
+#
+# ======================================================
+# You should not need to modify anything below this here
+# ======================================================
+#
+
+DOCS		=	BUGS CHANGES COPYING CREDITS INSTALL OVERVIEW README USAGE vmsbuild.com
+INCLUDES	=	Makefile system.h cpu.h atari.h atari_custom.h atari_h_device.h colours.h
+
+atari800	:	main.o atari.o cpu.o monitor.o atari_sio.o atari_h_device.o atari_custom.o atari_amiga.o $(DOCS)
+	$(LD) $(LDFLAGS) main.o atari.o cpu.o monitor.o atari_sio.o atari_h_device.o atari_custom.o atari_amiga.o $(LDLIBS) -o atari800
+
+main.o		:	main.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) main.c
+
+atari.o		:	atari.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="$(ATARI_LIBRARY)" $(CFLAGS) atari.c
+
+cpu.o		:	cpu.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
+
+monitor.o	:	monitor.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
+
+atari_sio.o	:	atari_sio.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_sio.c
+
+atari_h_device.o:	atari_h_device.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_h_device.c
+
+atari_custom.o	:	atari_custom.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_custom.c
+
+atari_amiga.o	:	atari_amiga.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_amiga.c
