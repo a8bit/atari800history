@@ -1,3 +1,6 @@
+/* $Id: atari.c,v 1.8 2001/04/15 09:14:33 knik Exp $ */
+
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,33 +8,12 @@
 #include <signal.h>
 #ifdef WIN32
 #include <windows.h>
-#include <io.h>
-#include <time.h>
-#include "winatari.h"
 #else
 #include <sys/time.h>
-#include <unistd.h>
-#include "config.h"
-#endif
-
-#ifdef VMS
-#include <unixio.h>
-#include <file.h>
-#else
-#include <fcntl.h>
-#endif
-
-#ifdef DJGPP
-int timesync = 1;
 #endif
 
 #define FALSE   0
 #define TRUE    1
-
-#ifdef AT_USE_ALLEGRO
-#include <allegro.h>
-static int i_love_bill = TRUE;	/* Perry, why this? */
-#endif
 
 #include "atari.h"
 #include "cpu.h"
@@ -54,15 +36,15 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "diskled.h"
 #include "colours.h"
 #include "binload.h"
+#ifdef SOUND
+#include "sound.h"
+#endif
 
 #ifdef CRASH_MENU
 extern int crash_code;
 extern UWORD crash_address;
 extern UWORD crash_afterCIM;
 #endif
-
-void Sound_Pause(void);	/* cross-platform sound.h would be better :) */
-void Sound_Continue(void);
 
 ULONG *atari_screen = NULL;
 #ifdef BITPL_SCR
@@ -77,27 +59,10 @@ int mach_xlxe = FALSE;
 int verbose = FALSE;
 double fps;
 int nframes;
-ULONG lastspeed;				/* measure time between two Antic runs */
+static double frametime = 0.1;	/* measure time between two Antic runs */
+static int emu_too_fast = 0;
 
-#ifdef WIN32		/* AUGH clean this crap up REL */
-#include "ddraw.h"
-#include "registry.h"
-extern unsigned char *screenbuff;
-extern void (*Atari_PlaySound)( void );
-extern HWND	hWnd;
-extern void GetJoystickInput( void );
-extern void Start_Atari_Timer( void );
-extern void Screen_Paused( UBYTE *screen );
-extern unsigned long ulMiscStates;
-extern void CheckBootFailure( void );
-int			ulAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
-int		test_val;
-int		FindCartType( char *rom_filename );
-char	current_rom[ _MAX_PATH ];
 int pil_on = FALSE;
-#else	/* not Win32 */
-int pil_on = FALSE;
-#endif
 
 int	os = 2;
 
@@ -210,19 +175,6 @@ int main(int argc, char **argv)
 #endif /* REALTIME */
 #endif /* linux */
 
-#ifdef WIN32
-	/* The Win32 version doesn't use configuration files, it reads values in from the Registry */
-	int update_registry = FALSE;
-	Ram256 = 0;
-
-	if( argc > 1 )
-		update_registry = TRUE;
-	ulAtariState &= ~ATARI_UNINITIALIZED;
-	ulAtariState |= ATARI_INITIALIZING | ATARI_PAUSED;
-	rom_inserted = FALSE;
-	Aprint("Start log");
-	test_val = 0;
-#else
 	char *rtconfig_filename = NULL;
 	int config = FALSE;
 
@@ -261,8 +213,6 @@ int main(int argc, char **argv)
 
 		RtConfigSave();
 	}
-
-#endif /* !Win32 */
 
 	switch (default_system) {
 	case 1:
@@ -377,10 +327,8 @@ int main(int argc, char **argv)
 		else if (strcmp(argv[i], "-palette") == 0)
 			read_palette(argv[++i]);
 		else if (strcmp(argv[i], "-help") == 0) {
-#ifndef WIN32
 			Aprint("\t-configure    Update Configuration File");
 			Aprint("\t-config fnm   Specify Alternate Configuration File");
-#endif
 			Aprint("\t-atari        Standard Atari 800 mode");
 			Aprint("\t-xl           Atari 800XL mode");
 			Aprint("\t-xe           Atari 130XE mode");
@@ -405,11 +353,9 @@ int main(int argc, char **argv)
 			Aprint("\t-c            Enable RAM between 0xc000 and 0xd000");
 			Aprint("\t-v            Show version/release number");
 			argv[j++] = argv[i];
-#ifndef WIN32
 			Aprint("\nPress Return/Enter to continue...");
 			getchar();
 			Aprint("\r                                 \n");
-#endif
 		}
 		else if (strcmp(argv[i], "-a") == 0)
 			os = 1;
@@ -448,15 +394,11 @@ int main(int argc, char **argv)
 
 
 	if (!atari_screen) {
-#ifdef WIN32
-		atari_screen = (ULONG *)screenbuff;
-#else
 		atari_screen = (ULONG *) malloc(ATARI_HEIGHT * ATARI_WIDTH);
 #ifdef BITPL_SCR
 		atari_screen_b = (ULONG *) malloc(ATARI_HEIGHT * ATARI_WIDTH);
 		atari_screen1 = atari_screen;
 		atari_screen2 = atari_screen_b;
-#endif
 #endif
 	}
 	/*
@@ -494,9 +436,7 @@ int main(int argc, char **argv)
 	/*
 	 * Install CTRL-C Handler
 	 */
-#ifndef WIN32
 	signal(SIGINT, sigint_handler);
-#endif
 	/*
 	 * Configure Atari System
 	 */
@@ -520,15 +460,6 @@ int main(int argc, char **argv)
 		status = Initialise_AtariXE();
 		break;
 	case Atari320XE:
-#ifdef WIN32
-		if( !Ram256 )
-		{
-		if( ulMiscStates & ATARI_RAMBO_MODE )
-			Ram256 = 1;
-		else
-			Ram256 = 2;
-		}
-#endif
 		/* Ram256 is even now set */
 		status = Initialise_Atari320XE();
 		break;
@@ -542,52 +473,17 @@ int main(int argc, char **argv)
 		return FALSE;
 	}
 
-#ifdef WIN32
-	if (!status || (ulAtariState & ATARI_UNINITIALIZED) )
-    {
-		Aprint("Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.");
-		ulAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED | ATARI_LOAD_WARNING;
-
-		CheckBootFailure( );
-		
-		if( update_registry )
-			WriteAtari800Registry( NULL );
-		return FALSE;
-	}
-#else
 	if (!status) {
 		Aprint("Operating System not available - using Emulated OS");
 		status = Initialise_EmuOS();
 	}
-#endif /* WIN32 */
 
 /*
  * ================================
  * Install requested ROM cartridges
  * ================================
  */
-#ifdef WIN32
-	if( current_rom[0] )
-	{
-		rom_filename = current_rom;
-		if( !strcmp( current_rom, "None" ) )
-			rom_filename = NULL;
-		if( !strcmp( atari_basic_filename, current_rom ) )
-		{
-			if( hold_option )
-				rom_filename = NULL;
-			else
-				cart_type = NORMAL8_CART;
-		}
-	}
-#endif /* WIN32 */
 	if (rom_filename) {
-#ifdef WIN32
-	  if( !cart_type || cart_type == NO_CART )
-	  {
-		  cart_type = FindCartType( rom_filename );
-	  }
-#endif /* WIN32 */
 		switch (cart_type) {
 		case CARTRIDGE:
 			status = Insert_Cartridge(rom_filename);
@@ -628,43 +524,11 @@ int main(int argc, char **argv)
 	if (run_direct != NULL)
 		BIN_loader(run_direct);
 
-#ifdef WIN32
-	if( update_registry )
-		WriteAtari800Registry( NULL );
-	Start_Atari_Timer();
-	ulAtariState = ATARI_HW_READY | ATARI_PAUSED;
-#else
 	Atari800_Hardware();
 	Aprint("Fatal error: Atari800_Hardware() returned");
 	Atari800_Exit(FALSE);
-#endif /* WIN32 */
 	return 0;
 }
-
-#ifdef WIN32
-int FindCartType( char *rom_filename )
-{
-	int		file;
-	int		length = 0, result = -1;
-
-	file =  _open( rom_filename, _O_RDONLY | _O_BINARY, 0 );
-	if( file == -1 )
-		return NO_CART;
-
-	length = _filelength( file );
-	_close( file );
-
-	cart_type = NO_CART;
-	if( length < 8193 )
-		cart_type = NORMAL8_CART;
-	else if( length < 16385 )
-		cart_type = NORMAL16_CART;
-	else if( length < 32769 )
-		cart_type = AGS32_CART;
-
-	return cart_type;
-}
-#endif /* WIN32 */
 
 int Atari800_Exit(int run_monitor)
 {
@@ -744,57 +608,101 @@ void Atari800_PutByte(UWORD addr, UBYTE byte)
 }
 
 #ifdef SNAILMETER
-void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
+static void ShowRealSpeed(ULONG * atari_screen)
 {
-	UWORD *ptr, *ptr2;
-	int i = (clock() - lastspeed) * (tv_mode == TV_PAL ? 50 : 60) / CLK_TCK / refresh_rate;
-	lastspeed = clock();
+  UBYTE *ptr;
+  int i;
+  int speed = (100.0 * deltatime / frametime + 0.5);
 
-	if (i > ATARI_WIDTH / 4)
-		return;
+  if (speed > 200)
+    speed = 200;
 
-	ptr = (UWORD *) atari_screen;
-	ptr += (ATARI_WIDTH / 2) * (ATARI_HEIGHT - 2) + ATARI_WIDTH / 4;	/* begin in middle of line */
-	ptr2 = ptr + ATARI_WIDTH / 2;
+  ptr = (UBYTE *) atari_screen + 32 + ATARI_WIDTH * LED_lastline;
 
-	while (--i > 0) {			/* number of blocks = times slower */
-		int j = i << 1;
-		ptr[j] = ptr2[j] = 0x0707;
-		j++;
-		ptr[j] = ptr2[j] = 0;
-	}
+  for (i = 0; i < speed; i++)
+    ptr[i] = 0xc8;
+  for (; i < 100; i++)
+    ptr[i] = 0x02;
+  ptr[100] = 0x38;
 }
 #endif
 
-void atari_sleep_ms(ULONG miliseconds)
+static double Atari_time(void)
 {
-#ifdef POSIX
-	struct timespec t;
-	t.tv_sec = 0;
-	t.tv_nsec = miliseconds * 1E6UL;
-	nanosleep(&t, NULL);	/* POSIX  */
+#ifdef WIN32
+  return GetTickCount() * 1e-3;
+#elif defined(DJGPP)
+  return uclock() * (1.0 / UCLOCKS_PER_SEC);
 #else
-	usleep(miliseconds * 1000);
+  struct timeval tp;
+
+  gettimeofday(&tp, NULL);
+  return tp.tv_sec + 1e-6 * tp.tv_usec;
 #endif
+}
+
+static void Atari_sleep(double s)
+{
+  emu_too_fast = 0;
+  if (s > 0)
+  {
+#ifdef linux
+    struct timeval tp;
+
+    tp.tv_sec = 0;
+    tp.tv_usec = 1e6 * s;
+    select(1,NULL,NULL,NULL,&tp);
+#elif defined(WIN32)
+    Sleep(s * 1e3);
+#elif defined(DJGPP)
+    double curtime = Atari_time();
+    while ((curtime + s) > Atari_time());
+#else
+    usleep(s * 1e6);
+#endif
+    emu_too_fast = 1;
+  }
+}
+
+void atari_sync(void)
+{
+#ifdef USE_CLOCK
+	static ULONG nextclock = 0;	/* put here a non-zero value to enable speed regulator */
+	/* on Atari Falcon CLK_TCK = 200 (i.e. 5 ms granularity) */
+	/* on DOS (DJGPP) CLK_TCK = 91 (not too precise, but should work anyway)*/
+	if (nextclock) {
+		ULONG curclock;
+		do {
+			curclock = clock();
+		} while (curclock < nextclock);
+
+		nextclock = curclock + (CLK_TCK / (tv_mode == TV_PAL ? 50 : 60));
+	}
+#else /* USE_CLOCK */
+	static double lasttime = 0, lastcurtime = 0;
+	double curtime;
+
+	if (deltatime > 0.0)
+	{
+	  curtime = Atari_time();
+	  Atari_sleep(lasttime + deltatime - curtime);
+	  curtime = Atari_time();
+
+	  /* make average time */
+	  frametime = (frametime * 4.0 + curtime - lastcurtime) * 0.2;
+	  fps = 1.0 / frametime;
+	  lastcurtime = curtime;
+
+	  lasttime += deltatime;
+	  if ((lasttime + deltatime) < curtime)
+	    lasttime = curtime;
+	}
+#endif /* USE_CLOCK */
 }
 
 void Atari800_Hardware(void)
 {
-#ifndef WIN32
-	static struct timeval tp;
-	static struct timezone tzp;
-	static double lasttime;
-#ifdef USE_CLOCK
-	static ULONG nextclock = 0;	/* put here a non-zero value to enable speed regulator */
-#endif
-#ifdef SNAILMETER
-	static long emu_too_fast = 0;	/* automatically enable/disable snailmeter */
-#endif
-
 	nframes = 0;
-	gettimeofday(&tp, &tzp);
-	lasttime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-	fps = 0.0;
 
 	while (TRUE) {
 #ifndef BASIC
@@ -829,9 +737,13 @@ void Atari800_Hardware(void)
 			}
 			break;
 		case AKEY_UI:
+#ifdef SOUND
 			Sound_Pause();
+#endif
 			ui((UBYTE *)atari_screen);
+#ifdef SOUND
 			Sound_Continue();
+#endif
 			break;
 		case AKEY_PIL:
 			if (pil_on)
@@ -861,6 +773,10 @@ void Atari800_Hardware(void)
 		}
 #endif	/* !BASIC */
 
+#ifdef SOUND
+		Sound_Update();
+#endif
+
 		/*
 		 * Generate Screen
 		 */
@@ -872,8 +788,11 @@ void Atari800_Hardware(void)
 			ANTIC_RunDisplayList();			/* generate screen */
 			Update_LED();
 #ifdef SNAILMETER
-			if (emu_too_fast == 0)
-				ShowRealSpeed(atari_screen, refresh_rate);
+			if (!emu_too_fast)
+			  ShowRealSpeed(atari_screen);
+#endif
+#ifndef DONT_SYNC_WITH_HOST
+			atari_sync(); /* here seems to be the best place to sync */
 #endif
 			Atari_DisplayScreen((UBYTE *) atari_screen);
 #ifndef SVGA_SPEEDUP
@@ -888,6 +807,9 @@ void Atari800_Hardware(void)
 #else	/* VERY_SLOW */
 			draw_display=0;
 			ANTIC_RunDisplayList();
+#ifndef DONT_SYNC_WITH_HOST
+			atari_sync();
+#endif
 			Atari_DisplayScreen((UBYTE *) atari_screen);
 #endif	/* VERY_SLOW */
 		}
@@ -897,128 +819,18 @@ void Atari800_Hardware(void)
 			GO(LINE_C);
 			xpos -= LINE_C - DMAR;
 		}
+#ifndef	DONT_SYNC_WITH_HOST
+		atari_sync();
+#endif
 #endif	/* !BASIC */
 
 		nframes++;
-
-#ifndef	DONT_SYNC_WITH_HOST
-/* if too fast host computer, slow the emulation down to 100% of original speed */
-
-#ifdef USE_CLOCK
-		/* on Atari Falcon CLK_TCK = 200 (i.e. 5 ms granularity) */
-		/* on DOS (DJGPP) CLK_TCK = 91 (not too precise, but should work anyway)*/
-		if (nextclock) {
-			ULONG curclock;
-
-#ifdef SNAILMETER
-			emu_too_fast = -1;
-#endif
-			do {
-				curclock = clock();
-#ifdef SNAILMETER
-				emu_too_fast++;
-#endif
-			} while (curclock < nextclock);
-
-			nextclock = curclock + (CLK_TCK / (tv_mode == TV_PAL ? 50 : 60));
-		}
-#else	/* USE_CLOCK */
-#ifndef DJGPP
-		if (deltatime > 0.0) {
-			double curtime;
-
-#ifdef linux
-		gettimeofday(&tp, NULL);
-		curtime = (lasttime + deltatime)
-			- tp.tv_sec - (tp.tv_usec / 1000000.0);
-		if( curtime>0 )
-		{	tp.tv_sec=  (int)(curtime);
-			tp.tv_usec= (int)((curtime-tp.tv_sec)*1000000);
-/* printf("delta=%f sec=%d usec=%d\n",curtime,tp.tv_sec,tp.tv_usec); */
-			select(1,NULL,NULL,NULL,&tp);
-		}
-		gettimeofday(&tp, NULL);
-		curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-#else	/* linux */
-
-#ifdef SNAILMETER
-			emu_too_fast = -1;
-#endif
-			do {
-				gettimeofday(&tp, &tzp);
-				curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-#ifdef SNAILMETER
-				emu_too_fast++;
-#endif
-			} while (curtime < (lasttime + deltatime));
-#endif	/* linux */
-			
-			fps = 1.0 / (curtime - lasttime);
-			lasttime = curtime;
-		}
-#else	/* !DJGPP */	/* for dos, count ticks and use the ticks_per_second global variable */
-		/* Use the high speed clock tick function uclock() */
-		if (timesync) {
-			if (deltatime > 0.0) {
-				static uclock_t lasttime = 0;
-				uclock_t curtime, uclockd;
-				unsigned long uclockd_hi, uclockd_lo;
-				unsigned long uclocks_per_int;
-
-				uclocks_per_int = (deltatime * (double) UCLOCKS_PER_SEC) + 0.5;
-				/* printf( "ticks_per_int %d, %.8X\n", uclocks_per_int, (unsigned long) lasttime ); */
-
-#ifdef SNAILMETER
-				emu_too_fast = -1;
-#endif
-				do {
-					curtime = uclock();
-					if (curtime > lasttime) {
-						uclockd = curtime - lasttime;
-					}
-					else {
-						uclockd = ((uclock_t) ~ 0 - lasttime) + curtime + (uclock_t) 1;
-					}
-					uclockd_lo = (unsigned long) uclockd;
-					uclockd_hi = (unsigned long) (uclockd >> 32);
-#ifdef SNAILMETER
-					emu_too_fast++;
-#endif
-				} while ((uclockd_hi == 0) && (uclocks_per_int > uclockd_lo));
-
-				lasttime = curtime;
-			}
-		}
-#endif	/* !DJGPP */
-#endif	/* USE_CLOCK */
-#endif	/* !DONT_SYNC_WITH_HOST */
 	}
-#endif	/* !WIN32 */
 }
 
-#ifdef WIN32
-void WinAtari800_Hardware (void)
-{
-	Atari_Keyboard ();
-	GetJoystickInput( );
-	ANTIC_RunDisplayList();			/* generate screen */
-	Update_LED();
-	if (++test_val==refresh_rate)
-	{
-		Atari_DisplayScreen ((UBYTE*)atari_screen);
-		test_val = 0;
-	}
-	Atari_PlaySound();
-
-	if( ulAtariState & ATARI_PAUSED )
-		Screen_Paused( (UBYTE *)atari_screen );
-}
-#endif /* Win32 */
-
-#ifndef WIN32
 int zlib_capable(void)
 {
-#ifdef ZLIB_CAPABLE
+#ifdef HAVE_LIBZ
 	return TRUE;
 #else
 	return FALSE;
@@ -1036,7 +848,6 @@ int ReadDisabledROMs(void)
 {
 	return FALSE;
 }
-#endif
 
 void MainStateSave( void )
 {
@@ -1116,3 +927,22 @@ void MainStateRead( void )
 	ReadINT( &default_tv_mode, 1 );
 	ReadINT( &default_system, 1 );
 }
+
+/*
+$Log: atari.c,v $
+Revision 1.8  2001/04/15 09:14:33  knik
+zlib_capable -> have_libz (autoconf compatibility)
+
+Revision 1.7  2001/04/08 05:57:12  knik
+sound calls update
+
+Revision 1.6  2001/04/03 05:43:36  knik
+reorganized sync code; new snailmeter
+
+Revision 1.5  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+Revision 1.4  2001/03/18 06:24:04  knik
+unused variable removed
+
+*/

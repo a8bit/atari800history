@@ -1,3 +1,4 @@
+/* $Id: compfile.c,v 1.5 2001/04/15 09:14:33 knik Exp $ */
 /* dcmtoatr based on code written by Chad Wagner (cmwagner@gate.net),
    version 1.4 (also by Preston Crow) */
 
@@ -9,22 +10,16 @@
 /* This also became the natural place to put zlib conversion functions */
 
 /* Include files */
-#ifdef WIN32
-#include <windows.h>
-#include <io.h>
-#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>	/* for close(), write() */
 #ifdef __MSDOS__
 #include <io.h>
 #endif
 #include "atari.h"
 #include "config.h"
 #include "log.h"
-#ifdef ZLIB_CAPABLE
+#ifdef HAVE_LIBZ
 #include "zlib.h"
 #endif
 
@@ -60,16 +55,9 @@ static unsigned char	createdisk ,working ,last ,density, buf[256], atr;
 static FILE *fin = NULL, *fout = NULL;
 
 
-#ifdef WIN32
-extern FARPROC	pgzread, pgzopen, pgzclose, pgzwrite, pgzerror;
-#define GZOPEN( X, Y ) (gzFile)pgzopen( X, Y )
-#define GZCLOSE( X ) (int)pgzclose( X )
-#define GZREAD( X, Y, Z ) (int)pgzread( X, Y, Z )
-#else
 #define GZOPEN( X, Y ) gzopen( X, Y )
 #define GZCLOSE( X ) gzclose( X )
 #define GZREAD( X, Y, Z ) gzread( X, Y, Z )
-#endif
 
 /* This is a port-specific function that should return -1 if the port is unable to
    use zlib, any other value if it can. For instance, Windows might return -1 if the
@@ -109,28 +97,28 @@ static void show_file_error( FILE *stream )
 /* Opens a ZLIB compressed (gzip) file, creates a temporary filename, and decompresses
    the contents of the .gz file to the temporary file name. Note that *outfilename is
    actually blank coming in and is filled in with whatever tmpnam returns */
-int openzlib(int diskno, const char *infilename, char *outfilename )
+FILE * openzlib(int diskno, const char *infilename, char *outfilename )
 {
-#ifndef ZLIB_CAPABLE
+#ifndef HAVE_LIBZ
 	Aprint( "This executable cannot decompress ZLIB files" );
-	return -1;
+	return NULL;
 #else
 	gzFile	gzSource;
-	int	fd = -1, outfile = -1;
+	FILE	*file = NULL, *outfile = NULL;
 	char	*curptr = outfilename;
 	char	*zlib_buffer = NULL;
 
 	if( zlib_capable() == -1 )
 	{
 		Aprint( "This executable cannot decompress ZLIB files" );
-		return -1;
+		return NULL;
 	}
 
 	zlib_buffer = malloc( ZLIB_BUFFER_SIZE + 1 );
 	if( !zlib_buffer )
 	{
 		Aprint( "Could not obtain memory for zlib decompression" );
-		return -1;
+		return NULL;
 	}
 
 	curptr += prepend_tmpfile_path( outfilename );
@@ -138,22 +126,21 @@ int openzlib(int diskno, const char *infilename, char *outfilename )
 	{
 		Aprint( "Could not obtain temporary filename" );
 		free( zlib_buffer );
-		return -1;
+		return NULL;
 	}
 
-	outfile = open(outfilename, O_CREAT | O_WRONLY | O_BINARY, 0777);
-	if( outfile == -1 )
+	if (!(outfile = fopen(outfilename, "wb")))
 	{
 		Aprint( "Could not open temporary file" );
 		free( zlib_buffer );
-		return -1;
+		return NULL;
 	}
 
 	gzSource = GZOPEN( infilename, "rb" );
 	if( !gzSource )
 	{
 		Aprint( "ZLIB could not open file %s", infilename );
-		close( outfile );
+		fclose( outfile );
 	}
 	else	/* Convert the gzip file to the temporary file */
 	{
@@ -165,7 +152,7 @@ int openzlib(int diskno, const char *infilename, char *outfilename )
 			result = GZREAD( gzSource, &zlib_buffer[0], ZLIB_BUFFER_SIZE );
 			if( result > 0 )
 			{
-				if( write( outfile, zlib_buffer, result ) != result )
+				if( fwrite(zlib_buffer, 1, result, outfile) != result )
 				{
 					Aprint( "Error writing to temporary file %s, disk may be full", outfilename );
 					result = -1;
@@ -173,20 +160,17 @@ int openzlib(int diskno, const char *infilename, char *outfilename )
 			}
 		} while( result == ZLIB_BUFFER_SIZE );
 		temp = GZCLOSE( gzSource );
-#ifdef WIN32
-		_commit( outfile );
-#endif
-		close( outfile );
+		fclose( outfile );
 		if( result > -1 )
-			fd = open(outfilename, O_RDONLY | O_BINARY, 0777);
+			file = fopen(outfilename, "rb");
 		else
 		{
 			Aprint( "Error while parsing gzip file" );
-			fd = -1;
+			file = NULL;
 		}
 	}
 
-	if( fd == -1 )
+	if(!file)
 	{
 		if( zlib_buffer )
 			free( zlib_buffer );
@@ -194,8 +178,8 @@ int openzlib(int diskno, const char *infilename, char *outfilename )
 		remove( outfilename );
 	}
 
-	return fd;
-#endif	/* ZLIB_CAPABLE */
+	return file;
+#endif	/* HAVE_LIBZ */
 }
 
 int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
@@ -249,10 +233,10 @@ int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
 		}
 		
 		if (working) {
-			if (((((long)cursec - 1) * (int)secsize) + 16) != ftell(fout)) 
+			if (soffset() != ftell(fout)) 
 			{
 				Aprint("Output desyncronized, possibly corrupt dcm file. fin=%lu fout=%lu != %lu cursec=%u secsize=%u", 
-					ftell(fin),ftell(fout),(((long)cursec - 1) * secsize) + 16,cursec,secsize);
+					ftell(fin),ftell(fout),soffset(),cursec,secsize);
 				return 0;
 			}
 		}
@@ -323,6 +307,8 @@ int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
 			else 
 			{
 				cursec++;
+				if(cursec==4 && secsize!=128)
+					fseek(fout,(secsize-128)*3,SEEK_CUR);
 			}
 		}
 	} 	
@@ -331,23 +317,17 @@ int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
 
 /* Opens a DCM file and decodes it to a temporary file, then returns the
    file handle for the temporary file and its name. */
-int opendcm( int diskno, const char *infilename, char *outfilename )
+FILE *opendcm( int diskno, const char *infilename, char *outfilename )
 {
 	FILE	*infile, *outfile;
-	int	fd = -1;
+	FILE	*file = NULL;
 	char	*curptr = outfilename;
 
-#ifdef WIN32
-	curptr += GetTempPath( MAX_PATH, outfilename) - 1;
-	if( (curptr == outfilename - 1) || *curptr != '\\' )
-		curptr++;
-#endif
-
 	if( tmpnam( curptr )== NULL )
-		return -1;
+		return NULL;
 	outfile = fopen( outfilename, "wb" );
 	if( !outfile )
-		return -1;
+		return NULL;
 	
 	infile = fopen( infilename, "rb" );
 	if( !infile )
@@ -360,24 +340,24 @@ int opendcm( int diskno, const char *infilename, char *outfilename )
 		{
 			fflush( outfile );
 			fclose( outfile );
-			fd = open(outfilename, O_RDONLY | O_BINARY, 0777);
+			file = fopen(outfilename, "rb");
 		}
 	}
 
-	if( fd == -1 )
+	if(!file)
 	{
 		Aprint( "Removing temporary file %s", outfilename );
 		remove( outfilename );
 	}
 
-	return fd;
+	return file;
 }
 
 static int decode_C1(void)
 {
 	int	secoff,tmpoff,c;
 
-	tmpoff = read_offset(fin);
+	tmpoff = fgetc(fin);
 	c = fgetc(fin);
 	if( tmpoff == EOF || c == EOF )
 	{
@@ -669,5 +649,18 @@ static int write_sector(FILE *fout)
 static long soffset()
 {
 	return (long)atr + (cursec < 4 ? ((long)cursec - 1) * 128 :
-			 ((long)cursec - 4) * secsize + 384);
+			 ((long)cursec - 1) * secsize);
 }
+
+/*
+$Log: compfile.c,v $
+Revision 1.5  2001/04/15 09:14:33  knik
+zlib_capable -> have_libz (autoconf compatibility)
+
+Revision 1.4  2001/03/25 06:57:35  knik
+open() replaced by fopen()
+
+Revision 1.3  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/

@@ -1,9 +1,6 @@
+/* $Id: atari.h,v 1.8 2001/04/24 10:22:36 joy Exp $ */
 #ifndef __ATARI__
 #define	__ATARI__
-
-#ifdef WIN32
-#include "windows.h"
-#endif
 
 #include "config.h"
 
@@ -13,36 +10,24 @@
    =================================
  */
 
-#ifdef VMS
-#define SBYTE char
-#define SWORD short int
-#define SLONG long int
-#else
 #define	SBYTE signed char
 #define	SWORD signed short int
-#ifndef ATARI800_64_BIT
-#define	SLONG signed long int
+#if SIZEOF_LONG > 4
+# define	SLONG signed int
 #else
-#define	SLONG signed int
-#endif
+# define	SLONG signed long int
 #endif
 
 #define	UBYTE unsigned char
 #define	UWORD unsigned short int
-#ifndef WIN32
-#ifndef ATARI800_64_BIT
-#define	ULONG unsigned long int
+#if SIZEOF_LONG > 4
+# define	ULONG unsigned int
 #else
-#define	ULONG unsigned int
-#endif
-#endif
-
-#ifndef O_BINARY				/* flag for binary files on MS-DOS */
-#define O_BINARY	0			/* this won't cause any trouble */
+# define	ULONG unsigned long int
 #endif
 
 #ifdef SHM
-#define USE_COLOUR_TRANSLATION_TABLE
+/* #define USE_COLOUR_TRANSLATION_TABLE */
 #endif
 
 typedef enum {
@@ -71,7 +56,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define ATARI_WIDTH  384
 #define ATARI_HEIGHT 240
 
-#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.4"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.7"
 
 extern int xpos;
 extern int xpos_limit;
@@ -410,17 +395,18 @@ struct ATR_Header {
 #define MENU_RUN		2
 #define MENU_SYSTEM		3
 #define MENU_SOUND		4
-#define MENU_ARTIF		5
-#define MENU_SAVESTATE	6
-#define MENU_LOADSTATE	7
-#define MENU_PCX		8
-#define MENU_PCXI		9
-#define MENU_BACK		10
-#define MENU_RESETW		11
-#define MENU_RESETC		12
-#define MENU_MONITOR	13
-#define MENU_ABOUT		14
-#define MENU_EXIT		15
+#define MENU_SOUND_RECORDING	5
+#define MENU_ARTIF		6
+#define MENU_SAVESTATE	7
+#define MENU_LOADSTATE	8
+#define MENU_PCX		9
+#define MENU_PCXI		10
+#define MENU_BACK		11
+#define MENU_RESETW		12
+#define MENU_RESETC		13
+#define MENU_MONITOR	14
+#define MENU_ABOUT		15
+#define MENU_EXIT		16
 
 
 
@@ -445,6 +431,22 @@ void Atari800_PutByte(UWORD addr, UBYTE byte);
 void AtariEscape(UBYTE esc_code);
 int Initialise_EmuOS(void);
 int Insert_Cartridge(char *filename);
-void atari_sleep_ms(ULONG miliseconds);
+void atari_sync(void);
 
 #endif
+
+/*
+$Log: atari.h,v $
+Revision 1.8  2001/04/24 10:22:36  joy
+COLOUR TRANSLATION TABLE defined out for SHM under X11 - Rudolf says "it produced funny results"
+
+Revision 1.7  2001/04/15 09:10:52  knik
+atari_64_bit -> sizeof_long (autoconf compatibility)
+
+Revision 1.6  2001/03/25 07:00:05  knik
+removed o_binary define
+
+Revision 1.5  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/

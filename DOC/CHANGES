@@ -1,3 +1,54 @@
+Changes in 1.0.7
+----------------
+o atari_x11.c: Added clipping and made the -large and -huge work with XShm.
+  The XShm code was rewritten, so that only the screen-portion which
+  has been changed is copied to the X-server (on older PCs with
+  PCI-graphic this brings a noticable performance gain).
+  New options are:
+  -clip_x  <left offset>
+  -clip_width  <width>
+  -clip_y  <top offset>
+  -clip_height  <height>
+  atari.h: commented out USE_COLOUR_TRANSLATION_TABLE because it produced
+  funny results with options -large and -huge.
+  Rudolf Opalla <rudi@khm.de>
+
+o introduced autoconf stuff <Krzysztof>
+o win32: standard wave output routines added to sound driver (-wavonly switch
+  to disable direct sound) <Krzysztof>
+o sound_update removed from port specific routines (moved to atari.c) and
+  some other sound fixes <Krzysztof>
+  
+o unix, windows and dos makefiles rewritten and reorganized <Krzysztof>
+
+o all open() calls on regular files replaced by fopen(). <Krzysztof>
+
+o win32 conditionals removed; new win32 port <Krzysztof>
+
+o atari_sleep_ms() replaced by new function atari_sync() with better
+  synchronization code (lasttime is increased by constant interval
+  and previously could differ depending on gettime call delay) <Krzysztof>
+
+o bug causing vesa modes not to be detected correctly fixed. <Krzysztof>
+
+o cpu_m68k.s is 100% compatible with the cpu.c now <Gerhard>
+
+o Don Mahurin added sound support to curses version.
+  Also Voxware_ routines were renamed.
+
+o it seems that zero in first byte of block 41/C1 should be interpreted
+   as 00, not 0x100 [eg. 1st disk of Big Demo couldn't be read because of
+   this]. Jakub Bogusz <qboosh@prioris.mini.pw.edu.pl>
+
+o double density DCM disks weren't handled properly ("Output
+  desynchronized...") [eg. 1st disk of Sweet Illusions demo couldn't be
+  read because of this] <Jakub>
+
+o some preliminary code for UI menu switch for readonly/readwrite disk
+  in UI.C. This needs to be discussed first, then finished.
+
+
+
 Changes in 1.0.6  - 2000/10/09
 ----------------
 

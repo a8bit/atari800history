@@ -1,4 +1,4 @@
-
+/* $Id: atari_x11.c,v 1.4 2001/04/24 10:23:53 joy Exp $ */
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef VMS
@@ -79,17 +79,14 @@ static struct timezone tzp;
 
 static XShmSegmentInfo shminfo;
 static XImage *image;
+#ifdef USE_COLOUR_TRANSLATION_TABLE
 extern int colour_translation_table[256];
+#endif
 #endif
 
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-#ifdef VOXWARE
-extern int sound_record;
-#endif
-void Sound_Record( void );
 
 static int invisible=0;
 
@@ -130,8 +127,15 @@ enum {
 static int x11bug = FALSE;
 static int private_cmap = FALSE;
 
-static int window_width;
-static int window_height;
+static int window_width=ATARI_WIDTH;
+static int window_height=ATARI_HEIGHT;
+
+static int clipping_factor=1;
+static int clipping_x=0;
+static int clipping_y=0;
+static int clipping_width=ATARI_WIDTH;
+static int clipping_height=ATARI_HEIGHT;
+
 
 static Display *display;
 static Screen *screen;
@@ -251,6 +255,8 @@ int GetKeyCode(XEvent * event)
 				  0, 0,
 				  window_width, window_height,
 				  0, 0);
+#else
+		modified = TRUE;
 #endif
 		break;
 	case FocusIn:
@@ -327,8 +333,9 @@ int GetKeyCode(XEvent * event)
 			keycode = AKEY_NONE;
 			break;
 		case XK_F8:
-			if(CONTROL)
-				Sound_Record();
+			if(CONTROL) {
+				SoundRecording(NULL);
+			}
 			else
 				screen_dump = 2;
 			keycode = AKEY_NONE;
@@ -1526,6 +1533,14 @@ void Atari_Initialise(int *argc, char *argv[])
 			windowsize = Large;
 		else if (strcmp(argv[i], "-huge") == 0)
 			windowsize = Huge;
+		else if (strcmp(argv[i], "-clip_x") == 0)
+			clipping_x = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-clip_y") == 0)
+			clipping_y = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-clip_width") == 0)
+			clipping_width = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-clip_height") == 0)
+			clipping_height = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-x11bug") == 0)
 			x11bug = TRUE;
 		else if (strcmp(argv[i], "-fps") == 0)
@@ -1547,6 +1562,10 @@ void Atari_Initialise(int *argc, char *argv[])
 				printf("\t-huge         Huge window (%dx%d)\n",
 					   ATARI_WIDTH * 3, ATARI_HEIGHT * 3);
 				printf("\t-x11bug       Enable debug code in atari_x11.c\n");
+				printf("\t-clip_x <nuber_of_pixels>       Set left offset for clipping\n");
+				printf("\t-clip_width <nuber_of_pixels>   Set window clip-width\n");
+				printf("\t-clip_y <nuber_of_pixels>       Set top offset for clipping\n");
+				printf("\t-clip_height <nuber_of_pixels>  Set window clip-height\n");
 			}
 			argv[j++] = argv[i];
 		}
@@ -1554,29 +1573,42 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	*argc = j;
 
-#ifdef VOXWARE
-	Voxware_Initialise(argc, argv);
+#ifdef SOUND
+	Sound_Initialise(argc, argv);
 #endif
 
-#ifdef SHM
-	if (windowsize != Small) {
-		printf("X Shared memory version only supports small window\n");
-		windowsize = Small;
+
+	if ((clipping_x < 0) || (clipping_x >= ATARI_WIDTH))
+	{
+		clipping_x = 0;
 	}
-#endif
-
+	if ((clipping_y < 0) || (clipping_y >= ATARI_HEIGHT))
+	{
+		clipping_y = 0;
+	}
+	if ((clipping_width <= 0) || (clipping_x + clipping_width > ATARI_WIDTH))
+	{
+		clipping_width = ATARI_WIDTH - clipping_x;
+	}
+	if ((clipping_height <= 0) || (clipping_y + clipping_height > ATARI_HEIGHT))
+	{
+		clipping_height = ATARI_HEIGHT - clipping_y;
+	}
 	switch (windowsize) {
 	case Small:
-		window_width = ATARI_WIDTH;
-		window_height = ATARI_HEIGHT;
+		clipping_factor = 1;
+		window_width = clipping_width;
+		window_height = clipping_height;
 		break;
 	case Large:
-		window_width = ATARI_WIDTH * 2;
-		window_height = ATARI_HEIGHT * 2;
+		clipping_factor = 2;
+		window_width = clipping_width * 2;
+		window_height = clipping_height * 2;
 		break;
 	case Huge:
-		window_width = ATARI_WIDTH * 3;
-		window_height = ATARI_HEIGHT * 3;
+		clipping_factor = 3;
+		window_width = clipping_width * 3;
+		window_height = clipping_height * 3;
 		break;
 	}
 
@@ -2363,10 +2395,11 @@ void Atari_Initialise(int *argc, char *argv[])
 		printf("Using X11 Shared Memory Extensions\n");
 
 		image = XShmCreateImage(display, visual, depth, ZPixmap,
-							NULL, &shminfo, window_width, window_height);
-
-                shmsize = (ATARI_HEIGHT * ATARI_WIDTH *
+						NULL, &shminfo, window_width, window_height);
+                shmsize = (window_width * window_height *
                                  image->bits_per_pixel) / 8;
+
+
 		shminfo.shmid = shmget(IPC_PRIVATE, shmsize, IPC_CREAT | 0777);
 		shminfo.shmaddr = image->data = shmat(shminfo.shmid, 0, 0);
 		shminfo.readOnly = False;
@@ -2377,8 +2410,6 @@ void Atari_Initialise(int *argc, char *argv[])
 
 		shmctl(shminfo.shmid, IPC_RMID, 0);
 
-                if(depth == 8)
-                        atari_screen = (ULONG *) image->data;
 	}
 #else
 	pixmap = XCreatePixmap(display, window,
@@ -2407,8 +2438,10 @@ void Atari_Initialise(int *argc, char *argv[])
 			colours[i+j] = colour.pixel;
 
 #ifdef SHM
+#ifdef USE_COLOUR_TRANSLATION_TABLE
 		for (j=0; j<colorstep; j++)
 			colour_translation_table[i+j] = colours[i+j] | (colours[i+j] << 8);
+#endif
 #endif
 	}
 
@@ -2503,8 +2536,8 @@ int Atari_Exit(int run_monitor)
 			close(js1);
 #endif
 
-#ifdef VOXWARE
-		Voxware_Exit();
+#ifdef SOUND
+		Sound_Exit();
 #endif
 	}
 	return restart;
@@ -2555,40 +2588,462 @@ void Atari_DisplayScreen(UBYTE * screen)
 	int update_status_line = FALSE;
 
 #ifdef SHM
+	int first_x, last_x, first_y, last_y;
+        int xpos;
+        int ypos;
+
+	first_x = ATARI_WIDTH;
+	last_x = -1000;
+	first_y = ATARI_HEIGHT;
+	last_y = -1000;
+
 	if( invisible || !draw_display )   goto after_screen_update;  /* mmm */
         if(image->bits_per_pixel == 32)
         {
-                ulong *ptr = image->data;
-                ubyte *ptr2 = screen;
-                int i;
+                ULONG *ptr = (ULONG *) image->data;
+                UBYTE *ptr2 = screen;
+		ULONG help_color;
 
-                for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
-                        *ptr++ = colours[*ptr2++];
+		if (windowsize == Small)
+		{
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+					}
+					else
+					{
+						ptr++;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+			}
+		}
+		else if (windowsize == Large)
+		{
+			ULONG *ptr_second_line;
+			
+			ptr_second_line = ptr + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+					}
+					else
+					{
+						ptr += 2;
+						ptr_second_line += 2;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += window_width;
+				ptr_second_line += window_width;
+			}
+		}
+		else /* if (windowsize == Huge) */
+		{
+			ULONG *ptr_second_line;
+			ULONG *ptr_third_line;
+
+			ptr_second_line = ptr + window_width;
+			ptr_third_line = ptr + window_width + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+					}
+					else
+					{
+						ptr += 3;
+						ptr_second_line += 3;
+						ptr_third_line += 3;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += (window_width + window_width);
+				ptr_second_line += (window_width + window_width);
+				ptr_third_line += (window_width + window_width);
+			}
+		}
         }
         else if(image->bits_per_pixel == 16)
         {
-                uword *ptr = image->data;
-                ubyte *ptr2 = screen;
-                int i;
+                UWORD *ptr = (UWORD *) image->data;
+                UBYTE *ptr2 = screen;
+		UWORD help_color;
 
-                for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
-                        *ptr++ = colours[*ptr2++];
+		if (windowsize == Small)
+		{
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+					}
+					else
+					{
+						ptr++;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+			}
+		}
+		else if (windowsize == Large)
+		{
+			UWORD *ptr_second_line;
+			
+			ptr_second_line = ptr + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+					}
+					else
+					{
+						ptr += 2;
+						ptr_second_line += 2;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += window_width;
+				ptr_second_line += window_width;
+			}
+		}
+		else /* if (windowsize == Huge) */
+		{
+			UWORD *ptr_second_line;
+			UWORD *ptr_third_line;
+
+			ptr_second_line = ptr + window_width;
+			ptr_third_line = ptr + window_width + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+					}
+					else
+					{
+						ptr += 3;
+						ptr_second_line += 3;
+						ptr_third_line += 3;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += (window_width + window_width);
+				ptr_second_line += (window_width + window_width);
+				ptr_third_line += (window_width + window_width);
+			}
+		}
+        }
+        else if(image->bits_per_pixel == 8)
+        {
+                UBYTE *ptr = (UBYTE *) image->data;
+                UBYTE *ptr2 = screen;
+		UBYTE help_color;
+
+		if (windowsize == Small)
+		{
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+					}
+					else
+					{
+						ptr++;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+			}
+		}
+		else if (windowsize == Large)
+		{
+			UBYTE *ptr_second_line;
+			
+			ptr_second_line = ptr + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+					}
+					else
+					{
+						ptr += 2;
+						ptr_second_line += 2;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += window_width;
+				ptr_second_line += window_width;
+			}
+		}
+		else /* if (windowsize == Huge) */
+		{
+			UBYTE *ptr_second_line;
+			UBYTE *ptr_third_line;
+
+			ptr_second_line = ptr + window_width;
+			ptr_third_line = ptr + window_width + window_width;
+			for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+				ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+				for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
+					help_color =  colours[*ptr2++];
+					if (help_color != *ptr)
+					{
+						last_y = ypos;
+						if (xpos > last_x)
+						{
+							last_x = xpos;
+						}
+						if (xpos < first_x)
+						{
+							first_x = xpos;
+						}
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_second_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+						*ptr_third_line++ = help_color;
+					}
+					else
+					{
+						ptr += 3;
+						ptr_second_line += 3;
+						ptr_third_line += 3;
+					}
+				}
+
+				if ((first_y > last_y) && (last_y >= 0))
+				{
+				  first_y = last_y;
+				}
+				ptr += (window_width + window_width);
+				ptr_second_line += (window_width + window_width);
+				ptr_third_line += (window_width + window_width);
+			}
+		}
         }
 
-	XShmPutImage(display, window, gc, image, 0, 0, 0, 0,
+
+        if (modified)
+        {
+	    XShmPutImage(display, window, gc, image, 0, 0, 0, 0,
 				 window_width, window_height, 0);
+	    modified = FALSE;
+	}
+	else
+        {
+	  if (last_y >= 0)
+          {
+		last_x++; 
+		last_y++; 
+		if (first_x < clipping_x)
+		{
+			first_x = clipping_x;
+		}
+		if (last_x > clipping_x + clipping_width)
+		{
+			last_x = clipping_x + clipping_width;
+		}
+		else if (last_x <= first_x)
+		{
+			last_x = first_x + 1;
+		}
+		if (first_y < clipping_y)
+		{
+			first_y = clipping_y;
+		}
+		if (last_y > clipping_y + clipping_height)
+		{
+			last_y = clipping_y + clipping_height;
+		}
+		else if (last_y <= first_y)
+		{
+			last_y = first_y + 1;
+		}
+
+		first_x *= clipping_factor;
+		last_x *= clipping_factor;
+		first_y *= clipping_factor;
+		last_y *= clipping_factor;
+
+		XShmPutImage(display, window, gc, image,
+			     first_x - (clipping_x * clipping_factor), first_y - (clipping_y * clipping_factor), first_x - (clipping_x * clipping_factor), first_y - (clipping_y * clipping_factor),
+				 last_x - first_x, last_y - first_y, 0);
+	  }
+	}
+
 	XSync(display, FALSE);
 #else
 	UBYTE *scanline_ptr = image_data;
+        UBYTE *ptr2 = screen;
 	int xpos;
 	int ypos;
 
 	if( invisible || !draw_display )   goto after_screen_update; 
-	for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
-		for (xpos = 0; xpos < ATARI_WIDTH; xpos++) {
+	for (ypos = clipping_y; ypos < (clipping_y + clipping_height); ypos++) {
+		ptr2 = ((UBYTE *) screen) + ((ypos * ATARI_WIDTH) + clipping_x);
+		scanline_ptr = ((UBYTE *) image_data) + ((ypos * ATARI_WIDTH) + clipping_x);
+		for (xpos = clipping_x; xpos < (clipping_x + clipping_width); xpos++) {
 			UBYTE colour;
 
-			colour = *screen++;
+			colour = *ptr2++;
 
 			if (colour != *scanline_ptr) {
 				int flush = FALSE;
@@ -2610,20 +3065,20 @@ void Atari_DisplayScreen(UBYTE * screen)
 					last_colour = colour;
 				}
 				if (windowsize == Small) {
-					points[npoints].x = xpos;
-					points[npoints].y = ypos;
+					points[npoints].x = xpos - clipping_x;
+					points[npoints].y = ypos - clipping_y;
 					npoints++;
 				}
 				else if (windowsize == Large) {
-					rectangles[nrects].x = xpos << 1;
-					rectangles[nrects].y = ypos << 1;
+					rectangles[nrects].x = (xpos - clipping_x) << 1;
+					rectangles[nrects].y = (ypos - clipping_y) << 1;
 					rectangles[nrects].width = 2;
 					rectangles[nrects].height = 2;
 					nrects++;
 				}
 				else {
-					rectangles[nrects].x = xpos + xpos + xpos;
-					rectangles[nrects].y = ypos + ypos + ypos;
+					rectangles[nrects].x = (xpos + xpos + xpos) - (clipping_x + clipping_x + clipping_x);
+					rectangles[nrects].y = (ypos + ypos + ypos) - (clipping_y + clipping_y + clipping_y);
 					rectangles[nrects].width = 3;
 					rectangles[nrects].height = 3;
 					nrects++;
@@ -2705,10 +3160,6 @@ after_screen_update:
 		XtAppNextEvent(app, &event);
 		XtDispatchEvent(&event);
 	}
-#endif
-
-#ifdef VOXWARE
-	Voxware_UpdateSound();
 #endif
 
 	if (screen_dump) {
@@ -2844,18 +3295,18 @@ void mouse_joystick(int mode)
 		int threshold;
 
 		if (windowsize == Small) {
-			center_x = ATARI_WIDTH / 2;
-			center_y = ATARI_HEIGHT / 2;
+			center_x = window_width / 2;
+			center_y = window_height / 2;
 			threshold = 32;
 		}
 		else if (windowsize == Large) {
-			center_x = (ATARI_WIDTH * 2) / 2;
-			center_y = (ATARI_HEIGHT * 2) / 2;
+			center_x = window_width / 2;
+			center_y = window_height / 2;
 			threshold = 64;
 		}
 		else {
-			center_x = (ATARI_WIDTH * 3) / 2;
-			center_y = (ATARI_HEIGHT * 3) / 2;
+			center_x = window_width / 2;
+			center_y = window_height / 2;
 			threshold = 96;
 		}
 
@@ -3002,16 +3453,16 @@ int Atari_TRIG(int num)
 						  &mask_return)) {
 			int mx,my;
 			if (windowsize == Small) {
-				mx = ATARI_WIDTH;
-				my = ATARI_HEIGHT;
+				mx = window_width;
+				my = window_height;
 			}
 			else if (windowsize == Large) {
-				mx = (ATARI_WIDTH * 2) ;
-				my = (ATARI_HEIGHT * 2);
+				mx = window_width;
+				my = window_height;
 			}
 			else {
-				mx = (ATARI_WIDTH * 3) ;
-				my = (ATARI_HEIGHT * 3);
+				mx = window_width;
+				my = window_height;
 			}
 			if( win_x_return<0 || win_x_return>mx ||
 			    win_y_return<0 || win_y_return>my )
@@ -3071,16 +3522,16 @@ int Atari_POT(int num)
 						  &win_x_return, &win_y_return, &mask_return)) {
 			switch (windowsize) {
 			case Small:
-				pot = ((float) ((ATARI_WIDTH) - win_x_return) /
-					   (float) (ATARI_WIDTH)) * 228;
+				pot = ((float) (window_width - win_x_return) /
+					   (float) (window_width)) * 228;
 				break;
 			case Large:
-				pot = ((float) ((ATARI_WIDTH * 2) - win_x_return) /
-					   (float) (ATARI_WIDTH * 2)) * 228;
+				pot = ((float) (window_width - win_x_return) /
+					   (float) (window_width)) * 228;
 				break;
 			default:
-				pot = ((float) ((ATARI_WIDTH * 3) - win_x_return) /
-					   (float) (ATARI_WIDTH * 3)) * 228;
+				pot = ((float) (window_width - win_x_return) /
+					   (float) (window_width)) * 228;
 				break;
 			}
 		}
@@ -3107,28 +3558,6 @@ int Atari_CONSOL(void)
 		temp = keyboard_consol;
 	}
 	return temp;
-}
-
-void Sound_Record( void )
-{
-#ifdef VOXWARE
-	static int record_num=0;
-	char buf[128];
-
-	if( sound_record<0 )
-	{	sprintf(buf,"%d.raw",record_num);
-		if( (sound_record=open(buf,O_RDWR|O_CREAT|O_TRUNC,0666))<0 )
-			printf("Can't write to file \"%s\"\n",buf);
-		else
-			printf("Recording sound to file \"%s\"\n",buf);
-	}
-	else
-	{	close( sound_record );
-		printf("Recording is stoped\n");
-		sound_record=-1;
-		record_num++;
-	}
-#endif /* VOXWARE */
 }
 
 int Atari_PEN(int vertical)

@@ -1,14 +1,11 @@
+/* $Id: ui.c,v 1.7 2001/03/25 06:57:36 knik Exp $ */
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>				/* for free() */
 #include <unistd.h>				/* for open() */
-#ifdef WIN32
-#include "winatari.h"
-#else
 #include <dirent.h>
 #include <sys/stat.h>
-#endif
 #include "rt-config.h"
 #include "atari.h"
 #include "cpu.h"
@@ -25,6 +22,7 @@
 #include "antic.h"
 #include "ataripcx.h"
 #include "binload.h"
+#include "sndsave.h"
 
 extern int refresh_rate;
 
@@ -47,13 +45,6 @@ static char curr_cart_dir[MAX_FILENAME_LEN] = "";
 static char curr_exe_dir[MAX_FILENAME_LEN] = "";
 static char curr_state_dir[MAX_FILENAME_LEN] = "";
 static char charset[1024];
-
-#ifdef WIN32
-extern unsigned long ulAtariState;
-extern void SafeShowScreen(void);
-extern HWND MainhWnd;
-unsigned long hThread = 0L;
-#endif	/* WIN32 */
 
 #ifdef STEREO
 extern int stereo_enabled;
@@ -110,8 +101,8 @@ unsigned char ascii_to_screen[128] =
 };
 
 
-#define KB_DELAY		15
-#define KB_AUTOREPEAT	3
+#define KB_DELAY		20
+#define KB_AUTOREPEAT		4
 
 int GetKeyPress(UBYTE * screen)
 {
@@ -130,7 +121,7 @@ int GetKeyPress(UBYTE * screen)
 		static int rep = KB_DELAY;
 		if (Atari_Keyboard() == AKEY_NONE) {
 			rep = KB_DELAY;
-			atari_sleep_ms(100);	/* mmm */
+			atari_sync();
 			break;
 		}
 		if (rep == 0) {
@@ -138,7 +129,7 @@ int GetKeyPress(UBYTE * screen)
 			break;
 		}
 		rep--;
-		atari_sleep_ms(20);
+		atari_sync();
 	}
 
 	do {
@@ -549,46 +540,15 @@ int FilenameSort(char *filename1, char *filename2)
 
 List *GetDirectory(char *directory)
 {
-#ifdef WIN32
-	List *list = NULL;
-	char filesearch[MAX_PATH];
-	WIN32_FIND_DATA FindFileData;
-	HANDLE hSearch;
-
-	strcpy(filesearch, directory);
-	strcat(filesearch, "\\*.*");
-
-	hSearch = FindFirstFile(filesearch, &FindFileData);
-
-	if (hSearch) {
-		list = ListCreate();
-		if (!list) {
-			MessageBox(NULL, "Out of memory", "Atari800Win", MB_OK);
-			return NULL;
-		}
-		ListAddTail(list, FindFileData.cFileName);
-
-		while (FindNextFile(hSearch, &FindFileData)) {
-			char *filename = _strdup(FindFileData.cFileName);
-			if (!filename)
-				MessageBox(NULL, "Out of memory", "Atari800Win", MB_OK);
-			else
-				ListAddTail(list, filename);
-		}
-
-		FindClose(hSearch);
-
-		ListSort(list, FilenameSort);
-	}
-#else
 	DIR *dp = NULL;
 	List *list = NULL;
 	struct stat st;
 	char fullfilename[MAX_FILENAME_LEN];
 	char *filepart;
 #ifdef DOS_DRIVES
-	char *letter = "C:";
-	char *letter2 = "[C:]";
+        /* strdup to avoid writing to string constants */
+	char *letter = strdup("C:");
+	char *letter2 = strdup("[C:]");
 #ifdef __DJGPP__
 	unsigned short s_backup = _djstat_flags;
 	_djstat_flags = _STAT_INODE | _STAT_EXEC_EXT | _STAT_EXEC_MAGIC | _STAT_DIRSIZE |
@@ -668,7 +628,6 @@ List *GetDirectory(char *directory)
 #endif
 #endif
 
-#endif
 	return list;
 }
 
@@ -677,7 +636,7 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 	List *list;
 	int flag = FALSE;
 	int next_dir;
-#ifndef WIN32
+
 	do {
 #ifdef __DJGPP__
 		char helpdir[MAX_FILENAME_LEN];
@@ -835,19 +794,21 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 			ListFree(list, (void *) free);
 		}
 	} while (next_dir);
-#endif /* WIN32 */
 	return flag;
 }
 
 void DiskManagement(UBYTE * screen)
 {
 	char *menu[8];
+	int rwflags[8];
 	int done = FALSE;
 	int dsknum = 0;
 	int i;
-#ifndef WIN32
-	for (i = 0; i < 8; ++i)
+
+	for (i = 0; i < 8; ++i) {
 		menu[i] = sio_filename[i];
+		rwflags[i] = (drive_status[i] == ReadOnly ? TRUE : FALSE);
+	}
 
 	while (!done) {
 		char filename[1024];
@@ -857,6 +818,7 @@ void DiskManagement(UBYTE * screen)
 		TitleScreen(screen, "Disk Management");
 		Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
 
+/*
 		Print(screen, 0x9a, 0x94, "D1:", 1, 4);
 		Print(screen, 0x9a, 0x94, "D2:", 1, 5);
 		Print(screen, 0x9a, 0x94, "D3:", 1, 6);
@@ -865,8 +827,14 @@ void DiskManagement(UBYTE * screen)
 		Print(screen, 0x9a, 0x94, "D6:", 1, 9);
 		Print(screen, 0x9a, 0x94, "D7:", 1, 10);
 		Print(screen, 0x9a, 0x94, "D8:", 1, 11);
+*/
+		for(i = 0; i < 8; i++) {
+			char diskName[80];
+			sprintf(diskName, "<%c>D%d:", rwflags[i] ? 'R' : 'W', i+1);
+			Print(screen, 0x9a, 0x94, diskName, 1, 4+i);
+		}
 
-		dsknum = Select(screen, dsknum, 8, menu, 8, 1, 4, 4, FALSE, &ascii);
+		dsknum = Select(screen, dsknum, 8, menu, 8, 1, 7, 4, FALSE, &ascii);
 		if (dsknum > -1) {
 			if (ascii == 0x9b) {	/* User pressed "Enter" to select a disk image */
 				char *pathname;
@@ -880,7 +848,7 @@ void DiskManagement(UBYTE * screen)
 					subdir = opendir(filename);
 					if (!subdir) {	/* A file was selected */
 						SIO_Dismount(dsknum + 1);
-						SIO_Mount(dsknum + 1, filename, FALSE);
+						SIO_Mount(dsknum + 1, filename, rwflags[dsknum]);
 						break;
 					}
 					else {		/* A directory was selected */
@@ -888,6 +856,15 @@ void DiskManagement(UBYTE * screen)
 						pathname = filename;
 					}
 				}
+			}
+			else if (ascii == 0x20) {	/* User pressed "SpaceBar" to change read/write flag of this drive */
+				char *flag;
+				rwflags[dsknum] = !rwflags[dsknum];
+				/* now the drive should probably be remounted
+				   and the rwflag should be read from the drive_status again */
+				/* TODO remount drive */
+				flag = rwflags[dsknum] ? "R" : "W";
+				Print(screen, 0x9a, 0x94, flag, 2, 4+i);
 			}
 			else {
 				if (strcmp(sio_filename[dsknum], "Empty") == 0)
@@ -899,7 +876,6 @@ void DiskManagement(UBYTE * screen)
 		else
 			done = TRUE;
 	}
-#endif
 }
 
 void CartManagement(UBYTE * screen)
@@ -949,14 +925,14 @@ void CartManagement(UBYTE * screen)
 				UBYTE image[32769];
 				int type = CART_UNKNOWN;
 				int nbytes;
-				int fd;
+				FILE *f;
 
-				fd = open(filename, O_RDONLY | O_BINARY, 0777);
-				if (fd == -1) {
+				f = fopen(filename, "rb");
+				if (!f) {
 					perror(filename);
 					exit(1);
 				}
-				nbytes = read(fd, image, sizeof(image));
+				nbytes = fread(image, 1, sizeof(image), f);
 				switch (nbytes) {
 				case 8192:
 					type = CART_STD_8K;
@@ -994,7 +970,7 @@ void CartManagement(UBYTE * screen)
 					type = CART_AGS;
 				}
 
-				close(fd);
+				fclose(f);
 
 				if (type != CART_UNKNOWN) {
 					Header header;
@@ -1028,40 +1004,40 @@ void CartManagement(UBYTE * screen)
 					header.gash[3] = '\0';
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
-					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
-					if (fd != -1) {
-						write(fd, &header, sizeof(header));
-						write(fd, image, nbytes);
-						close(fd);
+					f = fopen(filename, "wb");
+					if (f) {
+					  fwrite(&header, 1, sizeof(header), f);
+					  fwrite(image, 1, nbytes, f);
+					  fclose(f);
 					}
 				}
 			}
 			break;
 		case 1:
 			if (FileSelector(screen, curr_cart_dir, filename)) {
-				int fd;
+				FILE *f;
 
-				fd = open(filename, O_RDONLY | O_BINARY, 0777);
-				if (fd != -1) {
+				f = fopen(filename, "rb");
+				if (f) {
 					Header header;
 					UBYTE image[32769];
 					char fname[FILENAME_SIZE+1];
 					int nbytes;
 
-					read(fd, &header, sizeof(header));
-					nbytes = read(fd, image, sizeof(image));
+					fread(&header, 1, sizeof(header), f);
+					nbytes = fread(image, 1, sizeof(image), f);
 
-					close(fd);
+					fclose(f);
 
 					if (!EditFilename(screen, fname))
 						break;
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
 
-					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
-					if (fd != -1) {
-						write(fd, image, nbytes);
-						close(fd);
+					f = fopen(filename, "wb");
+					if (f) {
+					  fwrite(image, 1, nbytes, f);
+					  fclose(f);
 					}
 				}
 			}
@@ -1116,6 +1092,30 @@ void CartManagement(UBYTE * screen)
 			done = TRUE;
 			break;
 		}
+	}
+}
+
+void SoundRecording(UBYTE *screen)
+{
+	static int record_num=0;
+	char buf[128];
+	char msg[256];
+
+	if (! IsSoundFileOpen())
+	{	sprintf(buf,"%d.raw",record_num);
+		if (OpenSoundFile(buf))
+			sprintf(msg, "Recording sound to file \"%s\"",buf);
+		else
+			sprintf(msg, "Can't write to file \"%s\"",buf);
+	}
+	else
+	{	CloseSoundFile();
+		sprintf(msg, "Recording is stoped");
+		record_num++;
+	}
+	if (screen != NULL) {
+		CenterPrint(screen, 0x94, 0x9a, msg, 22);
+		GetKeyPress(screen);
 	}
 }
 
@@ -1209,6 +1209,7 @@ void ui(UBYTE *screen)
 		"Run BIN file directly            Alt+R",
 		"Select System                    Alt+Y",
 		"Sound Mono/Stereo                Alt+O",
+		"Sound Recording start/stop       Alt+W",
 		"Artifacting mode                      ",
 		"Save State                       Alt+S",
 		"Load State                       Alt+L",
@@ -1228,9 +1229,7 @@ void ui(UBYTE *screen)
 #endif
 
 	ui_is_active = TRUE;
-#ifdef WIN32
-	ulAtariState |= ATARI_UI_ACTIVE;
-#endif
+
 	/* Sound_Active(FALSE); */
 	if (!initialised) {
 		get_charset(charset);
@@ -1324,6 +1323,9 @@ void ui(UBYTE *screen)
 				GetKeyPress(screen);
 			}
 			break;
+		case MENU_SOUND_RECORDING:
+			SoundRecording(screen);
+			break;
 		case MENU_SAVESTATE:
 			SaveState(screen);
 			break;
@@ -1382,11 +1384,6 @@ void ui(UBYTE *screen)
 	/* Sound_Active(TRUE); */
 	ui_is_active = FALSE;
 	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
-#ifdef WIN32
-	ulAtariState &= ~ATARI_UI_ACTIVE;
-	hThread = 0L;
-	/* ExitThread(0); */
-#endif
 }
 
 
@@ -1451,3 +1448,16 @@ void ReadCharacterSet( void )
 {
 	get_charset(charset);
 }
+
+/*
+$Log: ui.c,v $
+Revision 1.7  2001/03/25 06:57:36  knik
+open() replaced by fopen()
+
+Revision 1.6  2001/03/18 07:56:48  knik
+win32 port
+
+Revision 1.5  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/

@@ -1,3 +1,4 @@
+/* $Id: atari_curses.c,v 1.3 2001/04/08 05:54:48 knik Exp $ */
 #ifdef NCURSES
 #include	<ncurses.h>
 #else
@@ -9,6 +10,10 @@
 #include "cpu.h"
 #include "monitor.h"
 #include "memory.h"
+
+#ifdef SOUND
+#include "sound.h"
+#endif
 
 #define CURSES_LEFT 0
 #define CURSES_CENTRAL 1
@@ -49,6 +54,9 @@ void Atari_Initialise(int *argc, char *argv[])
 	nodelay(stdscr, 1);			/* Don't block for keypress */
 
 	consol = 7;
+#ifdef SOUND
+   Sound_Initialise(argc, argv);
+#endif
 }
 
 int Atari_Exit(int run_monitor)
@@ -58,6 +66,7 @@ int Atari_Exit(int run_monitor)
 	curs_set(1);
 	endwin();
 
+
 	if (run_monitor)
 		restart = monitor();
 	else
@@ -66,6 +75,10 @@ int Atari_Exit(int run_monitor)
 	if (restart) {
 		curs_set(0);
 	}
+#ifdef SOUND
+        else
+           Sound_Exit();
+#endif
 	return restart;
 }
 
@@ -580,7 +593,6 @@ int Atari_Keyboard(void)
 		keycode = AKEY_NONE;
 		break;
 	}
-
 	return keycode;
 }
 
@@ -608,3 +620,10 @@ int Atari_PEN(int vertical)
 {
 	return 0;
 }
+
+/*
+$Log: atari_curses.c,v $
+Revision 1.3  2001/04/08 05:54:48  knik
+sound_update call removed (moved to atari.c)
+
+*/

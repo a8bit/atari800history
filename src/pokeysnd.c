@@ -1,3 +1,4 @@
+/* $Id: pokeysnd.c,v 1.5 2001/04/15 09:17:53 knik Exp $ */
 /*****************************************************************************/
 /*                                                                           */
 /* Module:  POKEY Chip Emulator, V2.4                                        */
@@ -91,27 +92,36 @@
 
 #include "pokeysnd.h"
 #include "atari.h"
+#include "sndsave.h"
 
-#ifndef WIN32
 #include "config.h"
-#endif
 
 #ifdef UNALIGNED_LONG_OK
 #  define READ_U32(x)    (*(uint32 *)(x))
 #  define WRITE_U32(x,d) (*(uint32 *)(x)=(d))
 #else
-#  ifdef ATARI800_BIG_ENDIAN
+#  ifdef WORDS_BIGENDIAN
 #    define READ_U32(x) (((*(unsigned char *)(x)) << 24) | ((*((unsigned char *)(x)+1)) << 16) | \
                         ((*((unsigned char *)(x)+2)) << 8) | ((*((unsigned char *)(x)+3))))
-#    define WRITE_U32(x,d) ((*(unsigned char *)(x)) = (((d)>>24)&255), (*((unsigned char *)(x)+1)) = \
-                           (((d)>>16)&255), (*((unsigned char *)(x)+2)) = (((d)>>8)&255), \
-                           (*((unsigned char *)(x)+3)) = ((d)&255), d)
+#    define WRITE_U32(x,d) \
+  { \
+  uint32 i = d; \
+  (*(unsigned char *)(x)) = (((i)>>24)&255); \
+  (*((unsigned char *)(x)+1)) = (((i)>>16)&255); \
+  (*((unsigned char *)(x)+2)) = (((i)>>8)&255); \
+  (*((unsigned char *)(x)+3)) = ((i)&255); \
+  }
 #  else
 #    define READ_U32(x) ((*(unsigned char *)(x)) | ((*((unsigned char *)(x)+1)) << 8) | \
                         ((*((unsigned char *)(x)+2)) << 16) | ((*((unsigned char *)(x)+3)) << 24))
-#    define WRITE_U32(x,d) ((*(unsigned char *)(x)) = ((d)&255), (*((unsigned char *)(x)+1)) = \
-                           (((d)>>8)&255), (*((unsigned char *)(x)+2)) = (((d)>>16)&255), \
-                           (*((unsigned char *)(x)+3)) = (((d)>>24)&255), d)
+#    define WRITE_U32(x,d) \
+  { \
+  uint32 i = d; \
+  (*(unsigned char *)(x)) = ((i)&255); \
+  (*((unsigned char *)(x)+1)) = (((i)>>8)&255); \
+  (*((unsigned char *)(x)+2)) = (((i)>>16)&255); \
+  (*((unsigned char *)(x)+3)) = (((i)>>24)&255); \
+  }
 #  endif
 #endif
 
@@ -652,11 +662,15 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 /*          num_pokeys - number of currently active pokeys to process        */
 /*                                                                           */
 /* Outputs: the buffer will be filled with n bytes of audio - no return val  */
+/*          Also the buffer will be written to disk if Sound recording is ON */
 /*                                                                           */
 /*****************************************************************************/
 
-void Pokey_process(register uint8 * buffer, register uint16 n)
+void Pokey_process(uint8 * sndbuffer, const uint16 sndn)
 {
+	register uint8 *buffer = sndbuffer;
+	register uint16 n = sndn;
+
 	register uint32 *div_n_ptr;
 	register uint8 *samp_cnt_w_ptr;
 	register uint32 event_min;
@@ -679,7 +693,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 	register uint8 *vol_ptr;
 
 	/* set a pointer to the whole portion of the samp_n_cnt */
-#ifdef ATARI800_BIG_ENDIAN
+#ifdef WORDS_BIGENDIAN
 	samp_cnt_w_ptr = ((uint8 *) (&Samp_n_cnt[0]) + 3);
 #else
 	samp_cnt_w_ptr = ((uint8 *) (&Samp_n_cnt[0]) + 1);
@@ -737,7 +751,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 #endif
 		count--;
 	} while (count);
-//#if defined (USE_DOSSOUND) || (WIN32)
+//#if defined (USE_DOSSOUND)
 //	cur_val += 32 * atari_speaker;
 //#endif
 
@@ -1037,7 +1051,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 #endif /* STEREO */
 #endif /* CLIP */
 
-#ifdef ATARI800_BIG_ENDIAN
+#ifdef WORDS_BIGENDIAN
 			*(Samp_n_cnt + 1) += Samp_n_max;
 #else
 			*Samp_n_cnt += Samp_n_max;
@@ -1057,6 +1071,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		sampbuf_last2=cpu_clock;
 #endif
 #endif	/* NO_VOL_ONLY */
+
+	if( IsSoundFileOpen())
+		WriteToSoundFile(sndbuffer, sndn);
 }
 
 #ifdef SERIO_SOUND
@@ -1144,3 +1161,16 @@ void Update_vol_only_sound( void )
 #endif /* NO_CONSOL_SOUND */
 }
 #endif	/* NO_VOL_ONLY */
+
+/*
+$Log: pokeysnd.c,v $
+Revision 1.5  2001/04/15 09:17:53  knik
+atari800_big_endian -> words_bigendian (autoconf compatibility)
+
+Revision 1.4  2001/04/08 06:05:24  knik
+weird bug in WRITE_U32 macro fixed
+
+Revision 1.3  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/

@@ -1,6 +1,8 @@
+/* $Id: atari_svgalib.c,v 1.5 2001/04/08 05:54:48 knik Exp $ */
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include <vga.h>
 
@@ -31,8 +33,10 @@ static int js1;
 
 static int js0_centre_x;
 static int js0_centre_y;
+#if 0 /* currently not used */
 static int js1_centre_x;
 static int js1_centre_y;
+#endif
 
 static struct JS_DATA_TYPE js_data;
 #endif
@@ -208,6 +212,8 @@ int Atari_Keyboard(void)
 				alt_function = MENU_SYSTEM;		/* ALT+Y .. Select system */
 			else if (kbcode == SCANCODE_O)
 				alt_function = MENU_SOUND;		/* ALT+O .. mono/stereo sound */
+			else if (kbcode == SCANCODE_W)
+				alt_function = MENU_SOUND_RECORDING;	/* ALT+W .. record sound */
 			else if (kbcode == SCANCODE_A)
 				alt_function = MENU_ABOUT;		/* ALT+A .. About */
 			else if (kbcode == SCANCODE_S)
@@ -432,8 +438,8 @@ void Atari_Initialise(int *argc, char *argv[])
 	int i;
 	int j;
 
-#ifdef VOXWARE
-	Voxware_Initialise(argc, argv);
+#ifdef SOUND
+	Sound_Initialise(argc, argv);
 #endif
 
 	for (i = j = 1; i < *argc; i++) {
@@ -473,10 +479,10 @@ void Atari_Initialise(int *argc, char *argv[])
 		js0_centre_x = js_data.x;
 		js0_centre_y = js_data.y;
 	}
-        else {
-                printf("cannot open joystick /dev/js0: %s\n"
-                       "joystick disabled\n",strerror(errno));
-        }
+	else {
+		printf("cannot open joystick /dev/js0: %s\n"
+			   "joystick disabled\n",strerror(errno));
+	}
 #if 0 /* currently not used */
 	js1 = open("/dev/js1", O_RDONLY, 0777);
 	if (js1 != -1) {
@@ -581,8 +587,8 @@ int Atari_Exit(int run_monitor)
 			close(js1);
 #endif
 
-#ifdef VOXWARE
-		Voxware_Exit();
+#ifdef SOUND
+		Sound_Exit();
 #endif
 
 #ifdef BUFFERED_LOG
@@ -647,9 +653,6 @@ void Atari_DisplayScreen(UBYTE * screen)
 #endif
 after_screen_update:
 
-#ifdef VOXWARE
-	Voxware_UpdateSound();
-#endif
 }
 
 #ifdef LINUX_JOYSTICK
@@ -735,10 +738,7 @@ int Atari_TRIG(int num)
                 }
         if (num==0)		
 	{
-#ifdef USE_CURSORBLOCK
 		return ctrig;
-#endif	
-		return 1;
 	}
 	return 1;
 }
@@ -764,3 +764,12 @@ void LeaveVGAMode(void)
 }
 */
 
+/*
+$Log: atari_svgalib.c,v $
+Revision 1.5  2001/04/08 05:54:48  knik
+sound_update call removed (moved to atari.c)
+
+Revision 1.4  2001/03/22 06:15:49  knik
+ctrig fix
+
+*/

@@ -1,9 +1,9 @@
+/* $Id: memory-p.c,v 1.3 2001/03/25 06:57:36 knik Exp $ */
 /* #define MEM_DEBUG */
 
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -97,22 +97,24 @@ UBYTE *load_file(char *filename)
 	struct stat stat_buf;
 	int status;
 	UBYTE *buffer;
-	int fd;
+	FILE *f;
 
 	status = stat(filename, &stat_buf);
 	if (status == -1) return NULL;
 	buffer = (UBYTE *) malloc(stat_buf.st_size);
 	if (!buffer) return NULL;
-	fd = open(filename, O_RDONLY | O_BINARY);
-	if (fd == -1) {
+	f = fopen(filename, "rb");
+	if (!f) {
 		free(buffer);
 		return NULL;
 	}
-	status = read(fd, buffer, stat_buf.st_size);
+	status = fread(buffer, 1, stat_buf.st_size, f);
 	if (status != stat_buf.st_size) {
+		fclose(f);
 		free(buffer);
 		return NULL;
 	}
+	fclose(f);
 	return buffer;
 }
 
@@ -574,9 +576,7 @@ void PORTB_handler(UBYTE byte)
 	default:
 		Aprint("Fatal Error in pia.c: PIA_PutByte(): Unknown machine\n");
 		Atari800_Exit(FALSE);
-#ifndef WIN32
 		exit(1);
-#endif
 		break;
 	}
 }
@@ -592,3 +592,13 @@ void get_charset(char * cs)
 	Aprint("get_charset called");
 	exit(1);
 }
+
+/*
+$Log: memory-p.c,v $
+Revision 1.3  2001/03/25 06:57:36  knik
+open() replaced by fopen()
+
+Revision 1.2  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/

@@ -1,15 +1,23 @@
+/* $Id: sio.h,v 1.4 2001/04/15 09:11:53 knik Exp $ */
 #ifndef __SIO__
 #define __SIO__
 
-#include "atari.h"
+#include "config.h"
 
 #define MAX_DRIVES 8
+
 #ifdef WIN32
-#include "windows.h"
-#define FILENAME_LEN MAX_PATH
-#else
-#define FILENAME_LEN 256
+# include <stdlib.h>
+# ifdef MAX_PATH
+#  define FILENAME_LEN MAX_PATH
+# endif
 #endif
+#ifndef FILENAME_LEN
+# define FILENAME_LEN 256
+#endif
+
+#include "atari.h"
+
 
 /*
  * it seems, there are two different ATR formats with different handling for
@@ -26,6 +34,7 @@ typedef enum tagUnitStatus {
 } UnitStatus;
 
 extern char sio_status[256];
+extern UnitStatus drive_status[MAX_DRIVES];
 extern char sio_filename[MAX_DRIVES][FILENAME_LEN];
 
 int SIO_Mount(int diskno, const char *filename, int b_open_readonly );
@@ -58,5 +67,6 @@ void SIO_Initialise(int *argc, char *argv[]);
 #define ACK_INTERVAL 36
 #ifndef NO_SECTOR_DELAY
 #define SECTOR_DELAY 3200
-#endif
-#endif
+#endif	/* NO_SECTOR_DELAY */
+
+#endif	/* __SIO__ */

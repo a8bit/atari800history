@@ -1,14 +1,17 @@
+/* $Id: sound.c,v 1.4 2001/04/08 05:59:32 knik Exp $ */
 #include <stdio.h>
 #include <unistd.h>
 
 #include "config.h"
 
-#ifdef VOXWARE
+#ifdef SOUND
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/soundcard.h>
 
 #include "pokeysnd.h"
+
+#include "sndsave.h"
 
 #define FRAGSIZE	7
 
@@ -24,9 +27,8 @@ static int snddelay = 40;		/* delay in milliseconds */
 
 static int sound_enabled = TRUE;
 static int dsp_fd;
-int sound_record=-1;
 
-void Voxware_Initialise(int *argc, char *argv[])
+void Sound_Initialise(int *argc, char *argv[])
 {
 	int i, j;
 	struct audio_buf_info abi;
@@ -42,10 +44,11 @@ void Voxware_Initialise(int *argc, char *argv[])
 			sscanf(argv[++i], "%d", &snddelay);
 		else {
 			if (strcmp(argv[i], "-help") == 0) {
-				printf("\t-sound                    enable sound");
-				printf("\t-nosound                  disable sound");
-				printf("\t-dsprate <rate>           set dsp rate");
-				printf("\t-snddelay <milliseconds>  set sound delay");
+				printf("\t-sound                    enable sound\n"
+				       "\t-nosound                  disable sound\n"
+				       "\t-dsprate <rate>           set dsp rate\n"
+				       "\t-snddelay <milliseconds>  set sound delay\n"
+				      );
 			}
 			argv[j++] = argv[i];
 		}
@@ -104,13 +107,6 @@ void Voxware_Initialise(int *argc, char *argv[])
 			return;
 		}
 
-		printf("%s: %d(%d) fragments(free) of %d bytes, %d bytes free\n",
-			   dspname,
-			   abi.fragstotal,
-			   abi.fragments,
-			   abi.fragsize,
-			   abi.bytes);
-
 #ifdef STEREO
 		Pokey_sound_init(FREQ_17_EXACT, dsprate, 2);
 #else
@@ -133,13 +129,13 @@ void Sound_Continue(void)
 	}
 }
 
-void Voxware_Exit(void)
+void Sound_Exit(void)
 {
 	if (sound_enabled)
 		close(dsp_fd);
 }
 
-void Voxware_UpdateSound(void)
+void Sound_Update(void)
 {
 	int i;
 	struct audio_buf_info abi;
@@ -161,18 +157,16 @@ void Voxware_UpdateSound(void)
 #endif
 		Pokey_process(dsp_buffer, sizeof(dsp_buffer));
 		write(dsp_fd, dsp_buffer, sizeof(dsp_buffer));
-		if( sound_record>=0 )
-			write(sound_record, dsp_buffer, sizeof(dsp_buffer));
 	}
 }
+#endif	/* SOUND */
 
-#else
-void Sound_Pause(void)
-{
-}
+/*
+ $Log: sound.c,v $
+ Revision 1.4  2001/04/08 05:59:32  knik
+ sound_pause/continue removed if no sound used
 
-void Sound_Continue(void)
-{
-}
+ Revision 1.3  2001/03/24 06:28:07  knik
+ help fixed and control message removed
 
-#endif
+ */

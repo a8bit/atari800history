@@ -1,7 +1,11 @@
+/* $Id: devices.c,v 1.6 2001/03/25 06:57:35 knik Exp $ */
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
 #include	<ctype.h>
+
+#include	"config.h"
+#include	"ui.h"
 
 #ifdef VMS
 #include	<unixio.h>
@@ -9,9 +13,7 @@
 #else
 #include	<fcntl.h>
 #ifndef	AMIGA
-#ifndef WIN32
 #include	<unistd.h>
-#endif
 #endif
 #endif
 
@@ -25,16 +27,8 @@
 #undef	DO_DIR
 #endif
 
-#ifdef WIN32
-#include <io.h>
-#include <sys/stat.h>
-#include "windows.h"
-#endif
-
 #ifdef DO_DIR
-#ifndef WIN32
 #include	<dirent.h>
-#endif
 #endif
 
 #include "atari.h"
@@ -86,9 +80,7 @@ static int fid;
 static char filename[64];
 
 #ifdef DO_DIR
-#ifndef WIN32
 static DIR	*dp = NULL;
-#endif
 #endif
 
 char *strtoupper(char *str)
@@ -129,11 +121,7 @@ int Device_isvalid(char ch)
 {
 	int valid;
 
-#ifdef WIN32
-  if( isalnum(ch) && ch!=-101 )
-#else
 	if (isalnum(ch))
-#endif
 		valid = TRUE;
 	else
 		switch (ch) {
@@ -268,7 +256,6 @@ void Device_HHOPEN(void)
 	case 6:
 	case 7:
 #ifdef DO_DIR
-#ifndef WIN32
 		fp[fid] = tmpfile();
 		if (fp[fid]) {
 			dp = opendir(H[devnum]);
@@ -297,47 +284,6 @@ void Device_HHOPEN(void)
 			}
 		}
           else
-#else	/* WIN32 DIR code */
-		  fp[fid] = tmpfile ();
-	  if( fp[fid] )
-	  {
-		  WIN32_FIND_DATA FindFileData;
-		  HANDLE	hSearch;
-		  char filesearch[ MAX_PATH ];
-		  
-		  strcpy( filesearch, H[devnum] );
-		  strcat( filesearch, "\\*.*" );
-		  
-		  hSearch = FindFirstFile( filesearch, &FindFileData );
-		  
-		  if( hSearch )
-		  {
-			  FindNextFile( hSearch, &FindFileData );
-			  
-			  while( FindNextFile( hSearch, &FindFileData ) )
-			  {
-				  if( (match( filename, FindFileData.cFileName )) )
-					  fprintf (fp[fid],"%s\n", FindFileData.cFileName );
-			  }
-			  
-			  FindClose( hSearch );
-			  regY = 1;
-			  ClrN;
-			  
-			  rewind (fp[fid]);
-			  
-			  flag[fid] = TRUE;
-		  }
-		  else
-		  {
-			  regY = 163;
-			  SetN;
-			  fclose (fp[fid]);
-			  fp[fid] = NULL;
-		  }
-	  }
-	  else
-#endif /* Win32 */
 #endif /* DO_DIR */
 		{
 			regY = 163;
@@ -503,7 +449,7 @@ void Device_HHINIT(void)
 		Aprint("HHINIT");
 }
 
-static int phfd = -1;
+static FILE *phf = NULL;
 void Device_PHCLOS(void);
 static char *spool_file = NULL;
 
@@ -512,12 +458,12 @@ void Device_PHOPEN(void)
 	if (devbug)
 		Aprint("PHOPEN");
 
-	if (phfd != -1)
+	if (phf)
 		Device_PHCLOS();
 
 	spool_file = tmpnam(NULL);
-	phfd = open(spool_file, O_CREAT | O_TRUNC | O_WRONLY, 0777);
-	if (phfd != -1) {
+	phf = fopen(spool_file, "w");
+	if (phf) {
 		regY = 1;
 		ClrN;
 	}
@@ -532,26 +478,24 @@ void Device_PHCLOS(void)
 	if (devbug)
 		Aprint("PHCLOS");
 
-	if (phfd != -1) {
+	if (phf) {
 		char command[256];
 		int status;
 
-		close(phfd);
+		fclose(phf);
 
 		sprintf(command, print_command, spool_file);
 		system(command);
 
 #ifndef VMS
-#ifndef WIN32
 		status = unlink(spool_file);
 		if (status == -1) {
 			perror(spool_file);
 			exit(1);
 		}
 #endif
-#endif
 
-		phfd = -1;
+		phf = NULL;
 	}
 	regY = 1;
 	ClrN;
@@ -578,7 +522,7 @@ void Device_PHWRIT(void)
 	if (byte == 0x9b)
 		byte = '\n';
 
-	status = write(phfd, &byte, 1);
+	status = fwrite(&byte, 1, 1, phf);
 	if (status == 1) {
 		regY = 1;
 		ClrN;
@@ -609,7 +553,7 @@ void Device_PHINIT(void)
 	if (devbug)
 		Aprint("PHINIT");
 
-	phfd = -1;
+	phf = NULL;
 	regY = 1;
 	ClrN;
 }
@@ -820,3 +764,16 @@ void AtariEscape(UBYTE esc_code)
 		exit(0);
 #endif
 }
+
+/*
+$Log: devices.c,v $
+Revision 1.6  2001/03/25 06:57:35  knik
+open() replaced by fopen()
+
+Revision 1.5  2001/03/22 06:16:58  knik
+removed basic improvement
+
+Revision 1.4  2001/03/18 06:34:58  knik
+WIN32 conditionals removed
+
+*/
