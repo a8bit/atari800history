@@ -61,7 +61,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define TRUE	1
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9e"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9f"
 
 #define NO_CART 0
 #define NORMAL8_CART 1

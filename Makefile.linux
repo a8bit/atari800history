@@ -63,7 +63,7 @@ svga:
 	make atari800 \
 	OBJECTS="$(OBJECTS) atari_svgalib.o" \
 	LDLIBS="$(LDLIBS) -lvga" \
-	DEFS="$(DEFS)" \
+	DEFS="$(DEFS) -DSVGALIB" \
 	INCLUDE="$(INCLUDE)"
 
 x11:

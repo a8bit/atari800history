@@ -34,6 +34,7 @@ by configure's build-in test.
 ?USE_NEW_BINLOAD	Use new routine for direct loading of binary files
 ?ZLIB_CAPABLE		Enable compressed state files (you'll need ZLIB for this)
 ?(ALLEGRO)NEW_ALLEGRO312	Update source for newer Allegro lib v3.12
+?(SVGALIB)USE_CURSORBLOCK	Use cursor keys/Ctrl for keyboard joystick
 ?UNALIGNED_LONG_OK
 
 #endif

@@ -1,7 +1,14 @@
+Changes in 0.9.9f
+-----------------
+
+o new binary loader fixed again (some binary files do not set starting
+  address) <Marek>
+
 Changes in 0.9.9e
 -----------------
 
-o new binary loader fixed <Marek>
+o new binary loader fixed (some binary files contain additional $FF,$FF
+  in the block headers) <Marek>
 
 o X11 keyboard autorepeat turned off during emulation <Marek>
 
@@ -13,7 +20,8 @@ o GTIA: return 0x0f for all write-only registers <Marcin>
 o monitor: added filename to write (memory dump) <Marcin>
 
 o svgalib: don't abort if joystick cannot be opened. Also allow cursorpad
-           keys/ctrl key for joystick emulation  <Christian Groessler>
+           keys/ctrl key for joystick emulation (enable it by defining
+           USE_CURSORBLOCK) <Christian Groessler>
 
 
 Changes in 0.9.9d

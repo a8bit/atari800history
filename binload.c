@@ -50,6 +50,11 @@ printf("Boot Error\n");
 	from=buf[0]|buf[1]<<8;
 	to=buf[2]|buf[3]<<8;
 	len= (0x10000+to-from+1) & 0x0000ffff;
+	if( dGetByte(736)==addrL_init && dGetByte(737)==0x01 )
+	{	dPutByte( 736, buf[0] );
+		dPutByte( 737, buf[1] );
+	}
+		
 	if( read(bin_fd,buf,len)!=len )
 	{	close(bin_fd); bin_fd=-1;
 		regS=orig_regS;
@@ -117,6 +122,8 @@ void BIN_loader_cont( void )
 		dPutByte((0x0100 + regS--), 0x60 );	/* RTS */
 		dPutByte( 738 , addrL_init );	/* init low */
 		dPutByte( 739 , 0x01 );		/* init high */
+		dPutByte( 736 , addrL_init );	/* only for default start */
+		dPutByte( 737 , 0x01 );	
 		BIN_load();
 		start_binloading=0;
 	}
