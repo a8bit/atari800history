@@ -8,7 +8,7 @@
 #include "atari.h"
 #include "prompts.h"
 
-static char *rcsid = "$Id: configure.c,v 1.17 1997/03/31 09:34:33 david Exp $";
+static char *rcsid = "$Id: configure.c,v 1.18 1997/04/13 21:21:52 david Exp $";
 
 jmp_buf jmpbuf;
 
@@ -53,6 +53,7 @@ int main (void)
   char linux_joystick = 'N';
   char joymouse = 'N';
   char direct_video = 'N';
+  char voxware = 'N';
   int allow_unaligned_long = 0;
 
   home = getenv ("~");
@@ -88,6 +89,9 @@ int main (void)
 
 	  if (fscanf (fp,"\n%c", &joymouse) == 0)
 	    joymouse = 'N';
+
+	  if (fscanf (fp,"\n%c\n", &voxware) == 0)
+	    voxware = 'N';
 	}
       else
         {
@@ -100,6 +104,7 @@ int main (void)
   YesNo ("Enable LINUX Joystick [%c] ", &linux_joystick);
   YesNo ("Support for Toshiba Joystick Mouse (Linux SVGALIB Only) [%c] ", &joymouse);
   YesNo ("Enable Direct Video Access [%c] ", &direct_video);
+  YesNo ("Enable Voxware Sound Support (Linux) [%c] ", &voxware);
 
   printf("Testing unaligned long accesses...");
   if ((allow_unaligned_long = unaligned_long_ok()))
@@ -126,6 +131,9 @@ int main (void)
       if (joymouse == 'Y')
         fprintf (fp, "#define JOYMOUSE\n");
 
+      if (voxware == 'Y')
+        fprintf (fp, "#define VOXWARE\n");
+
       if (allow_unaligned_long == 1)
 	fprintf (fp, "#define UNALIGNED_LONG_OK\n");
 
@@ -143,6 +151,7 @@ int main (void)
       fprintf (fp, "%c\n", linux_joystick);
       fprintf (fp, "%c\n", direct_video);
       fprintf (fp, "%c\n", joymouse);
+      fprintf (fp, "%c\n", voxware);
 
       fclose (fp);
     }

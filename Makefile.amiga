@@ -64,19 +64,16 @@ ATARI_H4_DIR	= $(ATARI_LIBRARY)/H4
 INCLUDES	=	Makefile cpu.h atari.h \
 			antic.h gtia.h pia.h pokey.h colours.h
 
-atari800	:	atari.o ffp.o cpu.o monitor.o sio.o \
+atari800	:	atari.o cpu.o monitor.o sio.o \
 			devices.o antic.o gtia.o pia.o pokey.o supercart.o \
 			$(OBJ)
-	$(LD) $(LDFLAGS) atari.o ffp.o cpu.o monitor.o sio.o \
+	$(LD) $(LDFLAGS) atari.o cpu.o monitor.o sio.o \
 			 devices.o antic.o gtia.o pia.o pokey.o supercart.o \
 			 $(OBJ) \
 			 $(LDLIBS) -o atari800
 
 atari.o		:	atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="$(ATARI_LIBRARY)" $(CFLAGS) atari.c
-
-ffp.o		:	ffp.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
 
 cpu.o		:	cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c

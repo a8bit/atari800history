@@ -241,7 +241,6 @@ INCLUDES	=	Makefile \
 			pokey.h \
 			pia.h \
 			devices.h \
-			ffp.h \
 			monitor.h \
 			sio.h \
 			supercart.h \
@@ -258,7 +257,6 @@ configure.o	:	configure.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS	=	atari.o \
-		ffp.o \
 		cpu.o \
 		monitor.o \
 		sio.o \
@@ -271,16 +269,15 @@ OBJECTS	=	atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
-                list.o
+                list.o \
+                sound.o \
+                pokey11.o
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
 atari.o		:	atari.c $(INCLUDES) prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
-
-ffp.o		:	ffp.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
 
 cpu.o		:	cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
@@ -335,6 +332,12 @@ prompts.o	:	prompts.c prompts.h
 
 rt-config.o	:	rt-config.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c
+
+sound.o		:	sound.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
+
+pokey11.o	:	pokey11.c pokey11.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
 
 clean	:
 	rm -f configure

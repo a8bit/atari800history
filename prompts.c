@@ -3,7 +3,7 @@
 
 #include "prompts.h"
 
-static char *rcsid = "$Id: prompts.c,v 1.1 1997/03/22 21:48:28 david Exp $";
+static char *rcsid = "$Id: prompts.c,v 1.2 1997/04/12 11:53:32 david Exp $";
 
 void GetString (char *message, char *string)
 {
@@ -46,6 +46,28 @@ void YesNo (char *message, char *yn)
 
   if (t_yn != ' ')
     *yn = t_yn;
+}
+
+void RemoveSpaces (char *string)
+{
+  char *ptr = string;
+
+  while (*string)
+    {
+      switch (*string)
+        {
+          case ' ' :
+          case '\n' :
+          case '\t' :
+            string++;
+            break;
+          default :
+            *ptr++ = *string++;
+            break;
+        }
+    }
+
+  *ptr = '\0';
 }
 
 void RemoveLF (char *string)

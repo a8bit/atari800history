@@ -1,3 +1,87 @@
+Changes in 0.8.1
+----------------
+
+o Added -private_cmap flag for X11 version.
+
+o Correction to handling of 6502 V flag during ADC and SBC operations.
+
+Changes in 0.8.0
+----------------
+
+o Added Ron Fries Pokey Emulation routines for sound in Linux.
+  A million thanks to Ron for releasing these routines - I've
+  put off using sound for ages but it took less than an evening
+  to add sound using these routines :-)
+
+  Sound is setup for Linux using /dev/dsp but it also seems to
+  produce something using /dev/audio, which leads me to believe
+  that it should work on most Unix boxes with a little work.
+  Patches welcomed :-)
+
+  In order to support sound I've added a few new command line
+  options:-
+
+  -sound and -nosound do what you'd expect.
+
+  -dsp_divisor takes a decimal value which alters the quality of
+               the sound output. It is used to work out how much
+               sound should be created each time the screen is
+               refreshed. Ideally it should be 50 (PAL) or 60 (NTSC)
+               but I've found that the best value to use is about
+               5 less than the emulators screen refresh rate WITH
+               SOUND DISABLED. If the values is to high you will
+               get gaps in the sound. If the value is to low the
+               emulator will run slower than it should.
+
+               I strongly suggest you experiment with this parameter
+               in order to get both the best sound and performance.
+
+o Support for an Experimental New Cartridge Format - with the use of
+  OSS Super Cartridges there is no way of automatically
+  distinguishing standard 16K cartridges from the various Super
+  Cartridges. Hopefully this format will do for cartridges what ATR
+  files did for disk images. Feedback and view would be welcomed
+  especially from the other Emulator Authors.
+
+  The current format is :-
+
+  first 4 bytes containing 'C' 'A' 'R' 'T'.
+  next 4 bytes containing cartridge type in MSB format.
+
+    Type 1 - Standard 8K Cartridge
+    Type 2 - Standard 16K Cartridge
+    Type 3 - OSS Super Cartridge (I heard rumours that there are two
+             different types of OSS Cartridges)
+    Type 4 - Atari 5200 Cartridge
+
+    Note: There is probably a case for extra cartridge types
+          indicating the system that needs to be emulated.
+          e.g. Standard 8K Cartridge (800 Mode Only).
+
+  next 4 bytes containing cartridge checksum in MSB format (ROM only).
+  next 4 bytes are currently unused.
+  followed immediately with the ROM data, typically 8, 16 or 32K.
+
+  In the next version I'm intending on adding:-
+    32 bytes for Cartridge Name
+    32 bytes for Cartridge Serial Number
+    32 bytes for Manufacturer
+
+  The current version of the emulator includes options in the
+  Cartridge Management screen to Create Cartridges in the above
+  format but be warned this format is likely to change.
+
+Changes in 0.7.1
+----------------
+
+o Note: I now consider the new Menu System that runs in the Emulated
+        Atari's window to be the prefered User Interface. I have no
+        intention of doing any further development for XVIEW
+
+o Cartridge Management added to Menu.
+
+o Removed FFP Code.
+
 Changes in 0.7.0
 ----------------
 

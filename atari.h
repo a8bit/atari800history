@@ -41,41 +41,19 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.7.0"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.1"
 
-#define NO_CART       0
-#define NORMAL8_CART  1
+#define NO_CART 0
+#define NORMAL8_CART 1
 #define NORMAL16_CART 2
-#define AGS32_CART    3
+#define AGS32_CART 3
 #define OSS_SUPERCART 4
-#define DB_SUPERCART  5
+#define DB_SUPERCART 5
+#define CARTRIDGE 6
 
 enum ESCAPE
 {
   ESC_SIOV,
-
-  ESC_AFP,
-  ESC_FASC,
-  ESC_IFP,
-  ESC_FPI,
-  ESC_FADD,
-  ESC_FSUB,
-  ESC_FMUL,
-  ESC_FDIV,
-  ESC_LOG,
-  ESC_LOG10,
-  ESC_EXP,
-  ESC_EXP10,
-  ESC_PLYEVL,
-  ESC_ZFR0,
-  ESC_ZF1,
-  ESC_FLD0R,
-  ESC_FLD0P,
-  ESC_FLD1R,
-  ESC_FLD1P,
-  ESC_FST0R,
-  ESC_FST0P,
-  ESC_FMOVE,
 /*
  * These are special device escape codes required by the Basic version
  */
@@ -142,8 +120,7 @@ enum ESCAPE
 #define AKEY_EXIT -4
 #define AKEY_BREAK -5
 #define AKEY_PIL -6
-#define AKEY_DISKCHANGE -7
-#define AKEY_UI -8
+#define AKEY_UI -7
 
 #define AKEY_SHFT 0x40
 #define AKEY_CTRL 0x80

@@ -4,7 +4,7 @@
 #include	<curses.h>
 #endif
 
-static char *rcsid = "$Id: atari_curses.c,v 1.5 1996/10/09 22:02:06 david Exp $";
+static char *rcsid = "$Id: atari_curses.c,v 1.6 1997/04/13 21:21:51 david Exp $";
 
 #include "atari.h"
 #include "cpu.h"
@@ -612,16 +612,4 @@ int Atari_POT (int num)
 int Atari_CONSOL (void)
 {
   return consol;
-}
-
-void Atari_AUDC (int channel, int byte)
-{
-}
-
-void Atari_AUDF (int channel, int byte)
-{
-}
-
-void Atari_AUDCTL (int byte)
-{
 }

@@ -2,6 +2,15 @@ This is the list of people who have contributed to project
 
 Thanks go to :-
 
+Ron Fries
+
+- For releasing a library of routines providing Pokey Sound
+  Emulation.
+
+Alex Hornby <alex@zetnet.co.uk>
+- Wrote the Virtual 2600 Emulator from which I took some code
+  to access the /dev/dsp device.
+
 Dave Bennett <bennett@halcyon.com>
 
 - Code enabling the use of OSS super cartridges
@@ -80,3 +89,7 @@ Ed Kaminski <ekamins@ibm.net>
 - Improved speed of MS-DOS version by synchronising with a high resolution
   timer.
 - PORTB duplicated special handling of PORTA.
+
+Nathan Monson <nathan@polaristel.net>
+- Supplied correction for handling of 6502 V flag during ADC and SBC
+  operations.

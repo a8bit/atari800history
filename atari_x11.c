@@ -14,7 +14,7 @@
  *       scanline_ptr.
  */
 
-static char *rcsid = "$Id: atari_x11.c,v 1.40 1997/03/29 21:05:11 david Exp $";
+static char *rcsid = "$Id: atari_x11.c,v 1.42 1997/06/22 17:52:35 david Exp $";
 
 #ifdef XVIEW
 #include <xview/xview.h>
@@ -119,6 +119,7 @@ enum
 } x11_monitor = MONITOR_NOTHING;
 
 static int x11bug = FALSE;
+static int private_cmap = FALSE;
 
 static int window_width;
 static int window_height;
@@ -130,6 +131,7 @@ static Window	window;
 static Pixmap	pixmap;
 #endif
 static Visual	*visual;
+static Colormap cmap;
 
 static GC gc;
 static GC gc_colour[256];
@@ -1494,6 +1496,8 @@ void Atari_Initialise (int *argc, char *argv[])
 	x11_monitor = MONITOR_FPS;
       else if (strcmp(argv[i],"-sio") == 0)
 	x11_monitor = MONITOR_SIO;
+      else if (strcmp(argv[i],"-private_cmap") == 0)
+        private_cmap = TRUE;
       else if (strcmp(argv[i],"-keypad") == 0)
         {
           if (keypad_mode == -1)
@@ -1520,6 +1524,10 @@ void Atari_Initialise (int *argc, char *argv[])
 
 #ifdef NAS
   NAS_Initialise (argc, argv);
+#endif
+
+#ifdef VOXWARE
+  Voxware_Initialise (argc, argv);
 #endif
 
 #ifdef SHM
@@ -1893,6 +1901,7 @@ void Atari_Initialise (int *argc, char *argv[])
 
   window = (Window)xv_get(canvas_paint_window(canvas), XV_XID);
   depth = XDefaultDepthOfScreen (screen);
+  cmap = XDefaultColormapOfScreen(screen);
 
   chooser = (Frame)xv_create (frame, FILE_CHOOSER,
 			      FILE_CHOOSER_TYPE, FILE_CHOOSER_OPEN,
@@ -2264,6 +2273,7 @@ void Atari_Initialise (int *argc, char *argv[])
     }
 
   depth = XDefaultDepthOfScreen (screen);
+  cmap = XDefaultColormapOfScreen(screen);
 #endif
 
 #ifndef MOTIF
@@ -2291,14 +2301,23 @@ void Atari_Initialise (int *argc, char *argv[])
 
   depth = XDefaultDepthOfScreen (screen);
 
+  if (private_cmap)
+    cmap = XCreateColormap (display,
+                            XRootWindowOfScreen(screen),
+                            visual,
+                            AllocNone);
+  else
+    cmap = XDefaultColormapOfScreen(screen);
+
   xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask;
+  xswda.colormap = cmap;
 
   window = XCreateWindow (display,
 			  XRootWindowOfScreen(screen),
 			  50, 50,
 			  window_width, window_height, 3, depth,
 			  InputOutput, visual,
-			  CWEventMask | CWBackPixel,
+			  CWEventMask | CWBackPixel | CWColormap,
 			  &xswda);
 
   XStoreName (display, window, ATARI_TITLE);
@@ -2353,7 +2372,7 @@ void Atari_Initialise (int *argc, char *argv[])
       colour.blue = (rgb & 0x000000ff) << 8;
 
       status = XAllocColor (display,
-			    XDefaultColormapOfScreen(screen),
+			    cmap,
 			    &colour);
 
       colours[i] = colour.pixel;
@@ -2431,6 +2450,9 @@ int Atari_Exit (int run_monitor)
 
       XSync (display, True);
 
+      if (private_cmap)
+        XFreeColormap (display, cmap);
+
 #ifdef SHM
       XDestroyImage (image);
 #else
@@ -2450,6 +2472,10 @@ int Atari_Exit (int run_monitor)
 
 #ifdef NAS
       NAS_Exit ();
+#endif
+
+#ifdef VOXWARE 
+      Voxware_Exit ();
 #endif
     }
 
@@ -2672,6 +2698,10 @@ void Atari_DisplayScreen (UBYTE *screen)
 
 #ifdef NAS
   NAS_UpdateSound ();
+#endif
+
+#ifdef VOXWARE
+  Voxware_UpdateSound ();
 #endif
 
   if (screen_dump)
@@ -3017,17 +3047,3 @@ int Atari_CONSOL (void)
 
   return temp;
 }
-
-#ifndef NAS
-void Atari_AUDC (int channel, int byte)
-{
-}
-
-void Atari_AUDF (int channel, int byte)
-{
-}
-
-void Atari_AUDCTL (int byte)
-{
-}
-#endif

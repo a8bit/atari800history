@@ -36,7 +36,7 @@
 #include <string.h>
 #include <workbench/workbench.h>
 
-static char *rcsid = "$Id: atari_amiga.c,v 1.4 1996/06/30 23:30:22 david Exp $";
+static char *rcsid = "$Id: atari_amiga.c,v 1.5 1997/04/13 21:21:51 david Exp $";
 
 #include "atari.h"
 #include "colours.h"
@@ -2424,66 +2424,6 @@ int Atari_POT (int num)
 int Atari_CONSOL (void)
 {
 	return consol;
-}
-
-
-
-/*
- * ==========
- * Atari_AUDC
- * ==========
- */
-
-/*
- * Revision     : v0.1.9a
- * Introduced   : 2nd September 1995
- * Last updated : 2nd September 1995
- *
- * Notes: Currently acts as nothing more than a hook.
- */
-
-void Atari_AUDC (int channel, int byte)
-{
-}
-
-
-
-/*
- * ==========
- * Atari_AUDF
- * ==========
- */
-
-/*
- * Revision     : v0.1.9a
- * Introduced   : 2nd September 1995
- * Last updated : 2nd September 1995
- *
- * Notes: Currently acts as nothing more than a hook.
- */
-
-void Atari_AUDF (int channel, int byte)
-{
-}
-
-
-
-/*
- * ============
- * Atari_AUDCTL
- * ============
- */
-
-/*
- * Revision     : v0.1.9a
- * Introduced   : 2nd September 1995
- * Last updated : 2nd September 1995
- *
- * Notes: Currently acts as nothing more than a hook.
- */
-
-void Atari_AUDCTL (int byte)
-{
 }
 
 

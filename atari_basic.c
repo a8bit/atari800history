@@ -1,7 +1,7 @@
 #include "atari.h"
 #include "monitor.h"
 
-static char *rcsid = "$Id: atari_basic.c,v 1.3 1996/09/04 23:36:01 david Exp $";
+static char *rcsid = "$Id: atari_basic.c,v 1.4 1997/04/13 21:21:51 david Exp $";
 
 #define FALSE 0
 #define TRUE 1
@@ -45,16 +45,4 @@ int Atari_POT (int num)
 int Atari_CONSOL (void)
 {
   return 7;
-}
-
-void Atari_AUDC (int channel, int byte)
-{
-}
-
-void Atari_AUDF (int channel, int byte)
-{
-}
-
-void Atari_AUDCTL (int byte)
-{
 }

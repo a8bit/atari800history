@@ -17,7 +17,7 @@
 #include "djgpp.h"
 #endif
 
-static char *rcsid = "$Id: atari.c,v 1.39 1997/03/31 00:50:32 david Exp $";
+static char *rcsid = "$Id: atari.c,v 1.42 1997/04/13 10:02:15 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
@@ -29,7 +29,6 @@ static char *rcsid = "$Id: atari.c,v 1.39 1997/03/31 00:50:32 david Exp $";
 #include "pia.h"
 #include "pokey.h"
 #include "supercart.h"
-#include "ffp.h"
 #include "devices.h"
 #include "sio.h"
 #include "monitor.h"
@@ -42,7 +41,6 @@ Machine machine = Atari;
 int verbose = FALSE;
 
 static int os = 2;
-static int enable_ffp_patch = FALSE;
 
 extern UBYTE NMIEN;
 extern UBYTE NMIST;
@@ -278,6 +276,94 @@ int Remove_ROM (void)
   return TRUE;
 }
 
+int Insert_Cartridge (char *filename)
+{
+  int status = FALSE;
+  int fd;
+
+  fd = open (filename, O_RDONLY, 0777);
+  if (fd != -1)
+    {
+      UBYTE header[16];
+
+      read (fd, header, sizeof(header));
+      if ((header[0] == 'C') &&
+          (header[1] == 'A') &&
+          (header[2] == 'R') &&
+          (header[3] == 'T'))
+        {
+          int type;
+          int checksum;
+
+          type = (header[4] << 24) |
+                 (header[5] << 16) |
+                 (header[6] << 8) |
+                 header[7];
+
+          checksum = (header[4] << 24) |
+                     (header[5] << 16) |
+                     (header[6] << 8) |
+                     header[7];
+
+          switch (type)
+            {
+#define STD_8K 1
+#define STD_16K 2
+#define OSS 3
+#define AGS 4
+              case STD_8K :
+                read (fd, &memory[0xa000], 0x2000);
+                SetRAM (0x8000, 0x9fff);
+                SetROM (0xa000, 0xbfff);
+                cart_type = NORMAL8_CART;
+                rom_inserted = TRUE;
+                status = TRUE;
+                break;
+              case STD_16K :
+                read (fd, &memory[0x8000], 0x4000);
+                SetROM (0x8000, 0xbfff);
+                cart_type = NORMAL16_CART;
+                rom_inserted = TRUE;
+                status = TRUE;
+                break;
+              case OSS :
+                cart_image = (UBYTE*)malloc(0x4000);
+                if (cart_image)
+                  {
+                    read (fd, cart_image, 0x4000);
+                    memcpy (&memory[0xa000], cart_image, 0x1000);
+                    memcpy (&memory[0xb000], cart_image+0x3000, 0x1000);
+                    SetRAM (0x8000, 0x9fff);
+                    SetROM (0xa000, 0xbfff);
+                    cart_type = OSS_SUPERCART;
+                    rom_inserted = TRUE;
+                    status = TRUE;
+                  }
+                break;
+              case AGS :
+                read (fd, &memory[0x4000], 0x8000);
+                close (fd);
+                SetROM (0x4000, 0xbfff);
+                cart_type = AGS32_CART;
+                rom_inserted = TRUE;
+                status = TRUE;
+                break;
+              default :
+                printf ("%s is in unsupported cartridge format %d\n",
+                        filename, type);
+                break;
+            }
+        }
+      else
+        {
+          printf ("%s is not a cartridge\n", filename);
+        }
+      close (fd);
+    }
+
+  return status;
+}
+
 void PatchOS (void)
 {
   const unsigned short	o_open = 0;
@@ -402,32 +488,6 @@ void PatchOS (void)
 	}
 
       addr += 3;	/* Next Device in HATABS */
-    }
-
-  if (enable_ffp_patch)
-    {
-      add_esc (0xd800, ESC_AFP);
-      add_esc (0xd8e6, ESC_FASC);
-      add_esc (0xd9aa, ESC_IFP);
-      add_esc (0xd9d2, ESC_FPI);
-      add_esc (0xda66, ESC_FADD);
-      add_esc (0xda60, ESC_FSUB);
-      add_esc (0xdadb, ESC_FMUL);
-      add_esc (0xdb28, ESC_FDIV);
-      add_esc (0xdecd, ESC_LOG);
-      add_esc (0xded1, ESC_LOG10);
-      add_esc (0xddc0, ESC_EXP);
-      add_esc (0xddcc, ESC_EXP10);
-      add_esc (0xdd40, ESC_PLYEVL);
-      add_esc (0xda44, ESC_ZFR0);
-      add_esc (0xda46, ESC_ZF1);
-      add_esc (0xdd89, ESC_FLD0R);
-      add_esc (0xdd8d, ESC_FLD0P);
-      add_esc (0xdd98, ESC_FLD1R);
-      add_esc (0xdd9c, ESC_FLD1P);
-      add_esc (0xdda7, ESC_FST0R);
-      add_esc (0xddab, ESC_FST0P);
-      add_esc (0xddb6, ESC_FMOVE);
     }
 }
 
@@ -669,8 +729,6 @@ int main (int argc, char **argv)
 	machine = Atari5200;
       else if (strcmp(argv[i],"-nobasic") == 0)
         hold_option = TRUE;
-      else if (strcmp(argv[i],"-ffp") == 0)
-	enable_ffp_patch = TRUE;
       else if (strcmp(argv[i],"-nopatch") == 0)
 	enable_sio_patch = FALSE;
       else if (strcmp(argv[i],"-pal") == 0)
@@ -687,6 +745,11 @@ int main (int argc, char **argv)
         strcpy (atari_5200_filename, argv[++i]);
       else if (strcmp(argv[i],"-basic_rom") == 0)
         strcpy (atari_basic_filename, argv[++i]);
+      else if (strcmp(argv[i],"-cart") == 0)
+        {
+	  rom_filename = argv[++i];
+	  cart_type = CARTRIDGE;
+        }
       else if (strcmp(argv[i],"-rom") == 0)
 	{
 	  rom_filename = argv[++i];
@@ -726,7 +789,6 @@ int main (int argc, char **argv)
 	  printf ("\t-xl           Atari XL mode\n");
 	  printf ("\t-xe           Atari XE mode (Currently same as -xl)\n");
 	  printf ("\t-5200         Atari 5200 Games System\n");
-	  printf ("\t-ffp          Use Fast Floating Point routines\n");
 	  printf ("\t-pal          Enable PAL TV mode\n");
 	  printf ("\t-ntsc         Enable NTSC TV mode\n");
 	  printf ("\t-rom fnm      Install standard 8K Cartridge\n");
@@ -862,6 +924,9 @@ int main (int argc, char **argv)
     {
       switch (cart_type)
 	{
+        case CARTRIDGE :
+          status = Insert_Cartridge (rom_filename);
+          break;
 	case OSS_SUPERCART :
 	  status = Insert_OSS_ROM (rom_filename);
 	  break;
@@ -1008,72 +1073,6 @@ void Escape (UBYTE esc_code)
     {
     case ESC_SIOV :
       SIO ();
-      break;
-    case ESC_AFP :
-      ffp_afp() ;
-      break;
-    case ESC_FASC :
-      ffp_fasc();
-      break;
-    case ESC_IFP :
-      ffp_ifp();
-      break;
-    case ESC_FPI :
-      ffp_fpi();
-      break;
-    case ESC_FADD :
-      ffp_fadd();
-      break;
-    case ESC_FSUB :
-      ffp_fsub();
-      break;
-    case ESC_FMUL :
-      ffp_fmul();
-      break;
-    case ESC_FDIV :
-      ffp_fdiv();
-      break;
-    case ESC_LOG :
-      ffp_log();
-      break;
-    case ESC_LOG10 :
-      ffp_log10();
-      break;
-    case ESC_EXP :
-      ffp_exp();
-      break;
-    case ESC_EXP10 :
-      ffp_exp10();
-      break;
-    case ESC_PLYEVL :
-      ffp_plyevl();
-      break;
-    case ESC_ZFR0 :
-      ffp_zfr0();
-      break;
-    case ESC_ZF1 :
-      ffp_zf1();
-      break;
-    case ESC_FLD0R :
-      ffp_fld0r();
-      break;
-    case ESC_FLD0P :
-      ffp_fld0p();
-      break;
-    case ESC_FLD1R :
-      ffp_fld1r();
-      break;
-    case ESC_FLD1P :
-      ffp_fld1p();
-      break;
-    case ESC_FST0R :
-      ffp_fst0r();
-      break;
-    case ESC_FST0P :
-      ffp_fst0p();
-      break;
-    case ESC_FMOVE :
-      ffp_fmove();
       break;
     case ESC_K_OPEN :
     case ESC_K_CLOSE :
@@ -1274,23 +1273,6 @@ void Atari800_Hardware (void)
 	      pil_on = TRUE;
 	    }
 	  break;
-	case AKEY_DISKCHANGE :
-	  {
-	    char filename[128];
-	    int driveno;
-
-	    printf ("Next Disk: ");
-	    scanf ("\n%s", filename);
-	    printf ("Drive Number: ");
-	    scanf ("\n%d", &driveno);
-
-	    SIO_Dismount (driveno);
-	    if (!SIO_Mount (driveno,filename))
-	      {
-		printf ("Failed to mount %s on D%d\n",
-			filename, driveno);
-	      }
-	  }
 	case AKEY_NONE :
 	  break;
 	default :

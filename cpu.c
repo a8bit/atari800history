@@ -27,18 +27,12 @@
 
 	The 6502 emulation also ignores memory attributes
 	for accesses to page 0 and page 1.
-
-	Possible Problems
-	-----------------
-
-	Call to Get Word when accessing stack - it doesn't
-	wrap around at 0x1ff correctly.
 */
 
 #include	<stdio.h>
 #include	<stdlib.h>
 
-static char *rcsid = "$Id: cpu.c,v 1.18 1996/09/02 19:41:59 david Exp $";
+static char *rcsid = "$Id: cpu.c,v 1.20 1997/06/22 18:08:00 david Exp $";
 
 #define	FALSE	0
 #define	TRUE	1
@@ -2130,11 +2124,13 @@ void GO (int ncycles)
       if (!(regP & D_FLAG))
 	{
 	  UWORD	temp;
+          UWORD t_data;
 
-	  Z = N = temp = (UWORD)A + (UWORD)data + (UWORD)C;
+          t_data = (UWORD)data + (UWORD)C;
+	  Z = N = temp = (UWORD)A + t_data;
 
+	  V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
 	  C = temp >> 8;
-	  V = (Z ^ A) & 0x80;
 	  A = Z;
 	}
       else
@@ -2148,8 +2144,8 @@ void GO (int ncycles)
 
 	  Z = N = DECtoBCD[bcd1];
 
-	  C = (bcd1 > 99);
 	  V = (Z ^ A) & 0x80;
+	  C = (bcd1 > 99);
 	  A = Z;
 	}
       goto next;
@@ -2158,8 +2154,10 @@ void GO (int ncycles)
       if (!(regP & D_FLAG))
 	{
 	  UWORD	temp;
+          UWORD t_data;
 
-	  temp = (UWORD)A - (UWORD)data - (UWORD)!C;
+          t_data = (UWORD)data + (UWORD)!C;
+	  temp = (UWORD)A - t_data;
 
 	  Z = N = temp & 0xff;
 
@@ -2167,8 +2165,8 @@ void GO (int ncycles)
  * This was the old code that I have been using upto version 0.5.2
  *  C = (A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
  */
+	  V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
 	  C = (temp > 255) ? 0 : 1;
-	  V = (Z ^ A) & 0x80;
 	  A = Z;
 	}
       else

@@ -1,6 +1,6 @@
-.TH ATARI800 1 "31 March 1997"
+.TH ATARI800 1 "22 June 1997"
 .SH NAME
-atari800 \- Atari 800 Emulator, Version 0.7.0
+atari800 \- Atari 800 Emulator, Version 0.8.1
 .SH SYNOPSIS
 \fBatari800\fP [options] [diskfiles...]
 .SH DESCRIPTION
@@ -28,11 +28,6 @@ Specify an alternative configuration filename.
 .TP
 \fB-configure
 Starts emulator in run-time configuration mode.
-.TP
-\fB-ffp
-Replace standard floating point with a set of fast floating point
-routines implemented within the emulator without using 6502 CPU
-emulation.
 .TP
 \fB-nobasic
 Used to disable Basic when starting the emulator in XL/XE mode.
@@ -105,6 +100,9 @@ Enable sound using the Network Audio System.
 \fB-interlace
 Enable screen interlace option
 .SS X Window Options
+.TP
+\fB-private_cmap
+Tells the Emulator to use its own private colormap.
 .TP
 \fB-small
 Runs the emulator in a small window where each Atari 800 pixel is

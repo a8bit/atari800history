@@ -19,7 +19,6 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
         the CPU is using)
 -5200   Enable Atari 5200 Games System Emulation Mode.
 
--ffp     Fast Floating Point routines.
 -nopatch Normally the OS is patched giving very fast I/O. This option
          prevents the patch from being applied so that the OS works
          using the serial port hardware directly. This option will

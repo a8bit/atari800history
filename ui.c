@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <dirent.h>
 
@@ -64,7 +65,9 @@ int GetKeyPress (UBYTE *screen)
 
   do
     {
+#ifndef BASIC
       Atari_DisplayScreen (screen);
+#endif
       keycode = Atari_Keyboard();
     } while (keycode == AKEY_NONE);
 
@@ -112,6 +115,60 @@ void Print (UBYTE *screen, int fg, int bg, char *string, int x, int y)
     }
 }
 
+void CenterPrint (UBYTE *screen, int fg, int bg, char *string, int y)
+{
+  Print (screen, fg, bg, string, (40 - strlen(string))  /2, y);
+}
+
+void EditString (UBYTE *screen, int fg, int bg,
+                 int len, char *string,
+                 int x, int y)
+{
+  int offset = 0;
+  int done = FALSE;
+
+  Print (screen, fg, bg, string, x, y);
+
+  while (!done)
+    {
+      int ascii;
+
+      Plot (screen, bg, fg, string[offset], x+offset, y);
+
+      ascii = GetKeyPress (screen);
+      switch (ascii)
+        {
+          case 0x1e : /* Cursor Left */
+            Plot (screen, fg, bg, string[offset], x+offset, y);
+            if (offset > 0)
+              offset--;
+            break;
+          case 0x1f : /* Cursor Right */
+            Plot (screen, fg, bg, string[offset], x+offset, y);
+            if ((offset+1)<len)
+              offset++;
+            break;
+          case 0x7e : /* Backspace */
+            Plot (screen, fg, bg, string[offset], x+offset, y);
+            if (offset > 0)
+              {
+                offset--;
+                string[offset] = ' ';
+              }
+            break;
+          case 0x9b : /* Return */
+            done = TRUE;
+            break;
+          default :
+            string[offset] = (char)ascii;
+            Plot (screen, fg, bg, string[offset], x+offset, y);
+            if ((offset+1) < len)
+              offset++;
+            break;
+        }
+    }
+}
+
 void Box (UBYTE *screen, int fg, int bg, int x1, int y1, int x2, int y2)
 {
   int x;
@@ -151,12 +208,8 @@ void ClearScreen (UBYTE *screen)
 
 void TitleScreen (UBYTE *screen, char *title)
 {
-  int x;
-
-  x = (40 - strlen(title)) / 2;
-
   Box (screen, 0x9a, 0x94, 0, 0, 39, 2);
-  Print (screen, 0x9a, 0x94, title, x, 1);
+  CenterPrint (screen, 0x9a, 0x94, title, 1);
 }
 
 void SelectItem (UBYTE *screen,
@@ -380,7 +433,7 @@ int FileSelector (UBYTE *screen, char *directory, char *full_filename)
             }
 
           ClearScreen (screen);
-          TitleScreen (screen, "Select Disk Image");
+          TitleScreen (screen, "Select File");
           Box (screen, 0x9a, 0x94, 0, 3, 39, 23);
 
           item = Select (screen, item, nitems, files, NROWS, NCOLUMNS, 1, 4, TRUE, &ascii);
@@ -480,17 +533,283 @@ void DiskManagement (UBYTE *screen)
     }
 }
 
+void CartManagement (UBYTE *screen)
+{
+  typedef struct
+    {
+      UBYTE id[4];
+      UBYTE type[4];
+      UBYTE checksum[4];
+      UBYTE gash[4];
+    } Header;
+
+  const int CART_UNKNOWN = 0;
+  const int CART_STD_8K = 1;
+  const int CART_STD_16K = 2;
+  const int CART_OSS = 3;
+  const int CART_AGS = 4;
+
+  const int nitems = 5;
+
+  static char *menu[5] =
+    {
+      "Create Cartridge from ROM image",
+      "Extract ROM image from Cartridge",
+      "Insert Cartridge",
+      "Remove Cartridge",
+      "Enable PILL Mode"
+    };
+
+  int done = FALSE;
+  int option = 2;
+
+  while (!done)
+    {
+      char filename[256];
+      int ascii;
+
+      ClearScreen (screen);
+      TitleScreen (screen, "Cartridge Management");
+      Box (screen, 0x9a, 0x94, 0, 3, 39, 23);
+
+      option = Select (screen, option, nitems, menu, nitems, 1, 1, 4, FALSE, &ascii);
+      switch (option)
+        {
+          case 0 :
+            if (FileSelector (screen, atari_rom_dir, filename))
+              {
+                UBYTE image[32769];
+                int type = CART_UNKNOWN;
+                int nbytes;
+                int fd;
+
+                fd = open (filename, O_RDONLY, 0777);
+                if (fd == -1)
+                  {
+                    perror (filename);
+                    exit (1);
+                  }
+
+                nbytes = read (fd, image, sizeof(image));
+                switch (nbytes)
+                  {
+                    case 8192 :
+                      type = CART_STD_8K;
+                      break;
+                    case 16384 :
+                      {
+                        const int nitems = 2;
+                        static char *menu[2] =
+                          {
+                            "Standard 16K Cartridge",
+                            "OSS Super Cartridge"
+                          };
+
+                        int option = 0;
+
+                        Box (screen, 0x9a, 0x94, 8, 10, 31, 13);
+
+                        option = Select (screen, option,
+                                         nitems, menu,
+                                         nitems, 1,
+                                         9, 11, FALSE, &ascii);
+                        switch (option)
+                          {
+                            case 0 :
+                              type = CART_STD_16K;
+                              break;
+                            case 1 :
+                              type = CART_OSS;
+                              break;
+                            default :
+                              continue;
+                          }
+                      }
+                      break;
+                    case 32768 :
+                      type = CART_AGS;
+                  }
+
+                close (fd);
+
+                if (type != CART_UNKNOWN)
+                  {
+                    Header header;
+
+                    int checksum = 0;
+                    int i;
+
+                    char fname[33];
+
+                    memcpy (fname, "                                ", 32);
+                    Box (screen, 0x9a, 0x94, 3, 9, 36, 11);
+                    Print (screen, 0x94, 0x9a, "Filename", 4, 9);
+                    EditString (screen, 0x9a, 0x94, 32, fname, 4, 10);
+                    fname[32] = '\0';
+                    RemoveSpaces (fname);
+
+                    for (i=0;i<nbytes;i++)
+                      checksum += image[i];
+
+                    header.id[0] = 'C';
+                    header.id[1] = 'A';
+                    header.id[2] = 'R';
+                    header.id[3] = 'T';
+                    header.type[0] = (type >> 24) & 0xff;
+                    header.type[1] = (type >> 16) & 0xff;
+                    header.type[2] = (type >> 8) & 0xff;
+                    header.type[3] = type & 0xff;
+                    header.checksum[0] = (checksum >> 24) & 0xff;
+                    header.checksum[1] = (checksum >> 16) & 0xff;
+                    header.checksum[2] = (checksum >> 8) & 0xff;
+                    header.checksum[3] = checksum & 0xff;
+                    header.gash[0] = '\0';
+                    header.gash[1] = '\0';
+                    header.gash[2] = '\0';
+                    header.gash[3] = '\0';
+
+                    sprintf (filename,"%s/%s", atari_rom_dir, fname);
+                    fd = open (filename, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+                    if (fd != -1)
+                      {
+                        write (fd, &header, sizeof(header));
+                        write (fd, image, nbytes);
+                        close (fd);
+                      }
+                  }
+              }
+            break;
+          case 1 :
+            if (FileSelector (screen, atari_rom_dir, filename))
+              {
+                int fd;
+
+                fd = open (filename, O_RDONLY, 0777);
+                if (fd != -1)
+                  {
+                    Header header;
+                    UBYTE image[32769];
+                    char fname[33];
+                    int nbytes;
+
+                    read (fd, &header, sizeof(header));
+                    nbytes = read (fd, image, sizeof(image));
+
+                    close (fd);
+
+                    memcpy (fname, "                                ", 32);
+                    Box (screen, 0x9a, 0x94, 3, 9, 36, 11);
+                    Print (screen, 0x94, 0x9a, "Filename", 4, 9);
+                    EditString (screen, 0x9a, 0x94, 32, fname, 4, 10);
+                    fname[32] = '\0';
+                    RemoveSpaces (fname);
+
+                    sprintf (filename,"%s/%s", atari_rom_dir, fname);
+
+                    fd = open (filename, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+                    if (fd != -1)
+                      {
+                        write (fd, image, nbytes);
+                        close (fd);
+                      }
+                  }
+              }
+            break;
+          case 2 :
+            if (FileSelector (screen, atari_rom_dir, filename))
+              {
+                if (!Insert_Cartridge (filename))
+                  {
+                    const int nitems = 4;
+                    static char *menu[4] =
+                      {
+                            "Standard 8K Cartridge",
+                            "Standard 16K Cartridge",
+                            "OSS Super Cartridge",
+                            "Atari 5200 Cartridge"
+                      };
+
+                    int option = 0;
+
+                    Box (screen, 0x9a, 0x94, 8, 10, 31, 15);
+
+                    option = Select (screen, option,
+                                     nitems, menu,
+                                     nitems, 1,
+                                     9, 11, FALSE, &ascii);
+                    switch (option)
+                      {
+                        case 0 :
+                          Insert_8K_ROM (filename);
+                          break;
+                        case 1 :
+                          Insert_16K_ROM (filename);
+                          break;
+                        case 2 :
+                          Insert_OSS_ROM (filename);
+                          break;
+                        case 3 :
+                          Insert_32K_5200ROM (filename);
+                          break;
+                      }
+                  }
+
+                Coldstart ();
+              }
+            break;
+          case 3 :
+            Remove_ROM ();
+            Coldstart ();
+            break;
+          case 4 :
+            EnablePILL ();
+            Coldstart ();
+            break;
+          default :
+            done = TRUE;
+            break;
+        }
+    }
+}
+
+void AboutEmulator (UBYTE *screen)
+{
+  ClearScreen (screen);
+
+  Box (screen, 0x9a, 0x94, 0, 0, 39, 8);
+  CenterPrint (screen, 0x9a, 0x94, ATARI_TITLE, 1);
+  CenterPrint (screen, 0x9a, 0x94, "Copyright (c) 1995-1997 David Firth", 2);
+  CenterPrint (screen, 0x9a, 0x94, "E-Mail: david@signus.demon.co.uk", 3);
+  CenterPrint (screen, 0x9a, 0x94, "http://www.signus.demon.co.uk/", 4);
+  CenterPrint (screen, 0x9a, 0x94, "Atari PokeySound 1.1", 6);
+  CenterPrint (screen, 0x9a, 0x94, "Copyright (c) 1996 Ron Fries", 7);
+
+  Box (screen, 0x9a, 0x94, 0, 9, 39, 23);
+  CenterPrint (screen, 0x9a, 0x94, "This program is free software; you can", 10);
+  CenterPrint (screen, 0x9a, 0x94, "redistribute it and/or modify it under", 11);
+  CenterPrint (screen, 0x9a, 0x94, "the terms of the GNU General Public", 12);
+  CenterPrint (screen, 0x9a, 0x94, "License as published by the Free", 13);
+  CenterPrint (screen, 0x9a, 0x94, "Software Foundation; either version 1,", 14);
+  CenterPrint (screen, 0x9a, 0x94, "or (at your option) any later version.", 15);
+
+  CenterPrint (screen, 0x94, 0x9a, "Press any Key to Continue", 22);
+  GetKeyPress (screen);
+}
+
 void ui (UBYTE *screen)
 {
   static int initialised = FALSE;
-  char filename[256];
   int option = 0;
+  char filename[256];
   int done = FALSE;
 
-  char *menu[5] =
+  const int nitems = 7;
+  char *menu[7] =
     {
+      "About the Emulator",
       "Select System",
       "Disk Management",
+      "Cartridge Management",
       "Power On Reset",
       "Power Off Reset",
       "Exit Emulator"
@@ -510,7 +829,8 @@ void ui (UBYTE *screen)
       TitleScreen (screen, ATARI_TITLE);
       Box (screen, 0x9a, 0x94, 0, 3, 39, 23);
 
-      option = Select (screen, option, 5, menu, 5, 1, 1, 4, FALSE, &ascii);
+      option = Select (screen, option, nitems, menu,
+                       nitems, 1, 1, 4, FALSE, &ascii);
 
       switch (option)
         {
@@ -518,18 +838,24 @@ void ui (UBYTE *screen)
             done = TRUE;
             break;
           case 0 :
-            SelectSystem (screen);
+            AboutEmulator (screen);
             break;
           case 1 :
-            DiskManagement (screen);
+            SelectSystem (screen);
             break;
           case 2 :
-            Warmstart ();
+            DiskManagement (screen);
             break;
           case 3 :
-            Coldstart ();
+            CartManagement (screen);
             break;
           case 4 :
+            Warmstart ();
+            break;
+          case 5 :
+            Coldstart ();
+            break;
+          case 6 :
             Atari800_Exit (0);
             exit (0);
         }

@@ -5,7 +5,7 @@
 #include <vga.h>
 #include <vgagl.h>
 
-static char *rcsid = "$Id: atari_svgalib.c,v 1.8 1997/03/29 21:05:11 david Exp $";
+static char *rcsid = "$Id: atari_svgalib.c,v 1.9 1997/04/13 21:21:51 david Exp $";
 
 #include "config.h"
 #include "atari.h"
@@ -70,6 +70,10 @@ void Atari_Initialise (int *argc, char *argv[])
 
 #ifdef NAS
   NAS_Initialise (argc, argv);
+#endif
+
+#ifdef VOXWARE
+  Voxware_Initialise (argc, argv);
 #endif
 
   for (i=j=1;i<*argc;i++)
@@ -226,6 +230,10 @@ int Atari_Exit (int run_monitor)
 #ifdef NAS
       NAS_Exit ();
 #endif
+
+#ifdef VOXWARE
+      Voxware_Exit ();
+#endif
     }
 
   return restart;
@@ -299,6 +307,10 @@ void Atari_DisplayScreen (UBYTE *screen)
 
 #ifdef NAS
   NAS_UpdateSound ();
+#endif
+
+#ifdef VOXWARE
+  Voxware_UpdateSound ();
 #endif
 
   consol = 7;
@@ -977,17 +989,3 @@ int Atari_CONSOL (void)
 {
   return consol;
 }
-
-#ifndef NAS
-void Atari_AUDC (int channel, int byte)
-{
-}
-
-void Atari_AUDF (int channel, int byte)
-{
-}
-
-void Atari_AUDCTL (int byte)
-{
-}
-#endif

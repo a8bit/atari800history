@@ -1,7 +1,15 @@
 This is a list of things that need to be done
 ---------------------------------------------
 
-The obsolete variable "countdown_rate" is still in use within "atari_amiga.c"
-this should be a trivial change. I'm reluctant to do this change without
-an Amiga to check it. I've left it defined in "atari.c" so that there are
-no linker errors on the Amiga.
+o The obsolete variable "countdown_rate" is still in use within
+  "atari_amiga.c" this should be a trivial change, however I'm reluctant
+  to do it without an Amiga to check it. I've left it defined in "atari.c"
+  so that there are no linker errors on the Amiga.
+
+o Support for optional X11 private colormap
+
+o Joystick support for DOS version
+
+o Sound output for DOS version
+
+o Correct handling of 5200 controllers

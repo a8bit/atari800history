@@ -1,20 +1,9 @@
-#
-# Note: x11-nas and xview-nas versions are linked with -lsocket and
-#       -lnsl which is required for the Sun versions. Remove them
-#       if they cause a problem on your system.
-#
-
-CC              = gcc
-CPPFLAGS        = $(OTHER)
-CFLAGS          = -c -O6 -DGNU_C
-LD              = gcc
-LDFLAGS         =
-LDLIBS          = -lm
-
-# PREFIX          = /usr/local
-# BIN_PATH        = ${PREFIX}/bin
-# LIB_PATH        = ${PREFIX}/lib
-# MAN_PATH        = ${PREFIX}/man
+CC		= gcc
+CPPFLAGS	= $(OTHER)
+CFLAGS		= -c -O6 -DGNU_C
+LD		= gcc
+LDFLAGS		=
+LDLIBS		= -lm
 
 default :
 	@echo To build the Atari 800 Emulator, type:
@@ -49,16 +38,30 @@ vga :
 
 INCLUDES        =       Makefile \
 			config.h \
+			rt-config.h \
 			cpu.h \
 			atari.h \
 			colours.h \
 			antic.h \
 			gtia.h \
 			pokey.h \
-			pia.h
+			pia.h \
+			devices.h \
+			monitor.h \
+			sio.h \
+			supercart.h \
+			platform.h
+
+config config.h	:	configure
+	configur
+
+configure	:	configure.o prompts.o
+	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
+
+configure.o	:	configur.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS =       atari.o \
-		ffp.o \
 		cpu.o \
 		monitor.o \
 		sio.o \
@@ -68,19 +71,18 @@ OBJECTS =       atari.o \
 		pokey.o \
 		pia.o \
                 supercart.o \
-                rt-config.o \
                 prompts.o \
+                rt-config.o \
                 ui.o \
-                list.o
+                list.o \
+		sound.o \
+		pokey11.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
 atari.o         :       atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
-
-ffp.o           :       ffp.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
 
 cpu.o           :       cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
@@ -118,8 +120,14 @@ list.o          :       list.c $(INCLUDES)
 rt-config.o     :       rt-config.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c
 
-prompts.o       :       prompts.c $(INCLUDES)
+prompts.o       :       prompts.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
+
+sound.o		:       sound.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
+
+pokey11.o	:       pokey11.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
 
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
@@ -137,8 +145,8 @@ nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
 clean   :
-	del configure.exe
-	del configure
+	del configur.exe
+	del configur
 	del config.h
 	del core
 	del *.o
