@@ -23,15 +23,16 @@
 #include "colours.h"
 #include "ui.h"         /* for ui_is_active */
 #include "log.h"
-#include "sound_dos.h"
+#include "dos/sound_dos.h"
 #include "monitor.h"
 #include "pcjoy.h"
 #include "diskled.h"	/* for LED_lastline */
+#include "antic.h"		/* for light_pen_enabled */
 
 #ifdef AT_USE_ALLEGRO
 #include <allegro.h>
 #endif
-#include "vga_gfx.h"
+#include "dos/vga_gfx.h"
 
 /* -------------------------------------------------------------------------- */
 
@@ -48,6 +49,9 @@
 #define MOUSE_PEN 2
 static int mouse_mode=MOUSE_OFF;
 #define MOUSE_SHL 3
+static int mouse_x = 0;
+static int mouse_y = 0;
+static int mouse_buttons = 0;
 
 static int consol;
 static int trig0;
@@ -521,6 +525,33 @@ void SetupVgaEnvironment()
         d_rg.x.es=(__tb >> 4) & 0xffff;  /*segment of transfer buffer*/
         __dpmi_int(0x10,&d_rg);  /*VGA set palette block*/
 
+	/* initialize mouse */
+	if (mouse_mode != MOUSE_OFF) {
+		union REGS rg;
+		rg.x.ax = 0;
+		int86(0x33, &rg, &rg);
+		if (rg.x.ax == 0xffff) {
+			rg.x.ax = 7;
+			rg.x.cx = 0;
+			rg.x.dx = mouse_mode == MOUSE_PAD ? 228 << MOUSE_SHL : 167 << MOUSE_SHL;
+			int86(0x33, &rg, &rg);
+			rg.x.ax = 8;
+			rg.x.cx = 0;
+			rg.x.dx = mouse_mode == MOUSE_PAD ? 228 << MOUSE_SHL : 119 << MOUSE_SHL;
+			int86(0x33, &rg, &rg);
+			rg.x.ax = 4;
+			rg.x.cx = mouse_mode == MOUSE_PAD ? 114 << MOUSE_SHL : 84 << MOUSE_SHL;
+			rg.x.dx = mouse_mode == MOUSE_PAD ? 114 << MOUSE_SHL : 60 << MOUSE_SHL;
+			int86(0x33, &rg, &rg);
+		}
+		else {
+			printf("Can't find mouse!\n");
+			mouse_mode = MOUSE_OFF;
+		}
+		if (mouse_mode == MOUSE_PEN)
+			light_pen_enabled = TRUE;		/* enable emulation in antic.c */
+	}
+
         key_init(); /*initialize keyboard handler*/
 }
 
@@ -570,6 +601,21 @@ void Atari_DisplayScreen(UBYTE * ascreen)
         static char speedmessage[200];
         extern int speed_count;
 #endif
+
+	if (mouse_mode != MOUSE_OFF) {
+		union REGS rg;
+		rg.x.ax = 3;
+		int86(0x33, &rg, &rg);
+		mouse_x = rg.x.cx >> MOUSE_SHL;
+		mouse_y = rg.x.dx >> MOUSE_SHL;
+		mouse_buttons = rg.x.bx;
+		if (mouse_mode == MOUSE_PEN && rg.x.bx & 2) {	/* draw light pen cursor if right mouse button pressed */
+			UWORD *ptr = & ((UWORD *) ascreen)[12 + mouse_x + ATARI_WIDTH * mouse_y];
+			*ptr ^= 0xffff;
+			ptr[ATARI_WIDTH / 2] ^= 0xffff;
+		}
+	}
+
         vga_ptr = 0xa0000;
         scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
 
@@ -892,30 +938,6 @@ void Atari_Initialise(int *argc, char *argv[])
 
         SetupVgaEnvironment();
 
-	/* initialize mouse */
-	if (mouse_mode!=MOUSE_OFF) {
-		union REGS rg;
-		rg.x.ax=0;
-		int86(0x33,&rg,&rg);
-		if (rg.x.ax==0xffff) {
-			rg.x.ax=7;
-			rg.x.cx=0;
-			rg.x.dx=mouse_mode==MOUSE_PAD?228<<MOUSE_SHL:167<<MOUSE_SHL;
-			int86(0x33,&rg,&rg);
-			rg.x.ax=8;
-			rg.x.cx=0;
-			rg.x.dx=mouse_mode==MOUSE_PAD?228<<MOUSE_SHL:119<<MOUSE_SHL;
-			int86(0x33,&rg,&rg);
-			rg.x.ax=4;
-			rg.x.cx=mouse_mode==MOUSE_PAD?114<<MOUSE_SHL:84<<MOUSE_SHL;
-			rg.x.dx=mouse_mode==MOUSE_PAD?114<<MOUSE_SHL:60<<MOUSE_SHL;
-			int86(0x33,&rg,&rg);
-		}
-		else {
-			printf("Can't find mouse!\n");
-			mouse_mode=MOUSE_OFF;
-		}
-	}
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1260,7 +1282,7 @@ int Atari_Keyboard(void)
                         keycode = AKEY_HELP;
                 break;
         case 0x42:                                      /* F8 */
-                if (!norepkey) {
+                if (!norepkey && !ui_is_active) {
                         keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;        /* invoke monitor */
                         norepkey = TRUE;
                 }
@@ -1623,26 +1645,19 @@ int Atari_Keyboard(void)
 
 int Atari_PORT(int num)
 {
-        if (num == 0) {
-		int val=(stick1 << 4) | stick0;
-		if (mouse_mode!=MOUSE_OFF) {
-			union REGS rg;
-			rg.x.ax=3;
-			int86(0x33,&rg,&rg);
-			if (mouse_mode==MOUSE_PAD) {
-				if (rg.x.bx&1)
-					val&=~4;
-				if (rg.x.bx&2)
-					val&=~8;
-			}
-			else
-				if (rg.x.bx&1)
-					val&=~1;
+	if (num == 0) {
+		int val = (stick1 << 4) | stick0;
+		switch (mouse_mode) {
+		case MOUSE_PAD:
+			return val & ~((mouse_buttons & 3) << 2);
+		case MOUSE_PEN:
+			return val & ~(mouse_buttons & 1);
+		default:
+			return val;
 		}
-		return val;
 	}
-        else
-                return (stick3 << 4) | stick2;
+	else
+		return (stick3 << 4) | stick2;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1666,17 +1681,11 @@ int Atari_TRIG(int num)
 
 int Atari_POT(int num)
 {
-        if (machine == Atari5200) {
-                if (num >= 0 && num < 2)
-                        return POT[num];
-        }
-	if (mouse_mode==MOUSE_PAD && num<2) {
-		union REGS rg;
-		rg.x.ax=3;
-		int86(0x33,&rg,&rg);
-		return num==1?228-(rg.x.dx>>MOUSE_SHL):228-(rg.x.cx>>MOUSE_SHL);
-	}
-        return 228;
+	if (machine == Atari5200 && num >= 0 && num < 2)
+		return POT[num];
+	if (mouse_mode == MOUSE_PAD && num < 2)
+		return num == 1 ? 228 - mouse_y : 228 - mouse_x;
+	return 228;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1690,14 +1699,14 @@ int Atari_CONSOL(void)
 
 int Atari_PEN(int vertical)
 {
-	if (mouse_mode==MOUSE_PEN) {
+	if (mouse_mode == MOUSE_PEN) {
 		union REGS rg;
-		rg.x.ax=3;
-		int86(0x33,&rg,&rg);
-		return vertical?4+(rg.x.dx>>MOUSE_SHL):44+(rg.x.cx>>MOUSE_SHL);
+		rg.x.ax = 3;
+		int86(0x33, &rg, &rg);
+		return vertical ? 4 + mouse_y : 44 + mouse_x;
 	}
 	else
-		return vertical?0xff:0;
+		return vertical ? 0xff : 0;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -1,3 +1,36 @@
+Changes in 1.0.4  - 2000/06/30
+----------------
+
+o Amiga version updated <Sebastian>
+
+o CRASH menu fixed <Raster>
+
+--Piotr's changes:
+
+o UI: added artifacting mode selection
+
+o DOS/VGA sources moved to 'dos' subdirectory, Makefile.dos and atari_vga.c
+  updated
+
+o DOS/VGA: F8 disabled in UI
+
+o DOS/VGA: mouse initialized after return from monitor, right button enables
+  light pen cursor
+
+o gtia: TRIG latches (enabled by bit 2 of GRACTL) implemented
+
+o antic: light pen emulation improved
+
+o antic: GTIA modes implemented for ANTIC modes 9, 0xb and 0xc
+
+o atari_screen moved from antic.[ch] to atari.[ch]
+
+o old BIN loader removed
+
+o obsolete NAS support removed; Atari_AUDC/AUDF/AUDCTL routines removed - now
+  pokey.c directly calls pokeysnd.c
+
+
 Changes in 1.0.3  - 2000/06/13
 ----------------
 

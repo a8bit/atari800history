@@ -1,15 +1,23 @@
-Short:     Emulates an Atari 8-bit computer
+Short:     V1.1 of the Atari 8-bit emulator
 Uploader:  sebauer@t-online.de (Sebastian Bauer)
 Author:    sebauer@t-online.de (Sebastian Bauer), Atari800 Emulator Development Team
 Type:      misc/emu
-Kurz:      Emuliert ein Atari 8-bit Computer
+Kurz:      V1.1 des Atari 8-bit Emulator
 Requires:  OS 3.0, MUI 3.8, 
-Version:   0.9.9
+Version:   1.1
 
 This is the amiga port of the Atari800 Emulator. It requires at
 least a 68020 processor, OS 3.0 and MUI 3.8.
-For more information like Usage please look into the included
-Atari800.guide.
+For more information like please look into the included
+Atari800.guide (not really written yet)
+
+History
+~~~~~~~
+Version 1.1 (12.06.2000)
+ - console keys and sound should work better now
+
+Version 1.0 (31.05.2000)
+ - initial public release
 
 How can you reach me?
 ~~~~~~~~~~~~~~~~~~~~~

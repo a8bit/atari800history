@@ -22,17 +22,10 @@ static int dsprate = DEFDSPRATE;
 static int fragstofill = 0;
 static int snddelay = 40;		/* delay in milliseconds */
 
-static int gain = 4;
-
 static int sound_enabled = TRUE;
 static int dsp_fd;
 int sound_record=-1;
-/*
-static int dsp_sample_rate_divisor = 35;
-static int AUDCTL = 0x00;
-static int AUDF[4] = {0, 0, 0, 0};
-static int AUDC[4] = {0, 0, 0, 0};
-*/
+
 void Voxware_Initialise(int *argc, char *argv[])
 {
 	int i, j;
@@ -166,41 +159,12 @@ void Voxware_UpdateSound(void)
 	}
 }
 
-void Atari_AUDC(int channel, int byte)
-{
-	channel--;
-	Update_pokey_sound( /* 0xd201 */ 1 + channel + channel, byte, 0, gain);
-}
-
-void Atari_AUDF(int channel, int byte)
-{
-	channel--;
-	Update_pokey_sound( /* 0xd200 */ 0 + channel + channel, byte, 0, gain);
-}
-
-void Atari_AUDCTL(int byte)
-{
-	Update_pokey_sound( /* 0xd208 */ 8, byte, 0, gain);
-}
-
 #else
 void Sound_Pause(void)
 {
 }
 
 void Sound_Continue(void)
-{
-}
-
-void Atari_AUDC(int channel, int byte)
-{
-}
-
-void Atari_AUDF(int channel, int byte)
-{
-}
-
-void Atari_AUDCTL(int byte)
 {
 }
 

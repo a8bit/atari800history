@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Correct timing, internal memory and other fixes: */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 20th May 2000                      */
+/* Last changes: 27th June 2000                     */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -48,14 +48,7 @@ UBYTE ANTIC_memory[52];
    Define screen as ULONG to ensure that it is Longword aligned.
    This allows special optimisations under certain conditions.
    ------------------------------------------------------------------------ */
-/* We no longer need 16 extra lines */
 
-ULONG *atari_screen = NULL;
-#ifdef BITPL_SCR
-ULONG *atari_screen_b = NULL;
-ULONG *atari_screen1 = NULL;
-ULONG *atari_screen2 = NULL;
-#endif
 static UWORD *scrn_ptr;
 
 /* ANTIC Timing --------------------------------------------------------------
@@ -67,7 +60,8 @@ emulates CPU is now void and is called with xpos limit, below which CPU can go.
 All strange variables holding 'unused cycles', 'DMA cycles', 'allocated cycles'
 etc. are removed. Simply whenever ANTIC fetches a byte, it takes single cycle,
 which can be done now with xpos++. There's only one exception: in text modes
-2-5 ANTIC takes more bytes than cycles, probably fetching bytes in DMAR cycles.
+2-5 ANTIC takes more bytes than cycles, because it does less than DMAR refresh
+cycles.
 
 Now emulation is really screenline-oriented. We do ypos++ after a line,
 not inside it.
@@ -221,6 +215,16 @@ static UBYTE lastline;			/* dctr limit */
 static UBYTE need_dl;			/* boolean: fetch DL next line */
 static UBYTE vscrol_off;		/* boolean: displaying line ending VSC */
 
+/* Light pen support ------------------------------------------------------- */
+
+int light_pen_enabled = 0;		/* set to non-zero at any time to enable light pen */
+static UBYTE PEN_X;
+static UBYTE PEN_Y;
+static UBYTE light_pen_x;
+static UBYTE light_pen_y;
+extern UBYTE TRIG_latch[4];	/* in gtia.c */
+void GTIA_Triggers(void);		/* in gtia.c */
+
 /* Pre-computed values for improved performance ---------------------------- */
 
 #define NORMAL0 0				/* modes 2,3,4,5,0xd,0xe,0xf */
@@ -249,7 +253,7 @@ static UWORD chbase_20;			/* CHBASE for 20 character mode */
 
 /* set with CHACTL */
 static UBYTE invert_mask;
-static UBYTE blank_mask;
+static int blank_mask;
 
 /* lookup tables */
 static UBYTE blank_lookup[256];
@@ -274,7 +278,7 @@ static UBYTE playfield_lookup[257];
    The table contains word value (lsb = msb) of colour to be drawn.
    The table is being updated taking current PRIOR setting into consideration.
    '...' represent two unused columns and single unused row.
-   HI2 and HI3 are used only if colour_lookup_table is being used.
+   HI2 and HI3 are used only if colour_translation_table is being used.
    They're colours of hi-res pixels on PF2 and PF3 respectively (PF2 is
    default background for hi-res, PF3 is PM5).
    Columns PM023, PM123 and PM0123 are used when PRIOR & 0xf equals any
@@ -846,6 +850,14 @@ static UBYTE gtia_10_pm[] =
 #define DO_PMG_LORES PF_COLLS(colreg) |= pm_pixel = *c_pm_scanline_ptr++;\
 	*ptr++ = COLOUR(pm_lookup_ptr[pm_pixel] | colreg);
 
+#ifdef ALTERNATE_LOOP_COUNTERS 	/* speeds-up pmg in hires a bit or not? try it :) */
+#define FOUR_LOOP_BEGIN(data) data |= 0x800000; do {	/* data becomes negative after four data <<= 2 */
+#define FOUR_LOOP_END(data) } while (data >= 0);
+#else
+#define FOUR_LOOP_BEGIN(data) int k = 4; do {
+#define FOUR_LOOP_END(data) } while (--k);
+#endif
+
 #ifdef USE_COLOUR_TRANSLATION_TABLE
 
 #define INIT_HIRES hires_norm(0x00) = cl_lookup[C_PF2];\
@@ -854,11 +866,10 @@ static UBYTE gtia_10_pm[] =
 	hires_norm(0xc0) = hires_norm(0x30) = hires_norm(0x0c) = cl_lookup[C_HI2];
 
 #define DO_PMG_HIRES(data) {\
-	UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;\
+	UBYTE *c_pm_scanline_ptr = (UBYTE *) t_pm_scanline_ptr;\
 	int pm_pixel;\
 	int mask;\
-	int k = 4;\
-	do {\
+	FOUR_LOOP_BEGIN(data)\
 		pm_pixel = *c_pm_scanline_ptr++;\
 		if (data & 0xc0)\
 			PF2PM |= pm_pixel;\
@@ -866,7 +877,7 @@ static UBYTE gtia_10_pm[] =
 		pm_pixel = pm_lookup_ptr[pm_pixel] | L_PF2;\
 		*ptr++ = (COLOUR(pm_pixel) & mask) | (COLOUR(pm_pixel + (L_HI2 - L_PF2)) & ~mask);\
 		data <<= 2;\
-	} while (--k);\
+	FOUR_LOOP_END(data)\
 }
 
 #else /* USE_COLOUR_TRANSLATION_TABLE */
@@ -877,21 +888,20 @@ static UBYTE gtia_10_pm[] =
 	hires_norm(0xc0) = hires_norm(0x30) = hires_norm(0x0c) = (cl_lookup[C_PF2] & 0xf0f0) | hires_lum(0xc0);
 
 #define DO_PMG_HIRES(data) {\
-	UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;\
+	UBYTE *c_pm_scanline_ptr = (UBYTE *) t_pm_scanline_ptr;\
 	int pm_pixel;\
-	int k = 4;\
-	do {\
+	FOUR_LOOP_BEGIN(data)\
 		pm_pixel = *c_pm_scanline_ptr++;\
 		if (data & 0xc0)\
 			PF2PM |= pm_pixel;\
 		*ptr++ = (COLOUR(pm_lookup_ptr[pm_pixel] | L_PF2) & hires_mask(data & 0xc0)) | hires_lum(data & 0xc0);\
 		data <<= 2;\
-	} while (--k);\
+	FOUR_LOOP_END(data)\
 }
 
 #endif /* USE_COLOUR_TRANSLATION_TABLE */
 
-#define INIT_ANTIC_2	UWORD t_chbase = (dctr ^ chbase_20) & 0xfc07;\
+#define INIT_ANTIC_2	int t_chbase = (dctr ^ chbase_20) & 0xfc07;\
 	xpos += font_cycles[md];\
 	blank_lookup[0x60] = (anticmode == 2 || dctr & 0xe) ? 0xff : 0;\
 	blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (dctr & 0xe) == 8 ? 0 : 0xff;
@@ -904,7 +914,7 @@ void draw_antic_2(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanl
 
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
+		int chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -940,7 +950,7 @@ void draw_antic_2_artif(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm
 
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
+		int chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -964,7 +974,7 @@ void draw_antic_2_gtia9(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm
 
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
+		int chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -1016,7 +1026,7 @@ void draw_antic_2_gtia10(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_p
 	t_pm_scanline_ptr = (ULONG *) (((UBYTE *) t_pm_scanline_ptr) + 1);
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
+		int chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -1052,7 +1062,7 @@ void draw_antic_2_gtia11(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_p
 
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
+		int chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -1257,6 +1267,23 @@ void draw_antic_9(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanl
 	do_border();
 }
 
+/* ANTIC modes 9, b and c use BAK and PF0 colours only so they're not visible in GTIA modes */
+/* Direct use of draw_antic_0* routines may cause some problems, I think */
+void draw_antic_9_gtia9(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanline_ptr)
+{
+	draw_antic_0();
+}
+
+void draw_antic_9_gtia10(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanline_ptr)
+{
+	draw_antic_0_gtia10();
+}
+
+void draw_antic_9_gtia11(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanline_ptr)
+{
+	draw_antic_0_gtia11();
+}
+
 void draw_antic_a(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanline_ptr)
 {
 	lookup2[0x00] = cl_lookup[C_BAK];
@@ -1366,7 +1393,7 @@ void draw_antic_f(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanl
 	INIT_HIRES
 
 	CHAR_LOOP_BEGIN
-		UBYTE screendata = *ANTIC_memptr++;
+		int screendata = *ANTIC_memptr++;
 		if (!(*t_pm_scanline_ptr)) {
 			if (screendata) {
 				*ptr++ = hires_norm(screendata & 0xc0);
@@ -1390,7 +1417,7 @@ void draw_antic_f_artif(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm
 
 	setup_art_colours();
 	CHAR_LOOP_BEGIN
-		UBYTE screendata = *ANTIC_memptr++;
+		int screendata = *ANTIC_memptr++;
 		screendata_tally <<= 8;
 		screendata_tally |= screendata;
 		if (!(*t_pm_scanline_ptr))
@@ -1563,18 +1590,18 @@ draw_antic_function draw_antic_table[4][16] = {
 		{ NULL,			NULL,			draw_antic_2_gtia9,	draw_antic_2_gtia9,
 /* Only few of below are right... A lot of proper functions must be implemented */
 		draw_antic_4,	draw_antic_4,	draw_antic_6,	draw_antic_6,
-		draw_antic_8,	draw_antic_9,	draw_antic_a,	draw_antic_c,
-		draw_antic_c,	draw_antic_e,	draw_antic_e,	draw_antic_f_gtia9},
+		draw_antic_8,	draw_antic_9_gtia9,	draw_antic_a,	draw_antic_9_gtia9,
+		draw_antic_9_gtia9, draw_antic_e,	draw_antic_e,	draw_antic_f_gtia9},
 /* GTIA 10 */
 		{ NULL,			NULL,			draw_antic_2_gtia10,	draw_antic_2_gtia10,
 		draw_antic_4,	draw_antic_4,	draw_antic_6,	draw_antic_6,
-		draw_antic_8,	draw_antic_9,	draw_antic_a,	draw_antic_c,
-		draw_antic_c,	draw_antic_e,	draw_antic_e,	draw_antic_f_gtia10},
+		draw_antic_8,	draw_antic_9_gtia10,	draw_antic_a,	draw_antic_9_gtia10,
+		draw_antic_9_gtia10,	draw_antic_e,	draw_antic_e,	draw_antic_f_gtia10},
 /* GTIA 11 */
 		{ NULL,			NULL,			draw_antic_2_gtia11,	draw_antic_2_gtia11,
 		draw_antic_4,	draw_antic_4,	draw_antic_6,	draw_antic_6,
-		draw_antic_8,	draw_antic_9,	draw_antic_a,	draw_antic_c,
-		draw_antic_c,	draw_antic_e,	draw_antic_e,	draw_antic_f_gtia11}};
+		draw_antic_8,	draw_antic_9_gtia11,	draw_antic_a,	draw_antic_9_gtia11,
+		draw_antic_9_gtia11,	draw_antic_e,	draw_antic_e,	draw_antic_f_gtia11}};
 
 /* pointer to current GTIA/ANTIC mode routine */
 draw_antic_function draw_antic_ptr = draw_antic_8;
@@ -1738,6 +1765,10 @@ void ANTIC_RunDisplayList(void)
 	int delayed_gtia11 = 250;
 #endif
 
+	GTIA_Triggers();
+	PEN_X = Atari_PEN(0);
+	PEN_Y = Atari_PEN(1);
+
 	ypos = 0;
 	do {
 		POKEY_Scanline();		/* check and generate IRQ */
@@ -1747,6 +1778,13 @@ void ANTIC_RunDisplayList(void)
 	scrn_ptr = (UWORD *) atari_screen;
 	need_dl = TRUE;
 	do {
+		if (light_pen_enabled && ypos >> 1 == PEN_Y) {
+			light_pen_x = PEN_X;
+			light_pen_y = PEN_Y;
+			if (GRACTL & 4)
+				TRIG_latch[0] = 0;
+		}
+
 		POKEY_Scanline();		/* check and generate IRQ */
 		pmg_dma();
 
@@ -1930,9 +1968,9 @@ UBYTE ANTIC_GetByte(UWORD addr)
 	case _VCOUNT:
 		return ypos >> 1;
 	case _PENH:
-		return Atari_PEN(0);
+		return light_pen_x;
 	case _PENV:
-		return Atari_PEN(1);
+		return light_pen_y;
 	case _NMIST:
 		return NMIST;
 	default:

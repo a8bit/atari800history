@@ -71,7 +71,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define ATARI_WIDTH  384
 #define ATARI_HEIGHT 240
 
-#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.3"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.4"
 
 extern int xpos;
 extern int xpos_limit;
@@ -80,6 +80,13 @@ extern int xpos_limit;
 #define DMAR	9
 #define max_ypos tv_mode		/* number of scanlines */
 /* if tv_mod is enum, max_ypos is (tv_mod == TV_PAL ? 312 : 262) */
+
+extern ULONG *atari_screen;
+#ifdef BITPL_SCR
+extern ULONG *atari_screen_b;
+extern ULONG *atari_screen1;
+extern ULONG *atari_screen2;
+#endif
 
 #ifndef NO_VOL_ONLY
 extern unsigned int screenline_cpu_clock;
@@ -403,16 +410,17 @@ struct ATR_Header {
 #define MENU_RUN		2
 #define MENU_SYSTEM		3
 #define MENU_SOUND		4
-#define MENU_SAVESTATE	5
-#define MENU_LOADSTATE	6
-#define MENU_PCX		7
-#define MENU_PCXI		8
-#define MENU_BACK		9
-#define MENU_RESETW		10
-#define MENU_RESETC		11
-#define MENU_MONITOR	12
-#define MENU_ABOUT		13
-#define MENU_EXIT		14
+#define MENU_ARTIF		5
+#define MENU_SAVESTATE	6
+#define MENU_LOADSTATE	7
+#define MENU_PCX		8
+#define MENU_PCXI		9
+#define MENU_BACK		10
+#define MENU_RESETW		11
+#define MENU_RESETC		12
+#define MENU_MONITOR	13
+#define MENU_ABOUT		14
+#define MENU_EXIT		15
 
 
 

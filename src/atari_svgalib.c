@@ -8,7 +8,6 @@
 #include "atari.h"
 #include "colours.h"
 #include "monitor.h"
-#include "nas.h"
 #include "sound.h"
 #include "platform.h"
 #include "log.h"
@@ -418,10 +417,6 @@ void Atari_Initialise(int *argc, char *argv[])
 	int i;
 	int j;
 
-#ifdef NAS
-	NAS_Initialise(argc, argv);
-#endif
-
 #ifdef VOXWARE
 	Voxware_Initialise(argc, argv);
 #endif
@@ -569,10 +564,6 @@ int Atari_Exit(int run_monitor)
 			close(js1);
 #endif
 
-#ifdef NAS
-		NAS_Exit();
-#endif
-
 #ifdef VOXWARE
 		Voxware_Exit();
 #endif
@@ -638,10 +629,6 @@ void Atari_DisplayScreen(UBYTE * screen)
 		vgamouse_strig = 1;
 #endif
 after_screen_update:
-
-#ifdef NAS
-	NAS_UpdateSound();
-#endif
 
 #ifdef VOXWARE
 	Voxware_UpdateSound();

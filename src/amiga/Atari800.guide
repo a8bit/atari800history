@@ -5,7 +5,7 @@
 
 @NODE MAIN "Atari800 - Guide"
 @SMARTWRAP
-@{b}Atari800 0.9.9 @{AMIGAGUIDE}@{ub}
+@{b}Atari800 1.0 @{AMIGAGUIDE}@{ub}
 
 
 Note that the @{" guide author's " link CONTACTING} native language is German. So please
@@ -83,7 +83,7 @@ be also changed).
 @{b}Usage@{ub}
 
 
-Sorry, but not yet written yet.
+Sorry, but not written yet.
 
 @ENDNODE
 

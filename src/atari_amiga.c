@@ -26,6 +26,7 @@
 #include <proto/dos.h>
 #include <proto/gadtools.h>
 #include <proto/timer.h>
+#include <proto/keymap.h>
 
 #include <clib/ahi_protos.h>
 #include <clib/alib_protos.h>
@@ -46,7 +47,7 @@
 #define ASM __asm
 #define SAVEDS __saveds
 
-__near LONG __stack = 150000;
+__near LONG __stack = 200000;
 
 #else
 
@@ -97,6 +98,7 @@ struct Library *MUIMasterBase;
 struct Library *GadToolsBase;
 struct Library *CGXVideoBase;
 struct Library *CyberGfxBase;
+struct Library *KeymapBase;
 
 /* Gameport */
 struct InputEvent gameport_data;
@@ -271,7 +273,7 @@ static struct NewMenu MenuEntries[] =
 	NM_SUB, "Drive 7", NULL, 0, 0L, (APTR)MEN_SYSTEM_ED7,
 	NM_SUB, "Drive 8", NULL, 0, 0L, (APTR)MEN_SYSTEM_ED8,
 	NM_ITEM, NM_BARLABEL, NULL,	0, 0L, NULL,
-	NM_ITEM, "Insert Cartride", NULL, 0, 0L, (APTR)MEN_SYSTEM_IC,
+	NM_ITEM, "Insert Cartridge", NULL, 0, 0L, (APTR)MEN_SYSTEM_IC,
 	NM_SUB, "8K Cart...", NULL, 0, 0L, (APTR)MEN_SYSTEM_IC8K,
 	NM_SUB, "16K Cart...", NULL, 0, 0L, (APTR)MEN_SYSTEM_IC16K,
 	NM_SUB, "OSS SuperCart", NULL, 0, 0L, (APTR)MEN_SYSTEM_ICOSS,
@@ -312,13 +314,14 @@ static struct NewMenu MenuEntries[] =
 **************************************************************************/
 VOID CloseLibraries(void)
 {
-	if( CyberGfxBase ) CloseLibrary(CyberGfxBase);
-	if( CGXVideoBase ) CloseLibrary(CGXVideoBase);
-	if( GadToolsBase ) CloseLibrary(GadToolsBase);
-	if( AslBase ) CloseLibrary(AslBase);
-	if( LayersBase ) CloseLibrary(LayersBase);
-	if( GfxBase ) CloseLibrary((struct Library*)GfxBase);
-	if( IntuitionBase ) CloseLibrary((struct Library*)IntuitionBase);
+	if (CyberGfxBase) CloseLibrary(CyberGfxBase);
+	if (CGXVideoBase) CloseLibrary(CGXVideoBase);
+	if (KeymapBase) CloseLibrary(KeymapBase);
+	if (GadToolsBase) CloseLibrary(GadToolsBase);
+	if (AslBase) CloseLibrary(AslBase);
+	if (LayersBase) CloseLibrary(LayersBase);
+	if (GfxBase) CloseLibrary((struct Library*)GfxBase);
+	if (IntuitionBase) CloseLibrary((struct Library*)IntuitionBase);
 }
 
 /**************************************************************************
@@ -326,20 +329,23 @@ VOID CloseLibraries(void)
 **************************************************************************/
 BOOL OpenLibraries(void)
 {
-	if((IntuitionBase = (struct IntuitionBase*)OpenLibrary ("intuition.library", 39)))
+	if ((IntuitionBase = (struct IntuitionBase*)OpenLibrary ("intuition.library", 39)))
 	{
-		if((GfxBase = (struct GfxBase*)OpenLibrary ("graphics.library", 39)))
+		if ((GfxBase = (struct GfxBase*)OpenLibrary ("graphics.library", 39)))
 		{
-			if((LayersBase = OpenLibrary ("layers.library", 39)))
+			if ((LayersBase = OpenLibrary ("layers.library", 39)))
 			{
-				if((AslBase = OpenLibrary ("asl.library", 39)))
+				if ((AslBase = OpenLibrary ("asl.library", 39)))
 				{
-					if((GadToolsBase = OpenLibrary("gadtools.library",39)))
+					if ((GadToolsBase = OpenLibrary("gadtools.library",39)))
 					{
-						CGXVideoBase = OpenLibrary("cgxvideo.library",41);
-						CyberGfxBase = OpenLibrary("cybergraphics.library",41);
+						if ((KeymapBase = OpenLibrary("keymap.library",36)))
+						{
+							CGXVideoBase = OpenLibrary("cgxvideo.library",41);
+							CyberGfxBase = OpenLibrary("cybergraphics.library",41);
 
-						return TRUE;
+							return TRUE;
+						}
 					}
 				}
 			}
@@ -724,9 +730,9 @@ BOOL SetupMUI(void)
 				MUIA_Application_Title      , "Atari800",
 
 #ifdef __MAXON__
-				MUIA_Application_Version    , "$VER: Atari800 1.0 ("__DATE2__")",
+				MUIA_Application_Version    , "$VER: Atari800 1.1 ("__DATE2__")",
 #else
-				MUIA_Application_Version    , "$VER: Atari800 1.0 "__AMIGADATE__,
+				MUIA_Application_Version    , "$VER: Atari800 1.1 "__AMIGADATE__,
 #endif
 				MUIA_Application_Copyright  , "©2000 by Sebastian Bauer",
 				MUIA_Application_Author     , "Sebastian Bauer",
@@ -939,7 +945,7 @@ VOID SetGadgets(void)
 	set(settings_patch_check, MUIA_Selected, enable_sio_patch);
 	set(settings_ram_check, MUIA_Selected, enable_c000_ram);
 
-	if(DisplayID == INVALID_ID) DisplayID = GetBestID(ATARI_WIDTH-64,ATARI_HEIGHT,8);
+	if (DisplayID == INVALID_ID) DisplayID = GetBestID(ATARI_WIDTH-64,ATARI_HEIGHT,8);
 
 	set(settings_sound_check, MUIA_Selected, SoundEnabled);
 	set(settings_best_check, MUIA_Selected, UseBestID);
@@ -1130,7 +1136,7 @@ int HandleMenu(UWORD code)
                 easy.es_StructSize = sizeof(struct EasyStruct);
                 easy.es_Flags = 0;
                 easy.es_Title = "Atari800";
-                easy.es_TextFormat = "Atari800 version 0.9.9\n\nAmiga port done by Sebastian Bauer";
+                easy.es_TextFormat = "Atari800 version 1.0.3\n\nAmiga port done by Sebastian Bauer";
                 easy.es_GadgetFormat = "Ok";
 
                 EasyRequestArgs( WindowMain, &easy, NULL, NULL );
@@ -1404,11 +1410,430 @@ int HandleMenu(UWORD code)
 		}	else code = MENUNULL;
 	}
 
+	return keycode;
+}
+
+/**************************************************************************
+ Handle the Vanillakeys
+**************************************************************************/
+int HandleVanillakey(int code)
+{
+	int keycode;
+
+	switch (code)
+	{
+		case	0x01:
+					keycode = AKEY_CTRL_a;
+					break;
+
+		case	0x02:
+					keycode = AKEY_CTRL_b;
+					break;
+
+		case	0x03:
+					keycode = AKEY_CTRL_c;
+					break;
+
+		case	0x04:
+					keycode = AKEY_CTRL_d;
+					break;
+
+		case	0x05:
+					keycode = AKEY_CTRL_E;
+					break;
+
+		case	0x06:
+					keycode = AKEY_CTRL_F;
+					break;
+
+		case	0x07:
+					keycode = AKEY_CTRL_G;
+					break;
+
+		/*
+							case 0x08 :
+								keycode = AKEY_CTRL_H;
+								break;
+		*/
+		/* TAB - see case '\t' :
+							case 0x09 :
+								keycode = AKEY_CTRL_I;
+								break;
+		*/
+		case	0x0a:
+					keycode = AKEY_CTRL_J;
+					break;
+		case	0x0b:
+					keycode = AKEY_CTRL_K;
+					break;
+		case	0x0c:
+					keycode = AKEY_CTRL_L;
+					break;
+
+		/*
+							case 0x0d :
+								keycode = AKEY_CTRL_M;
+								break;
+		*/
+		case	0x0e :
+					keycode = AKEY_CTRL_N;
+					break;
+		case	0x0f :
+					keycode = AKEY_CTRL_O;
+					break;
+		case	0x10 :
+					keycode = AKEY_CTRL_P;
+					break;
+		case	0x11 :
+					keycode = AKEY_CTRL_Q;
+					break;
+		case	0x12 :
+					keycode = AKEY_CTRL_R;
+					break;
+		case	0x13 :
+					keycode = AKEY_CTRL_S;
+					break;
+		case	0x14 :
+					keycode = AKEY_CTRL_T;
+					break;
+		case	0x15 :
+					keycode = AKEY_CTRL_U;
+					break;
+		case	0x16 :
+					keycode = AKEY_CTRL_V;
+					break;
+		case	0x17 :
+					keycode = AKEY_CTRL_W;
+					break;
+		case	0x18 :
+					keycode = AKEY_CTRL_X;
+					break;
+		case	0x19 :
+					keycode = AKEY_CTRL_Y;
+					break;
+		case	0x1a :
+					keycode = AKEY_CTRL_Z;
+					break;
+		case	8 :
+					keycode = AKEY_BACKSPACE;
+					break;
+		case	13 :
+					keycode = AKEY_RETURN;
+					break;
+		case	0x1b :
+					keycode = AKEY_ESCAPE;
+					break;
+		case	'0' :
+					keycode = AKEY_0;
+					break;
+		case	'1' :
+					keycode = AKEY_1;
+					break;
+		case	'2':
+					keycode = AKEY_2;
+					break;
+		case	'3':
+					keycode = AKEY_3;
+					break;
+		case	'4':
+					keycode = AKEY_4;
+					break;
+		case	'5':
+					keycode = AKEY_5;
+					break;
+		case	'6':
+					keycode = AKEY_6;
+					break;
+		case	'7':
+					keycode = AKEY_7;
+					break;
+		case	'8':
+					keycode = AKEY_8;
+					break;
+		case	'9':
+					keycode = AKEY_9;
+					break;
+		case	'A': case	'a':
+					keycode = AKEY_a;
+					break;
+		case	'B' : case 'b' :
+					keycode = AKEY_b;
+					break;
+		case	'C' : case 'c' :
+					keycode = AKEY_c;
+					break;
+		case	'D' : case 'd' :
+					keycode = AKEY_d;
+					break;
+		case	'E' : case 'e' :
+					keycode = AKEY_e;
+					break;
+		case	'F' : case 'f' :
+					keycode = AKEY_f;
+					break;
+		case	'G' : case 'g' :
+					keycode = AKEY_g;
+					break;
+		case	'H' : case 'h' :
+					keycode = AKEY_h;
+					break;
+		case	'I' : case 'i' :
+					keycode = AKEY_i;
+					break;
+		case	'J' : case 'j' :
+					keycode = AKEY_j;
+					break;
+		case	'K' : case 'k' :
+					keycode = AKEY_k;
+					break;
+		case	'L' : case 'l' :
+					keycode = AKEY_l;
+					break;
+		case	'M' : case 'm' :
+					keycode = AKEY_m;
+					break;
+		case	'N' : case 'n' :
+					keycode = AKEY_n;
+					break;
+		case 'O' : case 'o' :
+					keycode = AKEY_o;
+					break;
+		case 'P' : case 'p' :
+					keycode = AKEY_p;
+					break;
+		case 'Q' : case 'q' :
+					keycode = AKEY_q;
+					break;
+		case 'R' : case 'r' :
+					keycode = AKEY_r;
+					break;
+		case 'S' : case 's' :
+					keycode = AKEY_s;
+					break;
+		case 'T' : case 't' :
+					keycode = AKEY_t;
+					break;
+		case 'U' : case 'u' :
+					keycode = AKEY_u;
+					break;
+		case 'V' : case 'v' :
+					keycode = AKEY_v;
+					break;
+		case 'W' : case 'w' :
+					keycode = AKEY_w;
+					break;
+		case 'X' : case 'x' :
+					keycode = AKEY_x;
+					break;
+		case 'Y' : case 'y' :
+					keycode = AKEY_y;
+					break;
+		case 'Z' : case 'z' :
+					keycode = AKEY_z;
+					break;
+		case ' ' :
+					keycode = AKEY_SPACE;
+					break;
+		case '\t' :
+					keycode = AKEY_TAB;
+					break;
+		case '!' :
+					keycode = AKEY_EXCLAMATION;
+					break;
+		case '"' :
+					keycode = AKEY_DBLQUOTE;
+					break;
+		case '#' :
+					keycode = AKEY_HASH;
+					break;
+		case '$' :
+					keycode = AKEY_DOLLAR;
+					break;
+		case '%' :
+					keycode = AKEY_PERCENT;
+					break;
+		case '&' :
+					keycode = AKEY_AMPERSAND;
+					break;
+		case '\'' :
+					keycode = AKEY_QUOTE;
+					break;
+		case '@' :
+					keycode = AKEY_AT;
+					break;
+		case '(' :
+					keycode = AKEY_PARENLEFT;
+					break;
+		case ')' :
+					keycode = AKEY_PARENRIGHT;
+					break;
+		case '<' :
+					keycode = AKEY_LESS;
+					break;
+		case '>' :
+					keycode = AKEY_GREATER;
+					break;
+		case '=' :
+					keycode = AKEY_EQUAL;
+					break;
+		case '?' :
+					keycode = AKEY_QUESTION;
+					break;
+		case '-' :
+					keycode = AKEY_MINUS;
+					break;
+		case '+' :
+					keycode = AKEY_PLUS;
+					break;
+		case	'*' :
+					keycode = AKEY_ASTERISK;
+					break;
+		case	'/' :
+					keycode = AKEY_SLASH;
+					break;
+		case	':' :
+					keycode = AKEY_COLON;
+					break;
+		case	';' :
+					keycode = AKEY_SEMICOLON;
+					break;
+		case	',' :
+					keycode = AKEY_COMMA;
+					break;
+		case	'.' :
+					keycode = AKEY_FULLSTOP;
+					break;
+		case	'_' :
+					keycode = AKEY_UNDERSCORE;
+					break;
+		case	'[' :
+					keycode = AKEY_BRACKETLEFT;
+					break;
+		case	']' :
+					keycode = AKEY_BRACKETRIGHT;
+					break;
+		case	'^' :
+					keycode = AKEY_CIRCUMFLEX;
+					break;
+
+		case	'\\' :
+					keycode = AKEY_BACKSLASH;
+					break;
+
+		case	'|' :
+					keycode = AKEY_BAR;
+					break;
+
+		default :
+					keycode = AKEY_NONE;
+					break;
+	}
 
 	return keycode;
 }
 
+/**************************************************************************
+ Handle the Rawkey events
+**************************************************************************/
+int HandleRawkey( UWORD code, UWORD qual, APTR iaddress )
+{
+	int keycode = -1;
 
+	switch (code)
+	{
+		case	0x50:	/* F1 */
+					keycode = AKEY_UI;
+					break;		
+
+		case	0x51:	/* F2 pressed */
+					consol &= 0x03;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0xd1:	/* F2 released */
+					consol |= 0x04;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0x52:	/* F3 pressed */
+					consol &= 0x05;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0xd2:	/* F3 released */
+					consol |= 0x02;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0x53:	/* F4 pressed */
+					consol &= 0x06;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0xd3:	/* F4 released */
+					consol |= 0x01;
+					keycode = AKEY_NONE;
+					break;
+
+		case	0x54:	/* F5 */
+					if(qual & IEQUALIFIER_SHIFT) keycode = AKEY_COLDSTART;
+					else keycode = AKEY_WARMSTART;
+					consol = 7;
+					break;
+
+		case	0x55:	/* F6 */
+					keycode = AKEY_PIL;
+					break;
+
+		case	0x56:
+					keycode = AKEY_BREAK;
+					break;
+
+		case	0x59:
+					keycode = AKEY_NONE;
+					break;
+
+		case	0x5f:	/* HELP */
+					keycode = AKEY_HELP;
+					break;
+
+		case	CURSORLEFT:
+					keycode = AKEY_LEFT;
+					break;
+
+		case	CURSORUP:
+					keycode = AKEY_UP;
+					break;
+
+		case	CURSORRIGHT:
+					keycode = AKEY_RIGHT;
+					break;
+
+		case	CURSORDOWN:
+					keycode = AKEY_DOWN;
+					break;
+
+		default:
+					{
+						struct InputEvent ev;
+						UBYTE key;
+
+						ev.ie_Class = IECLASS_RAWKEY;
+						ev.ie_SubClass = 0;
+						ev.ie_Code = code;
+						ev.ie_Qualifier = qual;
+						ev.ie_EventAddress = (APTR) *((ULONG *) iaddress);
+						ev.ie_NextEvent = NULL;
+
+						if( MapRawKey( &ev, &key, 1, NULL ))
+						{
+							keycode = HandleVanillakey(key);
+						}
+					}
+					break;
+	}
+	return keycode;
+}
 
 /**************************************************************************
  Play the sound. Also stores it to a sound file if requested
@@ -1416,6 +1841,7 @@ int HandleMenu(UWORD code)
 void UpdateSound(void)
 {
 	static long send[2] = {NULL,NULL};
+//	static long test = 0x80808080;
 
 	if(SoundEnabled)
 	{
@@ -1428,13 +1854,15 @@ void UpdateSound(void)
 			WaitIO(((struct IORequest*)ahi_soundreq[ahi_current]));
 		}
 	
-		Pokey_process(ahi_streambuf[ahi_current] + ahi_samplepos, ahi_streamlen - ahi_samplepos);
+	  Pokey_process(ahi_streambuf[ahi_current] + ahi_samplepos, ahi_streamlen - ahi_samplepos);
 	
 		ahi_updatecount = 0;
 		ahi_samplepos = 0;
 	
 		*ahi_soundreq[ahi_current] = *ahi_request;
 		ahi_soundreq[ahi_current]->ahir_Std.io_Data = ahi_streambuf[ahi_current];
+		ahi_soundreq[ahi_current]->ahir_Std.io_Length = ahi_streamlen;
+		ahi_soundreq[ahi_current]->ahir_Std.io_Offset = 0;
 	
 		SendIO((struct IORequest*)ahi_soundreq[ahi_current]);
 		send[ahi_current] = TRUE;
@@ -1736,367 +2164,8 @@ int Atari_Keyboard (void)
 
 		switch( cl )
 		{
-			case	IDCMP_VANILLAKEY:
-						keycode = code;
-	
-						switch (keycode)
-						{
-							case	0x01 :
-										keycode = AKEY_CTRL_a;
-										break;
-							case	0x02 :
-										keycode = AKEY_CTRL_b;
-										break;
-							case	0x03 :
-										keycode = AKEY_CTRL_c;
-										break;
-							case	0x04 :
-										keycode = AKEY_CTRL_d;
-										break;
-							case	0x05 :
-										keycode = AKEY_CTRL_E;
-										break;
-							case	0x06 :
-										keycode = AKEY_CTRL_F;
-										break;
-							case	0x07 :
-										keycode = AKEY_CTRL_G;
-										break;
-
-		/*
-							case 0x08 :
-								keycode = AKEY_CTRL_H;
-								break;
-		*/
-		/* TAB - see case '\t' :
-							case 0x09 :
-								keycode = AKEY_CTRL_I;
-								break;
-		*/
-							case	0x0a :
-										keycode = AKEY_CTRL_J;
-										break;
-							case	0x0b :
-										keycode = AKEY_CTRL_K;
-										break;
-							case	0x0c :
-										keycode = AKEY_CTRL_L;
-										break;
-
-		/*
-							case 0x0d :
-								keycode = AKEY_CTRL_M;
-								break;
-		*/
-							case	0x0e :
-										keycode = AKEY_CTRL_N;
-										break;
-							case	0x0f :
-										keycode = AKEY_CTRL_O;
-										break;
-							case	0x10 :
-										keycode = AKEY_CTRL_P;
-										break;
-							case	0x11 :
-										keycode = AKEY_CTRL_Q;
-										break;
-							case	0x12 :
-										keycode = AKEY_CTRL_R;
-										break;
-							case	0x13 :
-										keycode = AKEY_CTRL_S;
-										break;
-							case	0x14 :
-										keycode = AKEY_CTRL_T;
-										break;
-							case	0x15 :
-										keycode = AKEY_CTRL_U;
-										break;
-							case	0x16 :
-										keycode = AKEY_CTRL_V;
-										break;
-							case	0x17 :
-										keycode = AKEY_CTRL_W;
-										break;
-							case	0x18 :
-										keycode = AKEY_CTRL_X;
-										break;
-							case	0x19 :
-										keycode = AKEY_CTRL_Y;
-										break;
-							case	0x1a :
-										keycode = AKEY_CTRL_Z;
-										break;
-							case	8 :
-										keycode = AKEY_BACKSPACE;
-										break;
-							case	13 :
-										keycode = AKEY_RETURN;
-										break;
-							case	0x1b :
-										keycode = AKEY_ESCAPE;
-										break;
-							case	'0' :
-										keycode = AKEY_0;
-										break;
-							case	'1' :
-										keycode = AKEY_1;
-										break;
-							case	'2':
-										keycode = AKEY_2;
-										break;
-							case	'3':
-										keycode = AKEY_3;
-										break;
-							case	'4':
-										keycode = AKEY_4;
-										break;
-							case	'5':
-										keycode = AKEY_5;
-										break;
-							case	'6':
-										keycode = AKEY_6;
-										break;
-							case	'7':
-										keycode = AKEY_7;
-										break;
-							case	'8':
-										keycode = AKEY_8;
-										break;
-							case	'9':
-										keycode = AKEY_9;
-										break;
-							case	'A': case	'a':
-										keycode = AKEY_a;
-										break;
-							case 'B' : case 'b' :
-								keycode = AKEY_b;
-								break;
-							case 'C' : case 'c' :
-								keycode = AKEY_c;
-								break;
-							case 'D' : case 'd' :
-								keycode = AKEY_d;
-								break;
-							case 'E' : case 'e' :
-								keycode = AKEY_e;
-								break;
-							case 'F' : case 'f' :
-								keycode = AKEY_f;
-								break;
-							case 'G' : case 'g' :
-								keycode = AKEY_g;
-								break;
-							case 'H' : case 'h' :
-								keycode = AKEY_h;
-								break;
-							case 'I' : case 'i' :
-								keycode = AKEY_i;
-								break;
-							case 'J' : case 'j' :
-								keycode = AKEY_j;
-								break;
-							case 'K' : case 'k' :
-								keycode = AKEY_k;
-								break;
-							case 'L' : case 'l' :
-								keycode = AKEY_l;
-								break;
-							case 'M' : case 'm' :
-								keycode = AKEY_m;
-								break;
-							case 'N' : case 'n' :
-								keycode = AKEY_n;
-								break;
-							case 'O' : case 'o' :
-								keycode = AKEY_o;
-								break;
-							case 'P' : case 'p' :
-								keycode = AKEY_p;
-								break;
-							case 'Q' : case 'q' :
-								keycode = AKEY_q;
-								break;
-							case 'R' : case 'r' :
-								keycode = AKEY_r;
-								break;
-							case 'S' : case 's' :
-								keycode = AKEY_s;
-								break;
-							case 'T' : case 't' :
-								keycode = AKEY_t;
-								break;
-							case 'U' : case 'u' :
-								keycode = AKEY_u;
-								break;
-							case 'V' : case 'v' :
-								keycode = AKEY_v;
-								break;
-							case 'W' : case 'w' :
-								keycode = AKEY_w;
-								break;
-							case 'X' : case 'x' :
-								keycode = AKEY_x;
-								break;
-							case 'Y' : case 'y' :
-								keycode = AKEY_y;
-								break;
-							case 'Z' : case 'z' :
-								keycode = AKEY_z;
-								break;
-							case ' ' :
-								keycode = AKEY_SPACE;
-								break;
-							case '\t' :
-								keycode = AKEY_TAB;
-								break;
-							case '!' :
-								keycode = AKEY_EXCLAMATION;
-								break;
-							case '"' :
-								keycode = AKEY_DBLQUOTE;
-								break;
-							case '#' :
-								keycode = AKEY_HASH;
-								break;
-							case '$' :
-								keycode = AKEY_DOLLAR;
-								break;
-							case '%' :
-								keycode = AKEY_PERCENT;
-								break;
-							case '&' :
-								keycode = AKEY_AMPERSAND;
-								break;
-							case '\'' :
-								keycode = AKEY_QUOTE;
-								break;
-							case '@' :
-								keycode = AKEY_AT;
-								break;
-							case '(' :
-								keycode = AKEY_PARENLEFT;
-								break;
-							case ')' :
-								keycode = AKEY_PARENRIGHT;
-								break;
-							case '<' :
-								keycode = AKEY_LESS;
-								break;
-							case '>' :
-								keycode = AKEY_GREATER;
-								break;
-							case '=' :
-								keycode = AKEY_EQUAL;
-								break;
-							case '?' :
-								keycode = AKEY_QUESTION;
-								break;
-							case '-' :
-								keycode = AKEY_MINUS;
-								break;
-							case '+' :
-								keycode = AKEY_PLUS;
-								break;
-							case '*' :
-								keycode = AKEY_ASTERISK;
-								break;
-							case '/' :
-								keycode = AKEY_SLASH;
-								break;
-							case ':' :
-								keycode = AKEY_COLON;
-								break;
-							case ';' :
-								keycode = AKEY_SEMICOLON;
-								break;
-							case ',' :
-								keycode = AKEY_COMMA;
-								break;
-							case '.' :
-								keycode = AKEY_FULLSTOP;
-								break;
-							case '_' :
-								keycode = AKEY_UNDERSCORE;
-								break;
-							case '[' :
-								keycode = AKEY_BRACKETLEFT;
-								break;
-							case ']' :
-								keycode = AKEY_BRACKETRIGHT;
-								break;
-							case '^' :
-								keycode = AKEY_CIRCUMFLEX;
-								break;
-
-							case	'\\' :
-										keycode = AKEY_BACKSLASH;
-										break;
-
-							case	'|' :
-										keycode = AKEY_BAR;
-										break;
-
-							default :
-										keycode = AKEY_NONE;
-										break;
-						}
-						break;
-
 			case	IDCMP_RAWKEY:
-						switch (code)
-						{
-							case	0x50:					/* F1 */
-										keycode = AKEY_UI;
-										break;
-
-							case	0x51:					/* F2 */
-										consol &= 0x03;
-										keycode = AKEY_NONE;
-										break;
-							case	0x52:					/* F3 */
-										consol &= 0x05;
-										keycode = AKEY_NONE;
-										break;
-							case	0x53 :					/* F4 */
-										consol &= 0x06;
-										keycode = AKEY_NONE;
-										break;
-
-							case	0x54:					/* F5 */
-										if(qual & IEQUALIFIER_SHIFT) keycode = AKEY_COLDSTART;
-										else keycode = AKEY_WARMSTART;
-										consol = 7;
-										break;
-
-							case	0x55:						/* F6 */
-										keycode = AKEY_PIL;
-										break;
-							case	0x56 :
-										keycode = AKEY_BREAK;
-										break;
-							case	0x59 :
-										keycode = AKEY_NONE;
-										break;
-							case	0x5f:					/* HELP */
-										keycode = AKEY_HELP;
-										break;
-
-							case 0x4f :
-								keycode = AKEY_LEFT;
-								break;
-							case 0x4c :
-								keycode = AKEY_UP;
-								break;
-							case 0x4e :
-								keycode = AKEY_RIGHT;
-								break;
-							case 0x4d :
-								keycode = AKEY_DOWN;
-								break;
-							default :
-								break;
-						}
+						keycode = HandleRawkey(code,qual,iaddress);
 						break;
 
 			case	IDCMP_MOUSEBUTTONS :
@@ -2275,44 +2344,6 @@ int Atari_CONSOL (void)
 int Atari_PEN(int vertical)
 {
 	return vertical?0xff:0;
-}
-
-/**************************************************************************
- AUDC Hook
-**************************************************************************/
-void Atari_AUDC(int channel, int byte)
-{
-	channel--;
-#ifdef STEREO
-	Update_pokey_sound(/*0xd200 +*/ 1 + channel + channel, byte, 0, 4);
-#else
-	Update_pokey_sound(0xd200 + 1 + channel + channel, byte, 0, 4);
-#endif
-}
-
-/**************************************************************************
- AUDF Hook
-**************************************************************************/
-void Atari_AUDF(int channel, int byte)
-{
-	channel--;
-#ifdef STEREO
-	Update_pokey_sound(/*0xd200 +*/ channel + channel, byte, 0, 4);
-#else
-	Update_pokey_sound(0xd200 + channel + channel, byte, 0, 4);
-#endif
-}
-
-/**************************************************************************
- AUDCTL Hook
-**************************************************************************/
-void Atari_AUDCTL(int byte)
-{
-#ifdef STEREO
-	Update_pokey_sound(/*0xd200+*/8, byte, 0, 4);
-#else
-	Update_pokey_sound(0xd200+8, byte, 0, 4);
-#endif
 }
 
 void Sound_Pause(void)
@@ -2677,7 +2708,7 @@ VOID SetupDisplay(void)
 				WA_InnerWidth, ScreenWidth,
 				WA_InnerHeight, ScreenHeight,
 				WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_MENUPICK | IDCMP_CLOSEWINDOW |
-									IDCMP_RAWKEY | IDCMP_VANILLAKEY | (VLHandle?IDCMP_MENUVERIFY:0),
+									IDCMP_RAWKEY | (VLHandle?IDCMP_MENUVERIFY:0),
 				WA_ReportMouse, TRUE,
 				WA_CustomScreen, ScreenMain,
 				ScreenType==WBENCHSCREEN?TAG_IGNORE:WA_Borderless, TRUE,

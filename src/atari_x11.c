@@ -65,7 +65,6 @@ static int motif_rom_sel = 1;
 #include "colours.h"
 #include "monitor.h"
 #include "sio.h"
-#include "nas.h"
 #include "sound.h"
 #include "platform.h"
 #include "rt-config.h"
@@ -80,7 +79,6 @@ static struct timezone tzp;
 
 static XShmSegmentInfo shminfo;
 static XImage *image;
-extern char *atari_screen;
 extern int colour_translation_table[256];
 #endif
 
@@ -1552,10 +1550,6 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	*argc = j;
 
-#ifdef NAS
-	NAS_Initialise(argc, argv);
-#endif
-
 #ifdef VOXWARE
 	Voxware_Initialise(argc, argv);
 #endif
@@ -2367,7 +2361,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		image = XShmCreateImage(display, visual, depth, ZPixmap,
 							NULL, &shminfo, window_width, window_height);
 
-                shmsize = ((ATARI_HEIGHT + 16) * ATARI_WIDTH *
+                shmsize = (ATARI_HEIGHT * ATARI_WIDTH *
                                  image->bits_per_pixel) / 8;
 		shminfo.shmid = shmget(IPC_PRIVATE, shmsize, IPC_CREAT | 0777);
 		shminfo.shmaddr = image->data = shmat(shminfo.shmid, 0, 0);
@@ -2380,7 +2374,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		shmctl(shminfo.shmid, IPC_RMID, 0);
 
                 if(depth == 8)
-                        atari_screen = image->data;
+                        atari_screen = (ULONG *) image->data;
 	}
 #else
 	pixmap = XCreatePixmap(display, window,
@@ -2503,10 +2497,6 @@ int Atari_Exit(int run_monitor)
 
 		if (js1 != -1)
 			close(js1);
-#endif
-
-#ifdef NAS
-		NAS_Exit();
 #endif
 
 #ifdef VOXWARE
@@ -2711,10 +2701,6 @@ after_screen_update:
 		XtAppNextEvent(app, &event);
 		XtDispatchEvent(&event);
 	}
-#endif
-
-#ifdef NAS
-	NAS_UpdateSound();
 #endif
 
 #ifdef VOXWARE
@@ -3143,5 +3129,5 @@ void Sound_Record( void )
 
 int Atari_PEN(int vertical)
 {
-	return 0;
+	return vertical ? 0xff : 0;
 }

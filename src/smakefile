@@ -8,7 +8,7 @@ CPUDEF= #CPUASS
 
 AMIGAOBJS=atari_amiga.o amiga/async.o amiga/amiga_asm.o amiga/support.o
 
-OBJS=antic.o atari.o ataripcx.o binload.o compfile.o devices.o diskled.o gtia.o \
+OBJS=antic.o atari.o ataripcx.o binload.o compfile.o colours.o devices.o diskled.o gtia.o \
      list.o log.o memory-d.o monitor.o pia.o pokey.o pokeysnd.o prompts.o \
      rt-config.o sio.o statesav.o supercart.o ui.o
 
@@ -44,6 +44,8 @@ atari.o: atari.c
 ataripcx.o: ataripcx.c ataripcx.h
 
 binload.o: binload.c
+
+colours.o: colours.c
 
 compfile.o: compfile.c
 
@@ -93,4 +95,6 @@ clean:
    -delete amiga/*.o
 
 install-at:
-   copy Atari800 dh2:projects/Atari/Atari800
+   copy Atari800 dh2:projects/Atari800
+   copy amiga/Atari800.guide dh2:projects/Atari800
+   copy amiga/ReadMe dh2:projects/Atari800

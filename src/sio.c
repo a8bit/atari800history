@@ -41,6 +41,7 @@ extern int DELAYED_SEROUT_IRQ;
 #include "platform.h"
 #include "log.h"
 #include "diskled.h"
+#include "binload.h"
 
 void CopyFromMem(int to, UBYTE *, int size);
 void CopyToMem(UBYTE *, ATPtr from, int size);
@@ -261,23 +262,18 @@ void SIO_DisableDrive(int diskno)
 	strcpy(sio_filename[diskno - 1], "Off");
 }
 
-#ifdef USE_NEW_BINLOAD
-extern int start_binloading;
-int BIN_loade_start( UBYTE *buffer );
-#endif /* USE_NEW_BINLOAD */
-
 void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 {
 	int size;
 	ULONG offset;
 
-#ifdef USE_NEW_BINLOAD
-	if( start_binloading )
-	{	if(sz)	*sz=128;
-		if(ofs)	*ofs=0;
+	if (start_binloading) {
+		if (sz)
+			*sz = 128;
+		if (ofs)
+			*ofs = 0;
 		return;
 	}
-#endif /* USE_NEW_BINLOAD */
 
 	if (sector < 4) {
 		/* special case for first three sectors in ATR and XFD image */
@@ -324,9 +320,8 @@ int ReadSector(int unit, int sector, UBYTE * buffer)
 {
 	int size;
 
-#ifdef USE_NEW_BINLOAD
-	if( start_binloading )	return(BIN_loade_start(buffer));
-#endif /* USE_NEW_BINLOAD */
+	if (start_binloading)
+		return(BIN_loade_start(buffer));
 
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
@@ -562,15 +557,13 @@ int ReadStatusBlock(int unit, UBYTE * buffer)
  */
 int DriveStatus(int unit, UBYTE * buffer)
 {
-#ifdef USE_NEW_BINLOAD
-	if( start_binloading )
-	{	buffer[0] = 0;
+	if (start_binloading) {
+		buffer[0] = 0;
 		buffer[1] = 64;
 		buffer[2] = 1;
 		buffer[3] = 0 ;
 		return 'C';
 	}
-#endif /* USE_NEW_BINLOAD */
 		
 	if (drive_status[unit] != Off) {
 		if (drive_status[unit] == ReadWrite) {

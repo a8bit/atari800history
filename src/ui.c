@@ -24,10 +24,7 @@
 #include "config.h"
 #include "antic.h"
 #include "ataripcx.h"
-
-#ifdef USE_NEW_BINLOAD
 #include "binload.h"
-#endif
 
 extern int refresh_rate;
 
@@ -43,10 +40,6 @@ int alt_function = -1;		/* alt function init */
 #endif
 
 int ui_is_active = FALSE;
-
-#ifndef USE_NEW_BINLOAD
-int ReadAtariExe( char *filename );
-#endif
 
 static int current_disk_directory = 0;
 static char curr_disk_dir[MAX_FILENAME_LEN] = "";
@@ -66,6 +59,13 @@ unsigned long hThread = 0L;
 
 #ifdef STEREO
 extern int stereo_enabled;
+#endif
+
+#ifdef CRASH_MENU
+int crash_code=-1;
+UWORD crash_address;
+UWORD crash_afterCIM;
+int CrashMenu(UBYTE *screen);
 #endif
 
 unsigned char key_to_ascii[256] =
@@ -1160,11 +1160,7 @@ int RunExe(UBYTE *screen)
 	if (!curr_exe_dir[0])
 	  strcpy(curr_exe_dir, atari_exe_dir);
 	if (FileSelector(screen, curr_exe_dir, exename)) {
-#ifdef USE_NEW_BINLOAD
 		ret = BIN_loader(exename);
-#else
-		ret = ReadAtariExe(exename);
-#endif
 		if (! ret) {
 			/* display log to a window */
 		}
@@ -1222,6 +1218,7 @@ void ui(UBYTE *screen)
 		"Run BIN file directly            Alt+R",
 		"Select System                    Alt+Y",
 		"Sound Mono/Stereo                Alt+O",
+		"Artifacting mode                      ",
 		"Save State                       Alt+S",
 		"Load State                       Alt+L",
 		"PCX screenshot                     F10",
@@ -1248,6 +1245,15 @@ void ui(UBYTE *screen)
 		get_charset(charset);
 		initialised = TRUE;
 	}
+
+#ifdef CRASH_MENU
+	if (crash_code >= 0) 
+	{
+		done = CrashMenu(screen);
+		crash_code = -1;
+	}
+#endif	
+	
 	while (!done) {
 		int ascii;
 
@@ -1284,6 +1290,32 @@ void ui(UBYTE *screen)
 			break;
 		case MENU_SYSTEM:
 			SelectSystem(screen);
+			break;
+		case MENU_ARTIF:
+			{
+				const int nitems = 5;
+				static char *menu[5] =
+				{
+					"none        ",
+					"blue/brown 1",
+					"blue/brown 2",
+					"GTIA        ",
+					"CTIA        "
+				};
+
+				int option = global_artif_mode;
+
+				Box(screen, 0x9a, 0x94, 18, 10, 31, 16);
+
+				option = Select(screen, option,
+								nitems, menu,
+								nitems, 1,
+								19, 11, FALSE, &ascii);
+
+				if (option >= 0)
+					global_artif_mode = option;
+			}
+			artif_init();
 			break;
 		case MENU_SOUND:
 			{
@@ -1374,89 +1406,60 @@ void ui(UBYTE *screen)
 #endif
 }
 
-void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address)
+
+#ifdef CRASH_MENU
+
+int CrashMenu(UBYTE *screen)
 {
-	static int initialised = FALSE;
 	int option = 0;
-	int done = FALSE;
 	char bf[40];	/* CIM info */
+	
 	char *menu[] =
 	{
-		"Power On Reset (Warm Start)",
-		"Power Off Reset (Cold Start)",
-		"Menu",
-		"Monitor",
-		"Continue                           Esc",
-		"Exit Emulator"
+		"Reset (Warm Start)                  F5",
+		"Reboot (Cold Start)           Shift+F5",
+		"Menu                                F1",
+		"Enter monitor                       F8",
+		"Continue after CIM                 Esc",
+		"Exit Emulator                       F9"
 	};
 	const int nitems = 6;
 
-#ifdef CURSES
-        char *screenbackup = malloc(40*24);
-        if (screenbackup) memcpy(screenbackup,&memory[(memory[89] << 8) | memory[88]],40*24);  /* backup of textmode screen */
-#endif
-	if (!initialised) {
-		get_charset(charset);
-		initialised = TRUE;
-	}
-	while (!done) {
+	while (1) {
 		int ascii;
 
 		ClearScreen(screen);
 		TitleScreen(screen, "!!! The Atari computer has crashed !!!");
 		Box(screen, 0x9a, 0x94, 0, 6, 39, 23);
 
-		sprintf(bf,"Code $%02X (CIM) at address $%04X", cimcode, address);
+		sprintf(bf,"Code $%02X (CIM) at address $%04X", crash_code, crash_address);
 		CenterPrint(screen, 0x9a, 0x94, bf, 4);
 
 		option = Select(screen, option, nitems, menu,
 							nitems, 1, 1, 7, FALSE, &ascii);
 
 		switch (option) {
+		case 0:			/* Power On Reset */
+			alt_function=MENU_RESETW;
+			return FALSE;
+		case 1:			/* Power Off Reset */
+			alt_function=MENU_RESETC;
+			return FALSE;
+		case 2:			/* Menu */
+			return FALSE;
+		case 3:			/* Monitor */
+			alt_function=MENU_MONITOR;
+			return FALSE;
 		case -2:
 		case -1:		/* ESC key */
-			done = TRUE;
-			break;
-		case 0:			/* Power On Reset */
-			Warmstart();
-			done = TRUE;
-			break;
-		case 1:			/* Power Off Reset */
-			Coldstart();
-			done = TRUE;
-			break;
-		case 2:			/* Menu */
-#ifdef CURSES
-        if (screenbackup) {
-          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
-        }
-#endif
-			ui(screen);
-			done = TRUE;
-			break;
-		case 3:			/* Monitor */
-#ifdef CURSES
-        if (screenbackup) {
-          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
-        }
-#endif
-			if ( !Atari_Exit(1) ) exit(0);		/* Invoke monitor now */
-			done = TRUE;
-			break;
-		case 4:			/* Continue */
-			done = TRUE;
-			break;
+		case 4:			/* Continue after CIM */
+			regPC = crash_afterCIM;
+			return TRUE;
 		case 5:			/* Exit */
-			Atari800_Exit(0);
-			exit(0);
+			alt_function=MENU_EXIT;
+			return FALSE;
 		}
 	}
-#ifdef CURSES
-        if (screenbackup) {
-          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
-          free(screenbackup);
-        }
-#endif
-
-	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
+	return FALSE;
 }
+#endif

@@ -128,9 +128,9 @@ atari_basic.o: atari.h monitor.h
 atari_curses.o: atari.h cpu.h monitor.h
 atari_falcon.o: cpu.h atari.h colours.h ui.h config.h antic.h platform.h
 atari_falcon.o: monitor.h log.h
-atari_svgalib.o: config.h atari.h colours.h monitor.h nas.h platform.h
+atari_svgalib.o: config.h atari.h colours.h monitor.h platform.h
 atari_vga.o: cpu.h atari.h colours.h ui.h pcjoy.h vga_gfx.h
-atari_x11.o: config.h atari.h colours.h monitor.h sio.h nas.h platform.h
+atari_x11.o: config.h atari.h colours.h monitor.h sio.h platform.h
 atari_x11.o: rt-config.h
 ataripcx.o: atari.h colours.h
 compfile.o: atari.h log.h

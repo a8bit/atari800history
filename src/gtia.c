@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Clean ups and optimizations:                     */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 20th May 2000                      */
+/* Last changes: 27th June 2000                     */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -64,6 +64,8 @@ UBYTE GRACTL;
 int atari_speaker;
 int next_console_value = 7;			/* for 'hold OPTION during reboot' */
 UBYTE consol_mask;
+static UBYTE TRIG[4];
+UBYTE TRIG_latch[4];
 extern int rom_inserted;
 extern int mach_xlxe;
 void set_prior(UBYTE byte);			/* in antic.c */
@@ -263,6 +265,19 @@ void new_pm_scanline(void)
 
 /* GTIA registers ---------------------------------------------------------- */
 
+void GTIA_Triggers(void) {
+	TRIG[0] = Atari_TRIG(0);
+	TRIG[1] = Atari_TRIG(1);
+	TRIG[2] = mach_xlxe ? 1 : Atari_TRIG(2);
+	TRIG[3] = mach_xlxe ? rom_inserted : Atari_TRIG(3);
+	if (GRACTL & 4) {
+		TRIG_latch[0] &= TRIG[0];
+		TRIG_latch[1] &= TRIG[1];
+		TRIG_latch[2] &= TRIG[2];
+		TRIG_latch[3] &= TRIG[3];
+	}
+}
+
 UBYTE GTIA_GetByte(UWORD addr)
 {
 	UBYTE byte = 0x0f;	/* write-only registers return 0x0f */
@@ -346,23 +361,16 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte = P3PL & 0x07;			/* mask in player 0,1, and 2 */
 		break;
 	case _TRIG0:
-		byte = Atari_TRIG(0);
+		byte = TRIG[0] & TRIG_latch[0];
 		break;
 	case _TRIG1:
-		byte = Atari_TRIG(1);
+		byte = TRIG[1] & TRIG_latch[1];
 		break;
 	case _TRIG2:
-		if (!mach_xlxe)
-			byte = Atari_TRIG(2);
-		else
-			byte = 1;
+		byte = TRIG[2] & TRIG_latch[2];
 		break;
 	case _TRIG3:
-		if (!mach_xlxe)
-			byte = Atari_TRIG(3);
-		else
-			/* extremely important patch - thanks to this hundred of games start running (BruceLee) */
-			byte = rom_inserted;
+		byte = TRIG[3] & TRIG_latch[3];
 		break;
 	case _PAL:
 		if (tv_mode == TV_PAL)
@@ -881,6 +889,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		player_gra_enabled = (byte & 0x02);
 		player_flickering = ((player_dma_enabled | player_gra_enabled) == 0x02);
 		missile_flickering = ((missile_dma_enabled | missile_gra_enabled) == 0x01);
+		if ((byte & 4) == 0)
+			TRIG_latch[0] = TRIG_latch[1] = TRIG_latch[2] = TRIG_latch[3] = 1;
 		break;
 	}
 }

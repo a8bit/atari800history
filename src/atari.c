@@ -53,15 +53,23 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "statesav.h"
 #include "diskled.h"
 #include "colours.h"
-
-#ifdef USE_NEW_BINLOAD
 #include "binload.h"
-#endif
 
-extern void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address);
+#ifdef CRASH_MENU
+extern int crash_code;
+extern UWORD crash_address;
+extern UWORD crash_afterCIM;
+#endif
 
 void Sound_Pause(void);	/* cross-platform sound.h would be better :) */
 void Sound_Continue(void);
+
+ULONG *atari_screen = NULL;
+#ifdef BITPL_SCR
+ULONG *atari_screen_b = NULL;
+ULONG *atari_screen1 = NULL;
+ULONG *atari_screen2 = NULL;
+#endif
 
 int tv_mode = TV_PAL;
 Machine machine = Atari;
@@ -88,10 +96,6 @@ char	current_rom[ _MAX_PATH ];
 int pil_on = FALSE;
 #else	/* not Win32 */
 int pil_on = FALSE;
-#endif
-
-#ifndef USE_NEW_BINLOAD
-int ReadAtariExe( char *filename );
 #endif
 
 int	os = 2;
@@ -625,14 +629,8 @@ int main(int argc, char **argv)
  * ======================================
  */
 
-	if( run_direct!=NULL )
-	{
-#ifdef USE_NEW_BINLOAD
+	if (run_direct != NULL)
 		BIN_loader(run_direct);
-#else
-		ReadAtariExe(run_direct);
-#endif
-	}
 
 #ifdef WIN32
 	if( update_registry )
@@ -843,16 +841,25 @@ void AtariEscape(UBYTE esc_code)
 		Device_HHINIT();
 		return;
 		break;
-#ifdef USE_NEW_BINLOAD
 	case ESC_BINLOADER_CONT:
 		BIN_loader_cont();
 		return;
 		break;
-#endif
 	}
 	/* for all codes that fall through the cases */
+
+	
+#ifdef CRASH_MENU
+	regPC -= 2;
+	crash_address = regPC;
+	crash_afterCIM = regPC+2;
+	crash_code = dGetByte(crash_address);
+	ui((UBYTE*)atari_screen);
+#else
 	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
-	CrashMenu((UBYTE*)atari_screen,dGetByte(regPC-2),regPC-2);
+	if(!Atari800_Exit(TRUE))
+		exit(0);
+#endif
 }
 
 int Atari800_Exit(int run_monitor)

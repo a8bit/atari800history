@@ -1,8 +1,7 @@
 #ifndef __PLATFORM__
 #define __PLATFORM__
 
-#include "config.h"
-#include "atari.h"	/* for UBYTE */
+#include "atari.h"
 
 /*
  * This include file defines prototypes for platforms specific functions.
@@ -25,8 +24,5 @@ int Atari_PEN(int vertical);
 #if defined(SET_LED) && defined(NO_LED_ON_SCREEN)
 void Atari_Set_LED(int how);
 #endif
-void Atari_AUDC(int channel, int byte);
-void Atari_AUDF(int channel, int byte);
-void Atari_AUDCTL(int byte);
 
 #endif

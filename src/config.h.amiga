@@ -8,12 +8,14 @@
 #define SUPPORTS_ATARI_CONFIGURE
 #define DONT_USE_RTCONFIGUPDATE
 
-#define POKEYSND_BIG_ENDIAN
-#define SIGNED_SAMPLES
+#define ATARI800_BIG_ENDIAN
+
+//#define SIGNED_SAMPLES
 /*#define STEREO*/
 /*#define VERY_SLOW*/
-#define SET_LED
+/*#define SET_LED*/
 
 #define USE_NEW_BINLOAD
+#define NO_GOTO
 
 #endif

@@ -36,13 +36,7 @@ extern int ypos;
 extern UBYTE wsync_halt;
 
 extern int global_artif_mode;
-
-extern ULONG *atari_screen;
-#ifdef BITPL_SCR
-extern ULONG *atari_screen_b;
-extern ULONG *atari_screen1;
-extern ULONG *atari_screen2;
-#endif
+extern int light_pen_enabled;
 
 void ANTIC_Initialise(int *argc, char *argv[]);
 void ANTIC_Reset(void);

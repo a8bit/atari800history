@@ -79,9 +79,6 @@
 #include "memory.h"
 #include "statesav.h"
 
-extern ULONG *atari_screen;
-extern void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address);
-
 #ifdef CPUASS
 extern UBYTE IRQ;
 
@@ -170,6 +167,14 @@ extern UBYTE break_here;
 extern int ret_nesting;
 extern int brkhere;
 #endif
+
+#ifdef CRASH_MENU
+extern int crash_code;
+extern UWORD crash_address;
+extern UWORD crash_afterCIM;
+#endif
+extern ULONG *atari_screen;
+extern void ui(UBYTE *screen);
 
 /*
    ===============================================================
@@ -1970,17 +1975,7 @@ void GO(int limit)
 	OPCODE(b2)
 	/* OPCODE(d2) Used for ESCRTS #ab (CIM) */
 	/* OPCODE(f2) Used for ESC #ab (CIM) */
-
-		/* Sound_Pause(); */
-		UPDATE_GLOBAL_REGS;
-		CPU_GetStatus();
-		CrashMenu((UBYTE *)atari_screen, insn, PC-1);
-		CPU_PutStatus();
-		UPDATE_LOCAL_REGS;
-
-		/* Sound_Continue(); */
-		DONE
-/*
+		PC--;
 		data = 0;
 #ifdef MONITOR_BREAK
 		break_cim = 1;
@@ -1988,11 +1983,18 @@ void GO(int limit)
 #endif
 		UPDATE_GLOBAL_REGS;
 		CPU_GetStatus();
+
+#ifdef CRASH_MENU
+		crash_address = PC;
+		crash_afterCIM = PC+1;
+		crash_code = insn;
+		ui((UBYTE*)atari_screen);
+#else
 		AtariEscape(data);
+#endif
 		CPU_PutStatus();
 		UPDATE_LOCAL_REGS;
 		DONE
-*/
 
 /* ---------------------------------------------- */
 /* ADC and SBC routines */

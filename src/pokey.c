@@ -14,17 +14,10 @@
 #include "sio.h"
 #include "platform.h"
 #include "statesav.h"
-
-#ifndef WIN32
-#include "config.h"
-#endif
+#include "pokeysnd.h"
 
 #ifdef SERIO_SOUND
 void Update_serio_sound( int out, UBYTE data );
-#endif
-
-#ifdef USE_DOSSOUND
-#include "pokeysnd.h"
 #endif
 
 #ifdef POKEY_UPDATE
@@ -109,9 +102,6 @@ UBYTE POKEY_GetByte(UWORD addr)
 	case _SERIN:
 		/* byte = SIO_SERIN(); */
 		byte = SIO_GetByte();
-/*
-   colour_lookup[8] = colour_translation_table[byte];
- */
 #ifdef DEBUG1
 		printf("RD: SERIN = %x, BUFRFL = %x, CHKSUM = %x, BUFR = %02x%02x, BFEN=%02x%02x, PC = %x\n",
 			byte, memory[0x38], memory[0x31], memory[0x33], memory[0x32],
@@ -143,6 +133,8 @@ int POKEY_siocheck(void)
 	return ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL & 0x28) == 0x28);
 }
 
+#define SOUND_GAIN 4
+
 void POKEY_PutByte(UWORD addr, UBYTE byte)
 {
 #ifdef STEREO
@@ -156,28 +148,28 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 		if( pokey_select==0 )
 #endif
 		AUDC[CHAN1] = byte;
-		Atari_AUDC(1, byte);
+		Update_pokey_sound(1, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDC2:
 #ifdef STEREO
 		if( pokey_select==0 )
 #endif
 		AUDC[CHAN2] = byte;
-		Atari_AUDC(2, byte);
+		Update_pokey_sound(3, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDC3:
 #ifdef STEREO
 		if( pokey_select==0 )
 #endif
 		AUDC[CHAN3] = byte;
-		Atari_AUDC(3, byte);
+		Update_pokey_sound(5, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDC4:
 #ifdef STEREO
 		if( pokey_select==0 )
 #endif
 		AUDC[CHAN4] = byte;
-		Atari_AUDC(4, byte);
+		Update_pokey_sound(7, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDCTL:
 #ifdef STEREO
@@ -192,7 +184,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 			TimeBase = DIV_64;
 
 		Update_Counter((1 << CHAN1) | (1 << CHAN2) | (1 << CHAN3) | (1 << CHAN4));
-		Atari_AUDCTL(byte);
+		Update_pokey_sound(8, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDF1:
 #ifdef STEREO
@@ -200,7 +192,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 #endif
 		AUDF[CHAN1] = byte;
 		Update_Counter((AUDCTL & CH1_CH2) ? ((1 << CHAN2) | (1 << CHAN1)) : (1 << CHAN1));
-		Atari_AUDF(1, byte);
+		Update_pokey_sound(0, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDF2:
 #ifdef STEREO
@@ -208,7 +200,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 #endif
 		AUDF[CHAN2] = byte;
 		Update_Counter(1 << CHAN2);
-		Atari_AUDF(2, byte);
+		Update_pokey_sound(2, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDF3:
 #ifdef STEREO
@@ -216,7 +208,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 #endif
 		AUDF[CHAN3] = byte;
 		Update_Counter((AUDCTL & CH3_CH4) ? ((1 << CHAN4) | (1 << CHAN3)) : (1 << CHAN3));
-		Atari_AUDF(3, byte);
+		Update_pokey_sound(4, byte, 0, SOUND_GAIN);
 		break;
 	case _AUDF4:
 #ifdef STEREO
@@ -224,7 +216,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 #endif
 		AUDF[CHAN4] = byte;
 		Update_Counter(1 << CHAN4);
-		Atari_AUDF(4, byte);
+		Update_pokey_sound(6, byte, 0, SOUND_GAIN);
 		break;
 	case _IRQEN:
 		IRQEN = byte;
@@ -238,23 +230,7 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 	case _POTGO:
 		break;
 	case _SEROUT:
-		/*
-		   {
-		   int cmd_flag = (PBCTL & 0x08) ? 0 : 1;
-
-		   #ifdef DEBUG1
-		   printf("WR: SEROUT = %x, BUFRFL = %x, CHKSUM = %x, BUFL = %02x%02x, BFEN = %02x%02x, PC = %x\n",
-		   byte, memory[0x38], memory[0x31],
-		   memory[0x33], memory[0x32],
-		   memory[0x35], memory[0x34],
-		   PC);
-		   #endif
-		   colour_lookup[8] = colour_translation_table[byte];
-		   SIO_SEROUT(byte, cmd_flag);
-		   }
-		 */
 		if ((SKSTAT & 0x70) == 0x20) {
-			/* if ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL & 0x28)==0x28) */
 			if (POKEY_siocheck()) {
 				SIO_PutByte(byte);
 				IRQST |= 0x08;
@@ -306,10 +282,6 @@ void POKEY_Initialise(int *argc, char *argv[])
 
 void POKEY_Scanline(void)
 {
-/*	static int prev_cpu_clock=0;
-	int dt=cpu_clock-prev_cpu_clock;
-	prev_cpu_clock=cpu_clock;
-*/
 #ifdef POKEY_UPDATE
 	pokey_update();
 #endif
@@ -346,7 +318,6 @@ void POKEY_Scanline(void)
 			}
 #ifdef DEBUG2
 			else {
-				/* sigint_handler(1); */
 				printf("SERIO: SEROUT Interrupt missed\n");
 			}
 #endif
@@ -360,7 +331,6 @@ void POKEY_Scanline(void)
 #ifdef DEBUG2
 				printf("SERIO: XMTDONE Interrupt triggered\n");
 #endif
-				/* IRQST &= 0xf7; */
 				GenerateIRQ();
 			}
 #ifdef DEBUG2
