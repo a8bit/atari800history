@@ -1,0 +1,40 @@
+Installation of the Atari 800 Emulator
+--------------------------------------
+
+Firstly, I don't know the legal status of the Atari Operating System
+or Atari Basic. I suggest that you obtain the images from the PC Xformer
+package (do an archie search on xf25).
+
+The files you need are 'ataribas.rom' and 'atariosb.rom' which should
+then be placed under a directory called 'object' below the source
+directory. At the moment the emulator must be executed from the
+build directory.
+
+Note: for case sensitive systems make sure that the filenames and
+      directory are all lowercase.
+
+X-Windows Version on a Unix Platform
+------------------------------------
+
+Just type make
+
+BASIC version on VAX/VMS (No Graphics)
+--------------------------------------
+
+type @vmsbuild
+
+Compiling: Run the command file vmsbuild.com. It is set up to use
+           GNU C (I used version 2.6.1 but don't expect problems
+           with other versions). It will probably compile OK on
+           VAX C.
+
+6502 :== $DISK$xxxx:[yyyy]6502.exe
+
+	where xxxx is the disk the software is on.
+	      yyyy is the directory the software is in.
+
+BASIC version for CBM Amiga (No Graphics)
+-----------------------------------------
+
+Uncomment the relevant section in the Makefile before typing make.
+If your using dmake the makefile should be renamed dmakefile.

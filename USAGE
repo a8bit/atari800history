@@ -1,0 +1,46 @@
+Usage
+-----
+
+Usage: 6502 [-atari] [-hprefix/] [-b] [-c] [-d] [-1..9]
+            [disk1.xfd ... disk8.xfd]
+
+-atari	Enable Atari 800 Emulation Mode [default]
+
+-b	Enable BASIC ROM (Loaded from object/ subdirectory)
+-1..9	Trade off between speed and screen refresh rate. The lower the
+        number the more often the screen is refreshed and the slower the
+        CPU emulation. :-(
+-c	Enable RAM between $C000 and $CFFF
+-d	Enable DEBUG Mode. Monitor is entered straight away. Only
+	useful for basic version.
+-h	Subdirectory for H device defaults to H/
+
+	H1: Store files in native Atari Format
+	H2: Convert linefeed to normal ASCII.
+
+Keys during use
+---------------
+
+Note: These keys will probably be regrouped into a better order.
+
+F1	Warm Reset (This doesn't work under Open Windows)
+F2	Option
+F3	Select
+F4	Start
+F5	Cold Reset
+F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode).
+F7	Break Key
+
+On the numeric keypad the 1, 2, 3, 4, 5, 6, 7, 8 and 9 keys are used
+as joystick 0. The 0 key is the fire key.
+
+Either ALT Key will operate as the Atari Key.
+
+CTRL C breaks into the monitor. Execution can be resumed by typing CONT
+at the prompt (Basic version only).
+
+Unlike PC Xformer, I have not tried to emulate the exact keyboard layout,
+instead, I have tried to make your native keyboard work as normal.
+
+Note: It will run using two .XFD disks. It should work with upto eight,
+      but I had trouble modifing DOS.

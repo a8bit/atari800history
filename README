@@ -1,0 +1,104 @@
+Atari 800 Emulator for Unix et al, Version 0.1
+----------------------------------------------
+
+    Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 1, or (at your option)
+    any later version.
+
+This is the first release of my Atari 800 emulator for Unix (consider
+it an early Alpha). My main objective is to create a portable freely
+distributable emulator (i.e. with source code available). It can be
+configured either as text only or using X-Windows.
+
+The text only mode is only useful for running programs such as MAC65,
+Atari Basic etc. I have had this version running on Linux, SunOS 4.1.3,
+Solaris 2.4, VAX/VMS, CBM Amiga (Dice C) and the HP-UX 9000/380.
+
+The X-Windows version supports graphics but runs *very* slowly. This
+appears to be beacuase of the refresh rate that I am achieving through
+X-Windows.
+
+	I create a window of 384 pixels by 240 pixels which is enough
+	overscan graphics. I also create an Image of the same size.
+	The Image is built up scanline by scanline by calling the
+	X-Windows PutPixel function. When the Image is complete the
+	X-Windows PutImage function is called to move the Image onto
+	the window. I tried writting directly to the Window but that
+	appeared to be even worse.
+
+	If anyone has any suggestions as how to improve the refresh
+	rate please forward them to david@signus.demon.co.uk
+
+I used to have support for SVGALIB in Linux but removed it when I increased
+the resolution for overscan modes. Thinking about it, I could have just
+copied the base 320x192 pixels onto the screen - I'll probably put it
+back in.
+---------------------------------------------------------------------------
+
+Why have I written this emulator instead of using PC Xformer?
+
+A few years ago (85/86) I wrote a small 'test' compiler for the Atari 800
+computer (It was never released commercially but has had a commercial
+game written in it - Enigmatix released by Page 6). For historical reason
+I would always like to be able to keep a usable copy of my first compiler.
+This was not possible using PC Xformer since it only runs on MS-DOS and
+without access to the source code have no chance of porting it to
+future computers. This emulator originally had a text only interface
+which is all I needed, but as so often happens one gets carried away :-)
+
+Features
+--------
+
+48K/52K Atari 400/800 emulation (optional RAM between 0xc000 and 0xcfff)
+Slow and Slow modes of operation :-(
+Should run on any Unix computer running X-Windows.
+Display List Interrupts.
+Vertical Blank Interrupts.
+All Antic Display modes.
+Player Missile Graphics with collision detection.
+Character vertical reflect, invert and blank.
+Files can be stored directly on your host computer via the H: device.
+	(H: replaces the C: device which serves no useful purpose)
+Reads XFD disk files.
+PIL modes - allows memory between 0x8000 and 0xbfff to be toggled
+between RAM and ROM.
+
+Bugs / Known Problems
+---------------------
+
+A lot of colours have the wrong RGB values. Contact me if you know a
+way of converting the Atari colours into RGB values. I am using a
+lookup table but a lot are just set to cyan (R=0x00, G=0xff, B=0xff).
+
+A few programs cause the emulator to enter its built in debugger. The
+reason for this is unknown at the moment.
+
+Fifth player uses colours from individual missiles and player missile
+priority is ignored - these should be easy to fix.
+
+Future Atari 800 Enhancements
+-----------------------------
+
+Hardware scrolling - pointless until the screen refresh rate is improved.
+GTIA graphics support for ANTIC modes.
+Atari 800XL/XE emulation.
+Printer support (Print to file + spool on close).
+Disk swapping
+Paddle controller using X-Windows mouse position.
+Specify cartridge to load.
+Paged memory using PORTB.
+Sound possibly through /dev/audio (don't hold your breath though)
+
+It may be possible to add support for Super Cartridges - The only
+problems are :-
+
+	1. I don't have any.
+
+	2. I don't know the how the banks are selected. I assume that
+           it would be by writing to an appropriate bank selection
+           address. If so, it could be easily emulated with additions
+           to the GetByte and PutByte functions.
+
