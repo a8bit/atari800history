@@ -19,7 +19,7 @@ void SetRAM(int addr1, int addr2);
 void SetROM(int addr1, int addr2);
 void SetHARDWARE(int addr1, int addr2);
 void NMI(void);
-void GO(int cycles);
+int GO(int cycles);
 
 extern UWORD regPC;
 extern UBYTE regA;

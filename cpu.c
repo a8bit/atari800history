@@ -1,3 +1,8 @@
+/* CPU.C
+ *    Original Author     :   David Firth          *
+ *	Trim by             :   Radek Sterba, RASTER *	
+ *    Date of changes     :   28th Feb 1998        */
+
 /*
    Ideas for Speed Improvements
    ============================
@@ -82,6 +87,8 @@ int count[256];
 UBYTE memory[65536];
 
 UBYTE IRQ;
+
+extern int wsync_halt;  /* WSYNC_HALT */
 
 #ifdef MONITOR_BREAK
 UWORD remember_PC[REMEMBER_PC_STEPS];
@@ -242,32 +249,40 @@ void NMI(void)
    ==============================================================
  */
 
-/* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
+/*    0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
 int cycles[256] =
 {
-	7, 2, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-	6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+	7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,  /* 0x */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,  /* 1x */
+	6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,  /* 2x */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,  /* 3x */
 
-	6, 6, 2, 8, 3, 3, 7, 5, 3, 2, 2, 2, 3, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-	6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+	6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,  /* 4x */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,  /* 5x */
+	6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,  /* 6x */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,  /* 7x */
 
-	2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-	2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
-	2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-	2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+	2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,  /* 8x */
+	2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,  /* 9x */
+	2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,  /* Ax */
+	2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,  /* Bx */
 
-	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
+	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,  /* Cx */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,  /* Dx */
+	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,  /* Ex */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7   /* Fx */
 };
 
-void GO(int ncycles)
+/* decrement 1 or 2 cycles for conditional jumps */
+#define NCYCLES_JMP	if ( ((SWORD) sdata + (UBYTE) PC) & 0xff00) ncycles-=2; else ncycles--;
+/* decrement 1 cycle for X (or Y) index overflow */
+#define NCYCLES_Y		if ( (SWORD) ((UBYTE) addr - (UBYTE) Y) < 0 ) ncycles--;
+#define NCYCLES_X		if ( (SWORD) ((UBYTE) addr - (UBYTE) X) < 0 ) ncycles--;
+
+
+int GO(int ncycles)
 {
+
 #ifdef GNU_C
 	static void *opcode[256] =
 	{
@@ -361,6 +376,7 @@ void GO(int ncycles)
 
 	UWORD addr;
 	UBYTE data;
+	int cyc;
 
 /*
    This used to be in the main loop but has been removed to improve
@@ -397,7 +413,7 @@ void GO(int ncycles)
 #define	ABSOLUTE	addr=(memory[PC+1]<<8)+memory[PC];PC+=2;
 #define	ZPAGE		addr=memory[PC++];
 #define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)X;PC+=2;
-#define ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)Y;PC+=2;
+#define 	ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)Y;PC+=2;
 #define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=(memory[addr+1]<<8)+memory[addr];
 #define	INDIRECT_Y	addr=memory[PC++];addr=(memory[addr+1]<<8)+memory[addr]+(UWORD)Y;
 #define	ZPAGE_X		addr=(memory[PC++]+X)&0xff;
@@ -430,7 +446,9 @@ void GO(int ncycles)
 #endif
 #endif
 
-	while (ncycles > 0) {
+	while (ncycles>0 && !wsync_halt) 
+	{
+
 #ifdef TRACE
 		if (tron) {
 			disassemble(PC, PC + 1);
@@ -456,7 +474,6 @@ void GO(int ncycles)
 			UPDATE_LOCAL_REGS;
 		}
 #endif
-
 		ncycles -= cycles[memory[PC]];
 
 #ifdef GNU_C
@@ -1060,6 +1077,7 @@ void GO(int ncycles)
 	  opcode_10:				/* BPL */
 		if (!(N & 0x80)) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1067,6 +1085,7 @@ void GO(int ncycles)
 
 	  opcode_11:				/* ORA (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		ORA(GetByte(addr));
 		goto next;
 
@@ -1095,6 +1114,7 @@ void GO(int ncycles)
 
 	  opcode_19:				/* ORA abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		ORA(GetByte(addr));
 		goto next;
 
@@ -1109,6 +1129,7 @@ void GO(int ncycles)
 
 	  opcode_1d:				/* ORA abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		ORA(GetByte(addr));
 		goto next;
 
@@ -1208,6 +1229,7 @@ void GO(int ncycles)
 	  opcode_30:				/* BMI */
 		if (N & 0x80) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1215,6 +1237,7 @@ void GO(int ncycles)
 
 	  opcode_31:				/* AND (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		AND(GetByte(addr));
 		goto next;
 
@@ -1249,6 +1272,7 @@ void GO(int ncycles)
 
 	  opcode_39:				/* AND abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		AND(GetByte(addr));
 		goto next;
 
@@ -1263,6 +1287,7 @@ void GO(int ncycles)
 
 	  opcode_3d:				/* AND abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		AND(GetByte(addr));
 		goto next;
 
@@ -1347,6 +1372,7 @@ void GO(int ncycles)
 	  opcode_50:				/* BVC */
 		if (!V) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1354,6 +1380,7 @@ void GO(int ncycles)
 
 	  opcode_51:				/* EOR (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		EOR(GetByte(addr));
 		goto next;
 
@@ -1393,6 +1420,7 @@ void GO(int ncycles)
 
 	  opcode_59:				/* EOR abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		EOR(GetByte(addr));
 		goto next;
 
@@ -1407,6 +1435,7 @@ void GO(int ncycles)
 
 	  opcode_5d:				/* EOR abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		EOR(GetByte(addr));
 		goto next;
 
@@ -1507,6 +1536,7 @@ void GO(int ncycles)
 	  opcode_70:				/* BVS */
 		if (V) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1514,6 +1544,7 @@ void GO(int ncycles)
 
 	  opcode_71:				/* ADC (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		data = GetByte(addr);
 		goto adc;
 
@@ -1548,6 +1579,7 @@ void GO(int ncycles)
 
 	  opcode_79:				/* ADC abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		data = GetByte(addr);
 		goto adc;
 
@@ -1562,6 +1594,7 @@ void GO(int ncycles)
 
 	  opcode_7d:				/* ADC abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		data = GetByte(addr);
 		goto adc;
 
@@ -1637,6 +1670,7 @@ void GO(int ncycles)
 	  opcode_90:				/* BCC */
 		if (!C) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1753,6 +1787,7 @@ void GO(int ncycles)
 	  opcode_b0:				/* BCS */
 		if (C) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1760,6 +1795,7 @@ void GO(int ncycles)
 
 	  opcode_b1:				/* LDA (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		LDA(GetByte(addr));
 		goto next;
 
@@ -1794,6 +1830,7 @@ void GO(int ncycles)
 
 	  opcode_b9:				/* LDA abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		LDA(GetByte(addr));
 		goto next;
 
@@ -1803,16 +1840,19 @@ void GO(int ncycles)
 
 	  opcode_bc:				/* LDY abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		LDY(GetByte(addr));
 		goto next;
 
 	  opcode_bd:				/* LDA abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		LDA(GetByte(addr));
 		goto next;
 
 	  opcode_be:				/* LDX abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		LDX(GetByte(addr));
 		goto next;
 
@@ -1882,7 +1922,7 @@ void GO(int ncycles)
 	  opcode_d0:				/* BNE */
 		if (Z) {
 			SBYTE sdata = memory[PC];
-
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -1890,6 +1930,7 @@ void GO(int ncycles)
 
 	  opcode_d1:				/* CMP (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		CMP(GetByte(addr));
 		goto next;
 
@@ -1917,6 +1958,7 @@ void GO(int ncycles)
 
 	  opcode_d9:				/* CMP abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		CMP(GetByte(addr));
 		goto next;
 
@@ -1929,6 +1971,7 @@ void GO(int ncycles)
 
 	  opcode_dd:				/* CMP abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		CMP(GetByte(addr));
 		goto next;
 
@@ -1998,6 +2041,7 @@ void GO(int ncycles)
 	  opcode_f0:				/* BEQ */
 		if (!Z) {
 			SBYTE sdata = memory[PC];
+			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
 		PC++;
@@ -2005,6 +2049,7 @@ void GO(int ncycles)
 
 	  opcode_f1:				/* SBC (ab),y */
 		INDIRECT_Y;
+		NCYCLES_Y;
 		data = GetByte(addr);
 		goto sbc;
 
@@ -2030,6 +2075,7 @@ void GO(int ncycles)
 
 	  opcode_f9:				/* SBC abcd,y */
 		ABSOLUTE_Y;
+		NCYCLES_Y;
 		data = GetByte(addr);
 		goto sbc;
 
@@ -2044,6 +2090,7 @@ void GO(int ncycles)
 
 	  opcode_fd:				/* SBC abcd,x */
 		ABSOLUTE_X;
+		NCYCLES_X;
 		data = GetByte(addr);
 		goto sbc;
 
@@ -2785,8 +2832,8 @@ void GO(int ncycles)
 	  opcode_bb:				/* AXA abcd,y [unofficial - Store Mem AND #$FD to Acc and X, then set stackpoint to value (Acc - 4) */
 		ABSOLUTE_Y;
 
-		Z = N = A = X = GetByte(addr) & 0xFD;
-		S = ((UWORD) A - 4) & 0xFF;
+		Z = N = A = X = GetByte(addr) & 0xfd;
+		S = ((UWORD) A - 4) & 0xff;
 
 		goto next;
 
@@ -2866,4 +2913,6 @@ void GO(int ncycles)
 	}
 
 	UPDATE_GLOBAL_REGS;
+	if (wsync_halt && ncycles>=0) return 0; /* WSYNC stopped CPU */
+	return ncycles;
 }

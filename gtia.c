@@ -689,10 +689,6 @@ void Atari_ScanLine(void)
 		}
 	}
 
-	if (!wsync_halt) {
-		GO(107);
-	}
-
 #ifdef DIRECT_VIDEO
 	for (i = 0; i < dmactl_xmin_noscroll; i++)
 		scrn_ptr[i] = colour_lookup[8];
@@ -835,17 +831,6 @@ void Atari_ScanLine(void)
 #endif	/* CPUASS */
 #endif	/* !DIRECT_VIDEO */
 		scrn_ptr += ATARI_WIDTH;
-	}
-
-	ypos++;
-
-	if (wsync_halt) {
-		if (!(--wsync_halt)) {
-			GO(7);
-		}
-	}
-	else {
-		GO(7);
 	}
 }
 

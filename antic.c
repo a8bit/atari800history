@@ -1,3 +1,8 @@
+/* ANTIC.C
+ *    Original Author     :   David Firth          *
+ *	Trim by             :   Radek Sterba, RASTER *	
+ *    Date of changes     :   4th March 1998       */
+  
 #include <stdio.h>
 #include <string.h>
 
@@ -14,7 +19,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: antic.c,v 1.20 1998/02/21 15:16:41 david Exp $";
+static char *rcsid = "$Id: antic.c,v 1.18 1997/03/22 21:48:27 david Exp $";
 
 UBYTE CHACTL;
 UBYTE CHBASE;
@@ -55,6 +60,45 @@ UBYTE VSCROL;
 
 int ypos;
 
+int wsync_halt;
+
+#define CPUL	114			/* 114 CPU cycles for 1 screenline */
+#define DMAR	9			/* 9 cycles for DMA refresh */
+#define WSYNC	7			/* 7 cycles for wsync */
+#define BEGL	15			/* 15 cycles for begin of each screenline */
+
+/* Table of Antic "beglinecycles" from real atari */
+/* middle of sceenline */
+static realcyc[128]= { 	58, 58, 58, 0,  58, 58, 58, 0,		/* blank lines */
+				58, 58, 58, 0,  58, 58, 58, 0,		/* --- */
+				27, 23, 15,	0,  41, 37, 31, 0,		/* antic2, gr.0 */
+				27, 23, 15,	0,  41, 37, 31, 0,		/* antic3, gr.0(8x10) */
+				27, 23, 15,	0,  41, 37, 31, 0,		/* antic4, gr.12 */
+				27, 23, 15,	0,  41, 37, 31, 0,		/* antic5, gr.13 */
+				40, 36, 32, 0,  49, 47, 45, 0,		/* antic6, gr.1 */
+				40, 36, 32, 0,  49, 47, 45, 0,		/* antic7, gr.2 */
+
+				53, 52, 51, 0,  58, 58, 58, 0,		/* antic8, gr.3 */
+				53, 52, 51, 0,  58, 58, 58, 0,		/* antic9, gr.4 */
+				49, 47, 45, 0,  58, 58, 58, 0,		/* antic10, gr.5 */
+				49, 47, 45, 0,  58, 58, 58, 0,		/* antic11, gr.6 */
+				49, 47, 45,	0,  58, 58, 58, 0,		/* antic12, gr.14 */
+				40, 36, 32, 0,  58, 58, 58, 0,		/* antic13, gr.7 */
+				40, 36, 32, 0,  58, 58, 58, 0,		/* antic14, gr.15 */
+				40, 36, 32, 0,  58, 58, 58, 0 	 	/* antic15, gr.8 */
+			   };
+
+/* Table of nlines for Antic modes */
+static an_nline[16] = { 1, 1, 8, 10, 8, 16, 8, 16,
+				8, 4, 4,  2, 1,  2, 1,  1 };
+
+/* DLI on first screenline */
+#define DLI_FIRSTLINE	if (dlisc==0) { allc -= 8; NMIST |= 0x80; NMI(); } unc = GO(allc + unc);
+
+int dmaw;					/* DMA width = 4,5,6 */
+int pmgdma_0;				/* DMA cycles for PMG on even lines */
+int pmgdma_1;				/* DMA cycles for PMG on uneven lines */
+
 /*
  * Pre-computed values for improved performance
  */
@@ -75,8 +119,6 @@ static UWORD p0addr_d;			/* Address of Player0 - Double Line Resolution */
 static UWORD p1addr_d;			/* Address of Player1 - Double Line Resolution */
 static UWORD p2addr_d;			/* Address of Player2 - Double Line Resolution */
 static UWORD p3addr_d;			/* Address of Player3 - Double Line Resolution */
-
-int wsync_halt = 0;
 
 /*
    =============================================================
@@ -108,6 +150,9 @@ void ANTIC_Initialise(int *argc, char *argv[])
 	}
 
 	*argc = j;
+
+	dmaw = 5;		/* for normal screen size */
+	pmgdma_0 = pmgdma_1 = 0;
 }
 
 /*
@@ -145,6 +190,9 @@ static UWORD screenaddr;
 static UWORD lookup1[256];
 static UWORD lookup2[256];
 
+static int vskipbefore = 0;		/* for vertical scrolling */
+static int vskipafter = 0;		/* for vertical scrolling */
+
 void antic_blank(int nlines)
 {
 	if (nlines > 0) {
@@ -160,10 +208,7 @@ void antic_blank(int nlines)
 	}
 }
 
-static int vskipbefore = 0;
-static int vskipafter = 0;
-
-void antic_2()
+void antic_2()		/* GRAPHICS 0 */
 {
 	UWORD t_screenaddr = screenaddr;
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
@@ -264,7 +309,7 @@ void antic_2()
  * Function to display Antic Mode 3
  */
 
-void antic_3()
+void antic_3()		/* GRAPHICS 0, 10 lines */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nchars = (xmax - xmin) >> 3;
@@ -390,7 +435,7 @@ void antic_3()
  * Funtion to display Antic Mode 4
  */
 
-void antic_4()
+void antic_4()		/* GRAPHICS 12 */
 {
 	UWORD *t_scrn_ptr = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	int nchars = (xmax - xmin) >> 3;
@@ -503,11 +548,11 @@ void antic_4()
  * Function to Display Antic Mode 5
  */
 
-void antic_5()
+void antic_5()		/* GRAPHICS 13 */
 {
 	UWORD *t_scrn_ptr1 = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	UWORD *t_scrn_ptr2 = (UWORD *) & scrn_ptr[xmin + ATARI_WIDTH + scroll_offset];
-	int nchars = nchars = (xmax - xmin) >> 3;
+	int nchars = (xmax - xmin) >> 3;
 	int i;
 
 /*
@@ -634,7 +679,7 @@ void antic_5()
  * Function to Display Antic Mode 6
  */
 
-void antic_6()
+void antic_6()		/* GRAPHICS 1 */
 {
 	UWORD *t_scrn_ptr = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	int nchars = (xmax - xmin) >> 4;	/* Divide by 16 */
@@ -715,7 +760,7 @@ void antic_6()
  * Function to Display Antic Mode 7
  */
 
-void antic_7()
+void antic_7()		/* GRAPHICS 2 */
 {
 	UWORD *t_scrn_ptr1 = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	UWORD *t_scrn_ptr2 = (UWORD *) & scrn_ptr[xmin + ATARI_WIDTH + scroll_offset];
@@ -803,7 +848,7 @@ void antic_7()
  * Function to Display Antic Mode 8
  */
 
-void antic_8()
+void antic_8()		/* GRAPHICS 3 */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 5;	/* Divide by 32 */
@@ -847,7 +892,7 @@ void antic_8()
  * Function to Display Antic Mode 9
  */
 
-void antic_9()
+void antic_9()		/* GRAPHICS 4 */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 5;	/* Divide by 32 */
@@ -887,7 +932,7 @@ void antic_9()
  * Function to Display Antic Mode a
  */
 
-void antic_a()
+void antic_a()		/* GRAPHICS 5 */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 4;	/* Divide by 16 */
@@ -931,7 +976,7 @@ void antic_a()
  * Function to Display Antic Mode b
  */
 
-void antic_b()
+void antic_b()		/* GRAPHICS 6 */
 {
 	char *t_scrn_ptr1 = &scrn_ptr[xmin + scroll_offset];
 	char *t_scrn_ptr2 = &scrn_ptr[xmin + ATARI_WIDTH + scroll_offset];
@@ -966,7 +1011,7 @@ void antic_b()
  * Function to Display Antic Mode c
  */
 
-void antic_c()
+void antic_c()		/* GRAPHICS 14 */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 4;	/* Divide by 16 */
@@ -1013,7 +1058,7 @@ void antic_c()
  * Function to Display Antic Mode d
  */
 
-void antic_d()
+void antic_d()		/* GRAPHICS 7 */
 {
 	UWORD *t_scrn_ptr1 = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	UWORD *t_scrn_ptr2 = (UWORD *) & scrn_ptr[ATARI_WIDTH + xmin + scroll_offset];
@@ -1090,7 +1135,7 @@ void antic_d()
  * Function to display Antic Mode e
  */
 
-void antic_e()
+void antic_e()		/* GRAPHICS 15 */
 {
 	UWORD *t_scrn_ptr = (UWORD *) & scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 3;
@@ -1163,7 +1208,7 @@ void antic_e()
  * Function to display Antic Mode f
  */
 
-void antic_f()
+void antic_f()		/* GRAPHICS 8,9,10,11 */
 {
 	char *t_scrn_ptr = &scrn_ptr[xmin + scroll_offset];
 	int nbytes = (xmax - xmin) >> 3;
@@ -1253,9 +1298,13 @@ void pmg_dma(void)
 	}
 	if (missile_dma_enabled) {
 		if (singleline)
+		{
 			GRAFM = memory[maddr_s + ypos];
+		}
 		else
+		{
 			GRAFM = memory[maddr_d + (ypos >> 1)];
+		}
 	}
 }
 
@@ -1266,39 +1315,69 @@ void ANTIC_RunDisplayList(void)
 	int vscrol_flag;
 	int nlines;
 	int i;
+	int j;
 
-	wsync_halt = 0;
+	int unc;			/* unused cycles (can be < 0 !)*/
+	int dlisc;			/* screenline with horizontal blank interrupt */
 
-	/*
-	 * VCOUNT must equal zero for some games but the first line starts
-	 * when VCOUNT=4. This portion processes when VCOUNT=0, 1, 2 and 3
-	 */
+	int firstlinecycles;	/* DMA cycles for first line */
+	int nextlinecycles;	/* DMA cycles for next lines */
+	int pmgdmac;		/* DMA cycles for PMG */
+	int dldmac;			/* DMA cycles for read display-list */
+
+	int allc;			/* temporary (sum of cycles) */
+	int begcyc;			/* temporary (cycles for begin of screenline) */
+	int anticmode;		/* temporary (Antic mode) */
+	int anticm8;		/* temporary (anticmode<<3) */
+
+	wsync_halt = 0;		
+	unc = 0;
 
 	for (ypos = 0; ypos < 8; ypos++)
-		GO(114);
+	{
+		unc = GO(CPUL - DMAR - WSYNC + unc);
+		wsync_halt = 0;
+		unc = GO(WSYNC + unc);
+	}
 
 	NMIST = 0x00;				/* Reset VBLANK */
 
 	scrn_ptr = (UBYTE *) atari_screen;
 
-	ypos = 8;
 	vscrol_flag = FALSE;
 
 	dlist = (DLISTH << 8) | DLISTL;
 	JVB = FALSE;
 
-	while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT + 8))) {
+	while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT + 8))) 
+	{
 		UBYTE IR;
 		UBYTE colpf1;
 		int colpf1_fiddled = FALSE;
 
 		IR = memory[dlist++];
+		firstlinecycles = nextlinecycles = DMAR;
+
 		colpf1 = COLPF1;
 
-		switch (IR & 0x0f) {
+		anticmode = (IR & 0x0f);
+		anticm8 = (anticmode<<3);
+
+		pmg_dma();
+		pmgdmac = (ypos & 0x01) ? pmgdma_1 : pmgdma_0;
+
+		if ((IR & 0x80) && (NMIEN & 0x80)) dlisc=an_nline[anticmode]-1; else dlisc=-1;
+
+		switch (anticmode) {
 		case 0x00:
 			{
+				/* 1-8 blank lines */
 				nlines = ((IR >> 4) & 0x07) + 1;
+				if (dlisc==0) dlisc = nlines-1;
+				begcyc = BEGL - pmgdmac - 1;  /* dldmac is allways 1 */
+				unc = GO(begcyc + unc);	/* cycles for begin of each screen line */
+				allc = realcyc[anticm8 - 4 + dmaw] - BEGL;
+				DLI_FIRSTLINE;
 				antic_blank(nlines);
 			}
 			break;
@@ -1310,6 +1389,10 @@ void ANTIC_RunDisplayList(void)
 			else {
 				dlist = (memory[dlist + 1] << 8) | memory[dlist];
 				nlines = 1;
+				begcyc = BEGL - pmgdmac - 3;  /* dldmac is allways 3 (1+2)*/
+				unc = GO(begcyc + unc);	/* cycles for begin of each screen line */
+				allc = realcyc[anticm8 - 4 + dmaw] - BEGL;
+				DLI_FIRSTLINE;
 				antic_blank(1);	/* Jump aparently uses 1 scan line */
 			}
 			break;
@@ -1317,15 +1400,33 @@ void ANTIC_RunDisplayList(void)
 			if (IR & 0x40) {
 				screenaddr = (memory[dlist + 1] << 8) | memory[dlist];
 				dlist += 2;
+				dldmac = 3;		/* 1 + 2 DMA for read 2 bytes of address from dlist */
 			}
-			if (IR & 0x20) {
-				if (!vscrol_flag) {
+			else
+				dldmac = 1;		/* 1 DMA for read from dlist */
+				
+			if (IR & 0x20) 
+			{
+				if (!vscrol_flag) 
+				{
+					if (dlisc>=0)
+					{
+						/* DLI on Antic mode with vertical scroll */
+						dlisc = (dlisc - VSCROL) & 0x0f;
+					}
 					vskipbefore = VSCROL;
 					vscrol_flag = TRUE;
 				}
 			}
-			else if (vscrol_flag) {
-				vskipafter = VSCROL /* - 1 */ ;
+			else 
+			if (vscrol_flag) 
+			{
+				if (dlisc>=0)
+				{
+					/* DLI on Antic mode with vertical scroll */
+					dlisc = VSCROL;
+				}
+				vskipafter = VSCROL + 1;
 				vscrol_flag = FALSE;
 			}
 			if (IR & 0x10) {
@@ -1339,73 +1440,112 @@ void ANTIC_RunDisplayList(void)
 				scroll_offset = 0;
 			}
 
-			switch (IR & 0x0f) {
-			case 0x02:
+			begcyc = BEGL - pmgdmac - dldmac;
+			unc = GO(begcyc + unc);	/* cycles for begin of each screen line */
+
+			allc = realcyc[anticm8 - 4 + dmaw] - BEGL;
+
+			switch (anticmode) {
+			case 0x02:	/* GR.0 (8x8) - textmode */
 				nlines = 8;
 				if (!enable_xcolpf1) {
 					GTIA_PutByte(_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
 					colpf1_fiddled = TRUE;
 				}
+				firstlinecycles = (dmaw<<4) + 6 - dmaw;	/* 0,1,2 */
+				nextlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_2();
 				break;
-			case 0x03:
+			case 0x03: /* GR.0 (8x10) - textmode */
 				nlines = 10;
 				if (!enable_xcolpf1) {
 					GTIA_PutByte(_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
 					colpf1_fiddled = TRUE;
 				}
+				firstlinecycles = (dmaw<<4) + 6 - dmaw;	/* 0,1,2 */
+				nextlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_3();
 				break;
-			case 0x04:
+			case 0x04: /* GR.12 (8x8 4colors) - textmode */
 				nlines = 8;
+				firstlinecycles = (dmaw<<4) + 6 - dmaw;	/* 0,1,2 */
+				nextlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_4();
 				break;
-			case 0x05:
+			case 0x05: /* GR.13 (8x16 4colors) - textmode */
 				nlines = 16;
+				firstlinecycles = (dmaw<<4) + 6 - dmaw;	/* 0,1,2 */
+				nextlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_5();
 				break;
-			case 0x06:
+			case 0x06: /* GR.1 (16x8) - textmode */
 				nlines = 8;
+				firstlinecycles = (dmaw<<3) + DMAR;
+				nextlinecycles = (dmaw<<2) + DMAR;
+				DLI_FIRSTLINE;
 				antic_6();
 				break;
-			case 0x07:
+			case 0x07: /* GR.2 (16x16) - textmode */
 				nlines = 16;
+				firstlinecycles = (dmaw<<3) + DMAR;
+				nextlinecycles = (dmaw<<2) + DMAR;
+				DLI_FIRSTLINE;
 				antic_7();
 				break;
-			case 0x08:
+			case 0x08: /* GR.3 (pixel 8x8, 4 colors) */
 				nlines = 8;
+				firstlinecycles = (dmaw<<1) + DMAR;
+				DLI_FIRSTLINE;
 				antic_8();
 				break;
-			case 0x09:
+			case 0x09: /* GR.4 (pixel 4x4, 2 colors) */
 				nlines = 4;
+				firstlinecycles = (dmaw<<1) + DMAR;
+				DLI_FIRSTLINE;
 				antic_9();
 				break;
-			case 0x0a:
+			case 0x0a: /* GR.5 (pixel 4x4, 4 colors) */
 				nlines = 4;
+				firstlinecycles = (dmaw<<2) + DMAR;
+				DLI_FIRSTLINE;
 				antic_a();
 				break;
-			case 0x0b:
+			case 0x0b: /* GR.6 (pixel 2x2, 2 colors) */
 				nlines = 2;
+				firstlinecycles = (dmaw<<2) + DMAR;
+				DLI_FIRSTLINE;
 				antic_b();
 				break;
-			case 0x0c:
+			case 0x0c: /* GR.14 (pixel 2x1, 2 colors) */
 				nlines = 1;
+				firstlinecycles = (dmaw<<2) + DMAR;
+				DLI_FIRSTLINE;
 				antic_c();
 				break;
-			case 0x0d:
+			case 0x0d: /* GR.7 (pixel 2x2, 4 colors) */
 				nlines = 2;
+				firstlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_d();
 				break;
-			case 0x0e:
+			case 0x0e: /* GR.15 (pixel 2x1, 4 colors) */
 				nlines = 1;
+				firstlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_e();
 				break;
-			case 0x0f:
+			case 0x0f: /* GR.8,9,10,11 (pixel 1x1, pixel 4x1) */
 				nlines = 1;
 				if (!enable_xcolpf1) {
 					GTIA_PutByte(_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
 					colpf1_fiddled = TRUE;
 				}
+				firstlinecycles = (dmaw<<3) + DMAR;
+				DLI_FIRSTLINE;
 				antic_f();
 				break;
 			default:
@@ -1416,41 +1556,50 @@ void ANTIC_RunDisplayList(void)
 			break;
 		}
 
-		if (nlines > 0) {
-			nlines--;
+		if (nlines > 0) 
+		{
+			/* continuation of first line */
+			Atari_ScanLine();
 
-/*
- * Should be able to optimise the (i >= vskipbefore) ...
- * into just the number of lines to display :-)
+			allc = CPUL - WSYNC - realcyc[anticm8 - 4 + dmaw] - firstlinecycles;
+			unc = GO(allc + unc);
 
- * Hopefully I did it right (PS)
+			wsync_halt = 0;
+			unc = GO(WSYNC + unc);
 
- for (i = 0; i < nlines; i++) {
- if ((i >= vskipbefore) && (i <= vskipafter)) {
- pmg_dma();
- Atari_ScanLine();
- }
- }
- */
+			ypos++;
+		
+			/* next lines */
 
-			i = nlines < vskipafter ? nlines : vskipafter;
-			i -= vskipbefore;
-			while (i--) {
+			j = (nlines < vskipafter ? nlines : vskipafter) - vskipbefore;
+			for (i = 1; i < j; i++) 
+			{
 				pmg_dma();
-				Atari_ScanLine();
-			}
+				pmgdmac = (ypos & 0x01) ? pmgdma_1 : pmgdma_0;
 
-			if (IR & 0x80) {
-				if (NMIEN & 0x80) {
+				begcyc = BEGL - pmgdmac;
+				unc = GO( begcyc + unc );
+
+				allc = realcyc[anticm8 + dmaw] - BEGL;
+				if ( i==dlisc )
+				{
+					allc -= 8;
 					NMIST |= 0x80;
 					NMI();
 				}
-			}
-			pmg_dma();
-			Atari_ScanLine();
-		}
+				unc = GO( allc + unc );
 
-		GO(28);					/* horizontal blank - 28 cycles - helps in hundred of games */
+				Atari_ScanLine();
+
+				allc = CPUL - WSYNC - realcyc[anticm8 + dmaw] - nextlinecycles;
+				unc = GO( allc + unc );
+
+				wsync_halt = 0;
+				unc = GO(WSYNC + unc);
+				
+				ypos++;
+			}
+		}
 
 		vskipbefore = 0;
 		vskipafter = 99;
@@ -1461,22 +1610,46 @@ void ANTIC_RunDisplayList(void)
 
 	nlines = (ATARI_HEIGHT + 8) - ypos;
 	antic_blank(nlines);
-	for (i = 0; i < nlines; i++) {
+	for (i = 0; i < nlines; i++) 
+	{
 		pmg_dma();
+		pmgdmac = (ypos & 0x01) ? pmgdma_1 : pmgdma_0;
+
+		begcyc = realcyc[dmaw] - pmgdmac;
+		unc = GO(begcyc + unc);
 		Atari_ScanLine();
+		unc = GO(CPUL - realcyc[dmaw] - DMAR - WSYNC + unc);
+
+		wsync_halt = 0;
+		unc = GO(WSYNC + unc);
+
+		ypos++;
 	}
 
 	NMIST = 0x40;				/* Set VBLANK */
-	if (NMIEN & 0x40) {
+	if (NMIEN & 0x40) { 
 		GO(1);					/* Needed for programs that monitor NMIST (Spy's Demise) */
 		NMI();
 	}
+
 	if (tv_mode == PAL)
+	{
 		for (ypos = 248; ypos < 312; ypos++)
-			GO(114);
+		{
+			unc = GO(CPUL - WSYNC + unc - DMAR);
+			wsync_halt = 0;
+			unc = GO(WSYNC + unc);
+		}
+	}
 	else
+	{
 		for (ypos = 248; ypos < 262; ypos++)
-			GO(114);
+		{
+			unc = GO(CPUL - WSYNC + unc - DMAR);
+			wsync_halt = 0;
+			unc = GO(WSYNC + unc);
+		}
+	}
 }
 
 UBYTE ANTIC_GetByte(UWORD addr)
@@ -1505,7 +1678,7 @@ UBYTE ANTIC_GetByte(UWORD addr)
 		byte = 0x00;
 		break;
 	case _VCOUNT:
-		byte = ypos >> 1;
+		byte = (ypos>>1);
 		break;
 	case _NMIEN:
 		byte = NMIEN;
@@ -1514,8 +1687,7 @@ UBYTE ANTIC_GetByte(UWORD addr)
 		byte = NMIST;
 		break;
 	case _WSYNC:
-		wsync_halt++;
-		byte = 0;
+		byte = 0xff;	/* tested on real Atari !RS! */
 		break;
 	}
 
@@ -1603,39 +1775,57 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 		case 0x00:
 			dmactl_xmin_noscroll = dmactl_xmax_noscroll = 0;
 			dmactl_xmin_scroll = dmactl_xmax_scroll = 0;
+			dmaw = 5;
 			break;
 		case 0x01:
 			dmactl_xmin_noscroll = 64;
 			dmactl_xmax_noscroll = ATARI_WIDTH - 64;
 			dmactl_xmin_scroll = 32;
 			dmactl_xmax_scroll = ATARI_WIDTH - 32;
+			dmaw = 4;
 			break;
 		case 0x02:
 			dmactl_xmin_noscroll = 32;
 			dmactl_xmax_noscroll = ATARI_WIDTH - 32;
 			dmactl_xmin_scroll = 0;
 			dmactl_xmax_scroll = ATARI_WIDTH;
+			dmaw = 5;
 			break;
 		case 0x03:
 			dmactl_xmin_noscroll = dmactl_xmin_scroll = 0;
 			dmactl_xmax_noscroll = dmactl_xmax_scroll = ATARI_WIDTH;
+			dmaw = 6;
 			break;
 		}
 
+		pmgdma_0 = 0;
+
 		if (DMACTL & 0x04)
+		{
 			missile_dma_enabled = TRUE;
+			pmgdma_0 = 1;
+		}
 		else
 			missile_dma_enabled = FALSE;
 
 		if (DMACTL & 0x08)
+		{
 			player_dma_enabled = TRUE;
+			pmgdma_0 = 5;	/* 4+1 ...no player DMA without missile DMA */
+		}
 		else
 			player_dma_enabled = FALSE;
 
 		if (DMACTL & 0x10)
+		{
 			singleline = TRUE;
+			pmgdma_1 = pmgdma_0;
+		}
 		else
+		{
 			singleline = FALSE;
+			pmgdma_1 = 0;
+		}
 		break;
 	case _HSCROL:
 		HSCROL = byte & 0x0f;

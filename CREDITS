@@ -103,7 +103,7 @@ Karel Rous <Empty Head>
 
 Radek Sterba <raster@infos.cz>
 - Added all missing CPU 6502 instructions
-- Works on DLI
+- Implemented precise timing into Antic and CPU
 
 Perry McFarlane <ce596@freenet.toronto.on.ca>
 - Antic fix in vertical scroll

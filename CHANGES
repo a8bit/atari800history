@@ -1,3 +1,11 @@
+Changes in 0.8.8
+----------------
+
+o Antic, GTIA and CPU are now synchronized. Very precise timing
+  (up to 99.87% compared to real Atari800XE) with CPU cycle counting
+  was implemented by Raster. This should be the final solution for
+  numerous DLI problems.
+
 Changes in 0.8.7
 ----------------
 
