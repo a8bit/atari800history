@@ -41,11 +41,21 @@ void	CPU_GetStatus (CPU_Status *cpu_status);
 void	CPU_PutStatus (CPU_Status *cpu_status);
 int	GO (int CONTINUE);
 
-extern UBYTE (*GetByte)  (UWORD addr);
-extern void  (*PutByte)  (UWORD addr, UBYTE byte);
-extern UWORD (*GetWord)  (UWORD addr);
+#define	RAM		0
+#define	ROM		1
+#define	HARDWARE	2
+
+extern UBYTE	memory[65536];
+extern UBYTE	attrib[65536];
+
+extern UBYTE (*XGetByte)  (UWORD addr);
+extern void  (*XPutByte)  (UWORD addr, UBYTE byte);
 extern void  (*Hardware) (void);
 extern void  (*Escape)   (UBYTE code);
+
+#define	GetByte(addr)		((attrib[addr] == HARDWARE) ? XGetByte(addr) : memory[addr])
+#define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) XPutByte(addr,byte);
+#define	GetWord(addr)		((GetByte(addr+1) << 8) | GetByte(addr))
 
 extern int	NMI;
 extern int	IRQ;

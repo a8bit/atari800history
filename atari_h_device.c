@@ -55,12 +55,14 @@ Device_GetFilename ()
 	bufadr = (GetByte(ICBAHZ) << 8) | GetByte(ICBALZ);
 	buflen = (GetByte(ICBLHZ) << 8) | GetByte(ICBLLZ);
 
-	while ((byte = GetByte (bufadr++)) != 0x9b)
+	while ((byte = GetByte (bufadr)) != 0x9b)
 	{
 		if (!devnam)
 			filename[offset++] = byte;
 		else if (byte == ':')
 			devnam = FALSE;
+
+		bufadr++;
 	}
 
 	filename[offset++] = '\0';
@@ -206,8 +208,6 @@ void H_Close ()
 
 void H_Read ()
 {
-	int	status;
-
 	if (fp[fid])
 	{
 		int	ch;

@@ -8,6 +8,12 @@
 #include	<file.h>
 #endif
 
+#include	"system.h"
+
+#ifdef CURSES
+int	curses_mode;
+#endif
+
 main (int argc, char **argv)
 {
 	enum
@@ -30,6 +36,18 @@ main (int argc, char **argv)
 		{
 			machine = Atari;
 		}
+#ifdef CURSES
+		else if (strcmp(argv[i], "-left") == 0)
+			curses_mode = CURSES_LEFT;
+		else if (strcmp(argv[i], "-central") == 0)
+			curses_mode = CURSES_CENTRAL;
+		else if (strcmp(argv[i], "-right") == 0)
+			curses_mode = CURSES_RIGHT;
+		else if (strcmp(argv[i], "-wide1") == 0)
+			curses_mode = CURSES_WIDE_1;
+		else if (strcmp(argv[i], "-wide2") == 0)
+			curses_mode = CURSES_WIDE_2;
+#endif
 		else
 		{
 			argv[j++] = argv[i];
@@ -40,7 +58,9 @@ main (int argc, char **argv)
 	Attach stderr to error.log file
 	===============================
 */
+#ifndef SVGALIB
 	freopen ("error.log", "w", stderr);
+#endif
 /*
 	=========================
 	Invoke requested emulator

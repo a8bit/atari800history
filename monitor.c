@@ -273,7 +273,8 @@ int monitor ()
 
 			while (get_hex(NULL, &temp))
 			{
-				PutByte (addr++,(UBYTE)temp);
+				PutByte (addr,(UBYTE)temp);
+				addr++;
 			}
 		}
 		else if (strcmp(t,"Y") == 0)
@@ -329,7 +330,8 @@ unsigned int disassemble (UWORD addr1, UWORD addr2)
 	{
 		printf ("%x\t",addr);
 
-		instr = GetByte(addr++);
+		instr = GetByte(addr);
+		addr++;
 
 		show_opcode (instr);
 		show_operand (instr);
@@ -569,7 +571,8 @@ void show_operand (UBYTE instr)
 		case 0x85 :	/* STA */
 		case 0x86 :	/* STX */
 		case 0x84 :	/* STY */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t$%x",byte);
 			break;
 /*
@@ -585,7 +588,8 @@ void show_operand (UBYTE instr)
 		case 0x10 :	/* BPL */
 		case 0x50 :	/* BVC */
 		case 0x70 :	/* BVS */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t$%x",addr+(SBYTE)byte);
 			break;
 /*
@@ -605,7 +609,8 @@ void show_operand (UBYTE instr)
 		case 0x09 :	/* ORA */
 		case 0xe9 :	/* SBC */
 		case 0xff :	/* ESC */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t#$%x",byte);
 			break;
 /*
@@ -663,7 +668,8 @@ void show_operand (UBYTE instr)
 		case 0x01 :	/* ORA */
 		case 0xe1 :	/* SBC */
 		case 0x81 :	/* STA */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t($%x,X)",byte);
 			break;
 /*
@@ -679,7 +685,8 @@ void show_operand (UBYTE instr)
 		case 0x11 :	/* ORA */
 		case 0xf1 :	/* SBC */
 		case 0x91 :	/* STA */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t($%x),Y",byte);
 			break;
 /*
@@ -703,7 +710,8 @@ void show_operand (UBYTE instr)
 		case 0xf5 :	/* SBC */
 		case 0x95 :	/* STA */
 		case 0x94 :	/* STY */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t$%x,X",byte);
 			break;
 /*
@@ -713,7 +721,8 @@ void show_operand (UBYTE instr)
 */
 		case 0xb6 :	/* LDX */
 		case 0x96 :	/* STX */
-			byte = GetByte(addr++);
+			byte = GetByte(addr);
+			addr++;
 			printf ("\t$%x,Y",byte);
 			break;
 /*

@@ -18,12 +18,19 @@
 #include	"atari_h_device.h"
 
 static int	enable_c000 = FALSE;
+static int	enable_action = FALSE;
 static int	enable_basic = FALSE;
+
+UBYTE	*super;	/* For ACTION! supercart */
 
 extern int	countdown;
 
 void Atari800_OS ();
 void Atari800_ESC (UBYTE code);
+
+int load_supercart (char *filename);
+
+static char	*rom_filename = NULL;
 
 void sigint_handler ()
 {
@@ -54,9 +61,7 @@ void sigint_handler ()
 
 	fclose (stderr);
 
-#ifdef X11
 	Atari800_Exit ();
-#endif
 
 	exit (0);
 }
@@ -69,7 +74,9 @@ atari_main (int argc, char **argv)
 
 	Atari800_Initialise ();
 
+#ifndef SVGALIB
 	printf ("Atari 800 Emulator\n");
+#endif
 
 	signal (SIGINT, sigint_handler);
 
@@ -77,7 +84,16 @@ atari_main (int argc, char **argv)
 
 	for (i=1;i<argc;i++)
 	{
-		if (*argv[i] == '-')
+		if (strcmp(argv[i],"-rom") == 0)
+		{
+			rom_filename = argv[++i];
+		}
+		else if (strcmp(argv[i],"-oss") == 0)
+		{
+			rom_filename = argv[++i];
+			enable_action = TRUE;
+		}
+		else if (*argv[i] == '-')
 		{
 			switch (*(argv[i]+1))
 			{
@@ -133,7 +149,13 @@ atari_main (int argc, char **argv)
 
 	if (error)
 	{
-		printf ("Usage: %s\n", argv[0]);
+		printf ("Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]\n", argv[0]);
+		printf ("\t-rom filename\tLoad Specified 8K ROM\n");
+		printf ("\t-oss filename\tLoad Specified OSS Super Cartridge\n");
+		printf ("\t-b\t\tEnable BASIC\n");
+		printf ("\t-c\t\tEnable RAM from 0xc000 upto 0xcfff\n");
+		printf ("\t-hdirectory/\tSpecifies directory to use for H:\n");
+		Atari800_Exit ();
 		exit (1);
 	}
 
@@ -180,10 +202,14 @@ void Atari800_OS ()
 		switch (GetByte(addr))
 		{
 			case 'P' :
+#ifndef SVGALIB
 				printf ("Printer Device\n");
+#endif
 				break;
 			case 'C' :
+#ifndef SVGALIB
 				printf ("Cassette Device changed to Host Device (H:)\n");
+#endif
 				PutByte (addr, 'H');
 				entry = GetWord (devtab + o_open);
 				add_esc (entry+1, ESC_H_OPEN);
@@ -218,7 +244,9 @@ void Atari800_OS ()
 #endif
 				break;
 			case 'S' :
+#ifndef SVGALIB
 				printf ("Screen Device\n");
+#endif
 				break;
 			case 'K' :
 #ifdef BASIC
@@ -264,16 +292,41 @@ void Atari800_OS ()
 	if (!enable_c000)
 		SetROM (0xc000, 0xcfff);
 
-	if (enable_basic)
-	{
-		status = load_image ("object/ataribas.rom", 0xa000);
-		if (!status)
-		{
-			printf ("Unable to load object/ataribas.rom\n");
-			exit (1);
-		}
+	if (enable_basic && !rom_filename)
+		rom_filename = "object/ataribas.rom";
 
-		SetROM (0xa000, 0xbfff);
+	if (rom_filename)
+	{
+		if (enable_action)
+		{
+			status = load_supercart (rom_filename);
+			if (!status)
+			{
+				printf ("Unable to load %s\n", rom_filename);
+				exit (1);
+			}
+
+			memcpy (memory+0xA000,super+0x0000,0x1000);
+			memcpy (memory+0xB000,super+0x3000,0x1000);
+
+			SetROM (0xa000, 0xbfff);
+		}
+		else
+		{
+/*
+	======================================
+	Only loads 8K Cartridges at the moment
+	======================================
+*/
+			status = load_image (rom_filename, 0xa000);
+			if (!status)
+			{
+				printf ("Unable to load %s\n", rom_filename);
+				exit (1);
+			}
+
+			SetROM (0xa000, 0xbfff);
+		}
 	}
 
 	Escape = Atari800_ESC;
@@ -310,6 +363,29 @@ int load_image (char *filename, int addr)
 		close (fd);
 
 		status = TRUE;
+	}
+
+	return status;
+}
+
+int load_supercart (char *filename)
+{
+	int	fd,
+		status;
+
+	super = (char*) malloc(0x4000);
+
+	fd = open (filename, O_RDONLY, 0777);
+	if (fd != -1 && super != NULL)
+	{
+		read (fd, super, 0x4000);
+		close (fd);
+
+		status = TRUE;
+	}
+	else
+	{
+		status = FALSE;
 	}
 
 	return status;

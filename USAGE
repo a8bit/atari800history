@@ -3,8 +3,14 @@ Usage
 
 Usage: 6502 [-atari] [-hprefix/] [-b] [-c] [-d] [-1..9]
             [disk1.xfd ... disk8.xfd]
+	    [-rom filename]
+	    [-oss filename]
+	    {-left|-central|-right|-wide1|-wide2}
 
 -atari	Enable Atari 800 Emulation Mode [default]
+
+-rom	Loads the following 8K ROM Cartridge
+-oss	Loads the following OSS Super Cartridge
 
 -b	Enable BASIC ROM (Loaded from object/ subdirectory)
 -1..9	Trade off between speed and screen refresh rate. The lower the
@@ -18,10 +24,17 @@ Usage: 6502 [-atari] [-hprefix/] [-b] [-c] [-d] [-1..9]
 	H1: Store files in native Atari Format
 	H2: Convert linefeed to normal ASCII.
 
+-left		Use columns 0 to 39
+-central	Use columns 20 to 59
+-right		Use columns 40 to 79
+-wide1		Use columns 0 to 79 (Spaces between characters)
+-wide2		Use columns 0 to 79 (as above but Normal/Reverse spaces)
+
 Keys during use
 ---------------
 
-Note: These keys will probably be regrouped into a better order.
+These keys will probably be regrouped into a better order. Not all
+of the keys work for all versions.
 
 F1	Warm Reset (This doesn't work under Open Windows)
 F2	Option
@@ -30,6 +43,7 @@ F4	Start
 F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode).
 F7	Break Key
+F8	Crude Disk 1 Changer
 
 On the numeric keypad the 1, 2, 3, 4, 5, 6, 7, 8 and 9 keys are used
 as joystick 0. The 0 key is the fire key.

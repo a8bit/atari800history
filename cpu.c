@@ -54,8 +54,14 @@ static UBYTE	I;
 static UBYTE	Z;
 static UBYTE	C;
 
+UBYTE	memory[65536];
+UBYTE	attrib[65536];
+
 int	NMI;
 int	IRQ;
+
+int	countdown = 15000;
+int	count = 0;
 
 /*
 	========================================================
@@ -65,9 +71,8 @@ int	IRQ;
 	========================================================
 */
 
-UBYTE (*GetByte)  (UWORD addr);
-void  (*PutByte)  (UWORD addr, UBYTE byte);
-UWORD (*GetWord)  (UWORD addr);
+UBYTE (*XGetByte)  (UWORD addr);
+void  (*XPutByte)  (UWORD addr, UBYTE byte);
 void  (*Hardware) (void);
 void  (*Escape)   (UBYTE byte);
 
@@ -131,8 +136,19 @@ void CPU_PutStatus (CPU_Status *cpu_status)
 	C = cpu_status->flag.C;
 }
 
+static UBYTE	BCD_Lookup1[256];
+static UBYTE	BCD_Lookup2[256];
+
 void CPU_Reset (void)
 {
+	int	i;
+
+	for (i=0;i<256;i++)
+	{
+		BCD_Lookup1[i] = ((i >> 4) & 0xf) * 10 + (i & 0xf);
+		BCD_Lookup2[i] = (((i % 100) / 10) << 4) | (i % 10);
+	}
+
 	IRQ = FALSE;
 	NMI = FALSE;
 
@@ -198,7 +214,11 @@ int GO (int CONTINUE)
 	{
 		UWORD	retadr;
 
-		Hardware ();
+		if (!count--)
+		{
+			count = countdown;
+			Hardware ();
+		}
 
 		if (NMI)
 		{
@@ -234,8 +254,9 @@ int GO (int CONTINUE)
 		if (CONTINUE != -1)
 			disassemble (PC, PC+1);
 */
-		instr_addr = PC;
-		instr = GetByte(PC++);
+
+		instr = GetByte(PC);
+		instr_addr = PC++;
 
 /*
 	=====================================
@@ -317,7 +338,8 @@ int GO (int CONTINUE)
 			case 0x10 :	/* BPL */
 			case 0x50 :	/* BVC */
 			case 0x70 :	/* BVS */
-				sdata = GetByte(PC++);
+				sdata = GetByte(PC);
+				PC++;
 				break;
 /*
 	=========================
@@ -336,7 +358,8 @@ int GO (int CONTINUE)
 			case 0x09 :	/* ORA */
 			case 0xe9 :	/* SBC */
 			case 0xff :	/* ESC */
-				data = GetByte (PC++);
+				data = GetByte (PC);
+				PC++;
 				break;
 /*
 	=====================
@@ -491,7 +514,7 @@ int GO (int CONTINUE)
 					N = A;
 					Z = A;
 					C = (temp > 255);
-					V = (((old_A ^ A) & 0x80) != 0);
+					V = ((old_A ^ A) & 0x80) >> 7;
 				}
 				else
 				{
@@ -499,18 +522,23 @@ int GO (int CONTINUE)
 					int	bcd1, bcd2;
 
 					old_A = A;
-
+/*
 					bcd1 = ((A >> 4) & 0xf) * 10 + (A & 0xf);
 					bcd2 = ((data >> 4) & 0xf) * 10 + (data & 0xf);
+*/
+					bcd1 = BCD_Lookup1[A];
+					bcd2 = BCD_Lookup1[data];
 
 					bcd1 += bcd2 + C;
-
+/*
 					A = (((bcd1 % 100) / 10) << 4) | (bcd1 % 10);
+*/
+					A = BCD_Lookup2[bcd1];
 
 					N = A;
 					Z = A;
 					C = (bcd1 > 99);
-					V = (((old_A ^ A) & 0x80) != 0);
+					V = ((old_A ^ A) & 0x80) >> 7;
 				}
 				break;
 /* AND */		case 0x2d :
@@ -522,15 +550,11 @@ int GO (int CONTINUE)
 			case 0x35 :
 				data = GetByte(addr);
 			case 0x29 :
-				A = A & data;
-				Z = A;
-				N = A;
+				Z = N = A = A & data;
 				break;
 /* ASL */		case 0x0a :
 				C = (A >= 128);
-				A = A << 1;
-				N = A;
-				Z = A;
+				Z = N = A = A << 1;
 				break;
 			case 0x0e :
 			case 0x06 :
@@ -538,9 +562,7 @@ int GO (int CONTINUE)
 			case 0x16 :
 				data = GetByte(addr);
 				C = (data >= 128);
-				data = data << 1;
-				N = data;
-				Z = data;
+				Z = N = data = data << 1;
 				PutByte(addr, data);
 				break;
 /* BCC */		case 0x90 :
@@ -556,7 +578,7 @@ int GO (int CONTINUE)
 			case 0x24 :
 				data = GetByte(addr);
 				N = data;
-				V = ((data & 0x40) != 0);
+				V = (data & 0x40) >> 6;
 				Z = (A & data);
 				break;
 /* BMI */		case 0x30 :
@@ -642,13 +664,11 @@ int GO (int CONTINUE)
 				break;
 /* DEX */		case 0xca :
 				X--;
-				N = X;
-				Z = X;
+				Z = N = X;
 				break;
 /* DEY */		case 0x88 :
 				Y--;
-				N = Y;
-				Z = Y;
+				Z = N = Y;
 				break;
 /* EOR */		case 0x4d :
 			case 0x45 :
@@ -659,9 +679,7 @@ int GO (int CONTINUE)
 			case 0x55 :
 				data = GetByte (addr);
 			case 0x49 :
-				A = A ^ data;
-				Z = A;
-				N = A;
+				Z = N = A = A ^ data;
 				break;
 /* INC */		case 0xee :
 			case 0xe6 :
@@ -675,13 +693,11 @@ int GO (int CONTINUE)
 				break;
 /* INX */		case 0xe8 :
 				X++;
-				N = X;
-				Z = X;
+				Z = N = X;
 				break;
 /* INY */		case 0xc8 :
 				Y++;
-				N = Y;
-				Z = Y;
+				Z = N = Y;
 				break;
 /* JMP */		case 0x4c :
 			case 0x6c :
@@ -705,9 +721,7 @@ int GO (int CONTINUE)
 			case 0xb5 :
 				data = GetByte(addr);
 			case 0xa9 :
-				A = data;
-				Z = A;
-				N = A;
+				Z = N = A = data;
 				break;
 /* LDX */		case 0xae :
 			case 0xa6 :
@@ -715,9 +729,7 @@ int GO (int CONTINUE)
 			case 0xb6 :
 				data = GetByte (addr);
 			case 0xa2 :
-				X = data;
-				Z = X;
-				N = X;
+				Z = N = X = data;
 				break;
 /* LDY */		case 0xac :
 			case 0xa4 :
@@ -725,9 +737,7 @@ int GO (int CONTINUE)
 			case 0xb4 :
 				data = GetByte (addr);
 			case 0xa0 :
-				Y = data;
-				Z = Y;
-				N = Y;
+				Z = N = Y = data;
 				break;
 /* LSR */		case 0x4a :
 				C = (A & 1);
@@ -757,9 +767,7 @@ int GO (int CONTINUE)
 			case 0x15 :
 				data = GetByte(addr);
 			case 0x09 :
-				A = A | data;
-				Z = A;
-				N = A;
+				Z = N = A = A | data;
 				break;
 /* PHA */		case 0x48 :
 				PutByte(0x0100 + S, A);
@@ -863,12 +871,18 @@ int GO (int CONTINUE)
 					UBYTE	old_A;
 
 					old_A = A;
+/*
 					bcd1 = ((A >> 4) & 0xf) * 10 + (A & 0xf);
 					bcd2 = ((data >> 4) & 0xf) * 10 + (data & 0xf);
+*/
+					bcd1 = BCD_Lookup1[A];
+					bcd2 = BCD_Lookup1[data];
 
 					bcd1 = bcd1 - bcd2 - !C;
-
+/*
 					A = (((bcd1 % 100) / 10) << 4) | (bcd1 % 10);
+*/
+					A = BCD_Lookup2[bcd1];
 
 					N = A;
 					Z = A;
@@ -905,39 +919,25 @@ int GO (int CONTINUE)
 				PutByte(addr, Y);
 				break;
 /* TAX */		case 0xaa :
-				X = A;
-				Z = X;
-				N = X;
+				Z = N = X = A;
 				break;
 /* TAY */		case 0xa8 :
-				Y = A;
-				Z = Y;
-				N = Y;
+				Z = N = Y = A;
 				break;
 /* TSX */		case 0xba :
-				X = S;
-				Z = X;
-				N = X;
+				Z = N = X = S;
 				break;
 /* TXA */		case 0x8a :
-				A = X;
-				Z = A;
-				N = A;
+				Z = N = A = X;
 				break;
 /* TXS */		case 0x9a :
 				S = X;
 				break;
 /* TYA */		case 0x98 :
-				A = Y;
-				Z = A;
-				N = A;
+				Z = N = A = Y;
 				break;
 /* ESC */		case 0xff :
 				Escape (data);
-/*
-				cpu_status = CPU_STATUS_ESC | data;
-				CONTINUE = FALSE;
-*/
 				break;
 			default :
 				fprintf (stderr,"*** Invalid Opcode %02x at address %04x\n",instr,instr_addr);

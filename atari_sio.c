@@ -116,4 +116,6 @@ SIO ()
 	}
 
 	CPU_PutStatus (&cpu_status);
+
+	PutByte(0x0303, cpu_status.Y);
 }

@@ -1,0 +1,61 @@
+Changes in 0.1.5
+----------------
+
+- CURSES text only mode (Support for various terminals)
+- Display list jump instruction corrected.
+- Fixed SIO module (It didn't update DSTATS)
+
+Changes in 0.1.4
+----------------
+
+- Changed GetByte and PutByte to macros
+- Added SVGALIB support for Linux which is much quicker than X11.
+- Added support for OSS Super Cartridges (Thanks to Dave Bennett)
+- -rom option to specify alternative cartridges
+- -oss option to specify alternative OSS Super Cartridges
+
+Changes in 0.1.3
+----------------
+
+- Compilation option for double size screen
+- Trigger now initialises to not pressed
+- Joystick now initialises to central
+- Fifth Player support added
+- Support for Paddle 0
+- Preparation for changing GetByte and PutByte to macros.
+
+Changes in 0.1.2
+----------------
+
+- Now include <stdlib.h>  in atari_custom.h
+
+- Resets count to countdown as soon as it reaches zero. This was causing
+  problems with the RESET Key - count went negative.
+
+- Removed XImage structure. I am now updating only the pixels that have
+  changed within a Pixmap. XCopyArea is used to move the Pixmap onto
+  the Window. XCopyArea is not called if no pixels are changed. As a
+  result I am trying a higher refresh rate.
+
+- Correction for BASIC version - I left some X11 stuff in resulting in
+  unresolved sybols.
+
+- Remove unused status variable from atari_h_device.c
+
+- Added some test Amiga Intuition Code - not usable (No Colour or Keyboard)
+  It manages to get the 'READY' prompt up! Atari Basic Blue is one colour
+  and everything else is the other. When keyboard support is added you
+  will be able to use Atari Basic.
+
+- Registers are now allocated variables within atari_custom.c. They are
+  nolonger stored in main memory area.
+
+Changes in 0.1.1 
+----------------
+
+- Outputs an error message when ROM images are not available.
+
+Version 0.1.0
+-------------
+
+- Initial Release

@@ -1,5 +1,5 @@
-Atari 800 Emulator for Unix et al, Version 0.1
-----------------------------------------------
+Atari 800 Emulator for Unix, Version 0.1.5
+------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
 
@@ -8,34 +8,31 @@ Atari 800 Emulator for Unix et al, Version 0.1
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the first release of my Atari 800 emulator for Unix (consider
+This is the version 0.1.4 of my Atari 800 emulator for Unix (consider
 it an early Alpha). My main objective is to create a portable freely
 distributable emulator (i.e. with source code available). It can be
-configured either as text only or using X-Windows.
+configured to run in the following ways :-
 
-The text only mode is only useful for running programs such as MAC65,
+	1. BASIC mode
+	2. CURSES Mode
+	3. SVGALIB for Linux Systems
+	4. X-Windows
+
+The basic mode is only useful for running programs such as MAC65,
 Atari Basic etc. I have had this version running on Linux, SunOS 4.1.3,
 Solaris 2.4, VAX/VMS, CBM Amiga (Dice C) and the HP-UX 9000/380.
 
+The CURSES mode is similar to the basic mode, but it also enables full
+screen editing capability. Some computer don't seem to support curses
+fully - SunOS 4.1.3, VAX/VMS, LINUX (but ncurses is OK).
+
+The SVGALIB version runs at a reasonable speed. The screen dimensions
+are limited to 320x200 and is unable to display the overscan modes.
+Instead SVGALIB displays the core 320x192 pixels.
+
 The X-Windows version supports graphics but runs *very* slowly. This
-appears to be beacuase of the refresh rate that I am achieving through
-X-Windows.
+appears to be due to overheads with X-Windows.
 
-	I create a window of 384 pixels by 240 pixels which is enough
-	overscan graphics. I also create an Image of the same size.
-	The Image is built up scanline by scanline by calling the
-	X-Windows PutPixel function. When the Image is complete the
-	X-Windows PutImage function is called to move the Image onto
-	the window. I tried writting directly to the Window but that
-	appeared to be even worse.
-
-	If anyone has any suggestions as how to improve the refresh
-	rate please forward them to david@signus.demon.co.uk
-
-I used to have support for SVGALIB in Linux but removed it when I increased
-the resolution for overscan modes. Thinking about it, I could have just
-copied the base 320x192 pixels onto the screen - I'll probably put it
-back in.
 ---------------------------------------------------------------------------
 
 Why have I written this emulator instead of using PC Xformer?
@@ -52,9 +49,14 @@ which is all I needed, but as so often happens one gets carried away :-)
 Features
 --------
 
+Note: Not all features are supported on all platforms.
+
 48K/52K Atari 400/800 emulation (optional RAM between 0xc000 and 0xcfff)
-Slow and Slow modes of operation :-(
+OSS Super Cartridges.
 Should run on any Unix computer running X-Windows.
+Wide / Normal / Standard Playfields.
+Joystick controller using numeric keypad.
+Paddle controller using X-Windows mouse position.
 Display List Interrupts.
 Vertical Blank Interrupts.
 All Antic Display modes.
@@ -63,6 +65,7 @@ Character vertical reflect, invert and blank.
 Files can be stored directly on your host computer via the H: device.
 	(H: replaces the C: device which serves no useful purpose)
 Reads XFD disk files.
+Disk swapping (Crude but works - needs to be improved)
 PIL modes - allows memory between 0x8000 and 0xbfff to be toggled
 between RAM and ROM.
 
@@ -74,10 +77,10 @@ way of converting the Atari colours into RGB values. I am using a
 lookup table but a lot are just set to cyan (R=0x00, G=0xff, B=0xff).
 
 A few programs cause the emulator to enter its built in debugger. The
-reason for this is unknown at the moment.
+reason for this is unknown at the moment. It might be use of undocumented
+instructions.
 
-Fifth player uses colours from individual missiles and player missile
-priority is ignored - these should be easy to fix.
+Player missile priority is ignored.
 
 Future Atari 800 Enhancements
 -----------------------------
@@ -86,19 +89,9 @@ Hardware scrolling - pointless until the screen refresh rate is improved.
 GTIA graphics support for ANTIC modes.
 Atari 800XL/XE emulation.
 Printer support (Print to file + spool on close).
-Disk swapping
-Paddle controller using X-Windows mouse position.
-Specify cartridge to load.
 Paged memory using PORTB.
 Sound possibly through /dev/audio (don't hold your breath though)
 
-It may be possible to add support for Super Cartridges - The only
-problems are :-
-
-	1. I don't have any.
-
-	2. I don't know the how the banks are selected. I assume that
-           it would be by writing to an appropriate bank selection
-           address. If so, it could be easily emulated with additions
-           to the GetByte and PutByte functions.
-
+It should be possible to add support for non OSS Super Cartridges. If
+you can forward details on how the cartridge works I'll see what I
+can do.
