@@ -217,7 +217,7 @@ void ListSort(List * list, int (*func) ())
 
 			for (temp = list->head, next = temp->next; next; temp = next, next = temp->next) {
 				result = (*func) (temp->data, next->data);
-				if (result == 1) {
+				if (result >= 1) {
 					data = temp->data;
 					temp->data = next->data;
 					next->data = data;

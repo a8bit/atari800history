@@ -62,30 +62,25 @@ int nframes;
 ULONG lastspeed;				/* measure time between two Antic runs */
 
 #ifdef WIN32		/* AUGH clean this crap up REL */
-
-#ifdef USE_DDRAW
 #include "ddraw.h"
-extern LPDIRECTDRAWSURFACE3	lpPrimary;
-#endif
 
+extern LPDIRECTDRAWSURFACE3	lpPrimary;
+extern UBYTE	screenbuff[];
 extern void (*Atari_PlaySound)( void );
 extern HWND	hWnd;
 extern void GetJoystickInput( void );
-
-#ifdef NOTHREAD
-int		unAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
-ULONG	dwAtari_HW_Starttime = 0;
+extern void ReadRegDrives( HKEY hkInitKey );
+extern void WriteAtari800Registry( HKEY hkInitKey );
+extern void Start_Atari_Timer( void );
+int			unAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
 int		test_val;
 int		FindCartType( char *rom_filename );
-#endif
-
 char	current_rom[ _MAX_PATH ];
 char	memory_log[8192];
 char	scratch[256];
-int		nDeltams = 0;
 unsigned int	memory_log_index = 0;
-#define ADDLOG( x ) { memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
-#define ADDLOGTEXT( x ) { memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
+#define ADDLOG( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
+#define ADDLOGTEXT( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
 int	os = 2;
 
 #else	/* not Win32 */
@@ -864,8 +859,10 @@ int main(int argc, char **argv)
 	int status;
 	int error = FALSE;
 	int diskno = 1;
-	int i;
-	
+	int i, j, update_registry = FALSE;
+
+	if( argc > 1 )
+		update_registry = TRUE;
 	time( &ltime );
 	newtime = gmtime( &ltime );
 	unAtariState &= ~ATARI_UNINITIALIZED;
@@ -950,7 +947,6 @@ int main(int argc, char **argv)
 		break;
 	}
 
-#ifndef WIN32
 	for (i = j = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-atari") == 0)
 			machine = Atari;
@@ -1061,36 +1057,28 @@ int main(int argc, char **argv)
 	}
 
 	argc = j;
-#endif
 
 	if (tv_mode == PAL)
 	{
 		deltatime = (1.0 / 50.0);
-#ifdef WIN32
-		nDeltams = 20;
-#endif
+		default_tv_mode = 1;
 	}
 	else
 	{
 		deltatime = (1.0 / 60.0);
-#ifdef WIN32
-		nDeltams = 17;
-#endif
+		default_tv_mode = 2;
 	}
 
 	Device_Initialise(&argc, argv);
-#ifdef WIN32
     if (hold_option)
 	    next_console_value = 0x03; /* Hold Option During Reboot */
-#else
-  /* Don't call this in Win32 because it sets the drives to "Empty" after the Registry
-     has already initialized them correctly */
 	SIO_Initialise (&argc, argv);
-#endif
 	Atari_Initialise(&argc, argv);	/* Platform Specific Initialisation */
 
 	if (!atari_screen) {
-#ifndef USE_DDRAW
+#ifdef WIN32
+		atari_screen = (ULONG *)&screenbuff[0];
+#else
 		atari_screen = (ULONG *) malloc((ATARI_HEIGHT + 16) * ATARI_WIDTH);
 #endif
 		for (i = 0; i < 256; i++)
@@ -1112,6 +1100,7 @@ int main(int argc, char **argv)
 	POKEY_Initialise(&argc, argv);
 
 #ifdef WIN32
+	ReadRegDrives( NULL );
 	for( i=0; i < 8; i++ )
 	{
 		if( strlen( sio_filename[i] ) && strncmp( sio_filename[i], "Empty", 5 ) && strncmp( sio_filename[i], "Off", 3 ) )
@@ -1125,34 +1114,35 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-#else
+#endif
 	/*
 	 * Any parameters left on the command line must be disk images.
 	 */
 
 	for (i = 1; i < argc; i++) {
 		if (!SIO_Mount(diskno++, argv[i])) {
+#ifdef WIN32
+			sprintf( scratch, "Error reading disk: %s", argv[i] );
+			ADDLOG( scratch );
+#else
 			printf("Disk File %s not found\n", argv[i]);
+#endif
 			error = TRUE;
 		}
 	}
-#endif
 
 	if (error) {
+#ifndef WIN32
 #ifdef BACKUP_MSG
 		sprintf(backup_msg_buf, "Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]\n", argv[0]);
 		sprintf(backup_msg_buf + strlen(backup_msg_buf), "\t-help         Extended Help\n");
 #else
-#ifdef WIN32
-		ADDLOGTEXT( "There was an error in configuring the Atari for startup, your registry entry for Atari800Win may be corrupted" );
-		Atari800_Exit(FALSE);
-		return( FALSE );
-#endif
 		printf("Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]\n", argv[0]);
 		printf("\t-help         Extended Help\n");
 #endif
 		Atari800_Exit(FALSE);
 		exit(1);
+#endif /* WIN32 */
 	}
 	/*
 	 * Install CTRL-C Handler
@@ -1209,6 +1199,8 @@ int main(int argc, char **argv)
 		ADDLOG("Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.");
 		unAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED;
 		InvalidateRect( hWnd, NULL, FALSE );
+		if( update_registry )
+			WriteAtari800Registry( NULL );
 		MessageBox( NULL, "Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.", "Atari800Win", MB_OK );
 		return FALSE;
 #else
@@ -1286,6 +1278,9 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef WIN32
+	if( update_registry )
+		WriteAtari800Registry( NULL );
+	Start_Atari_Timer();
 	unAtariState = ATARI_HW_READY | ATARI_PAUSED;
 	return 0;
 #else
@@ -1530,7 +1525,7 @@ int bounty_bob2(UWORD addr)
 
 UBYTE Atari800_GetByte(UWORD addr)
 {
-	UBYTE byte = 0;
+	UBYTE byte = 0xff;
 /*
    ============================================================
    GTIA, POKEY, PIA and ANTIC do not fully decode their address
@@ -1648,7 +1643,6 @@ void ui(UBYTE * screen);	/* forward reference */
 
 void Atari800_Hardware(void)
 {
-#ifndef WIN32
 	static struct timeval tp;
 	static struct timezone tzp;
 	static double lasttime;
@@ -1803,18 +1797,14 @@ void Atari800_Hardware(void)
 #endif							/* DJGPP */
 #endif							/* FALCON */
 	}
-#endif /* Win32 */
 }
 
 #ifdef WIN32
-#ifdef NOTHREAD
 void WinAtari800_Hardware (void)
 {
 	int	pil_on = FALSE;
 	int	keycode;
   
-	dwAtari_HW_Starttime = timeGetTime();
-
 	/*
       colour_lookup[8] = colour_translation_table[COLBK];
 	  */
@@ -1868,23 +1858,19 @@ void WinAtari800_Hardware (void)
 	  * Generate Screen
 	  */
 	  GetJoystickInput( );
-	  ANTIC_RunDisplayList ();
+	  ANTIC_RunDisplayList();
       if (++test_val == refresh_rate)
 	  {
 		  Atari_DisplayScreen ((UBYTE*)atari_screen);
-		  /* TODO: Examine this */
-		  /* if( (timeGetTime() - dwAtari_HW_Starttime) < deltams ) */
 		  test_val = 0;
 	  }
-	  Atari_PlaySound();
-	  /*
       else
 	  {
 		  for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
 		  {
 			  GO (114);
 		  }
-	  }*/
+	  }
+	  Atari_PlaySound();
 }
-#endif	/* NOTHREAD */
-#endif
+#endif /* Win32 */

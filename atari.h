@@ -1,6 +1,9 @@
 #ifndef __ATARI__
 #define	__ATARI__
 
+#ifdef WIN32
+#include "windows.h"
+#endif
 /*
    =================================
    Define Data Types on Local System
@@ -46,7 +49,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.3"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.4"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -58,6 +61,9 @@ extern int verbose;
 
 enum ESCAPE {
 	ESC_SIOV,
+#ifdef MONITOR_BREAK
+	ESC_BREAK,
+#endif
 /*
  * These are special device escape codes required by the Basic version
  */

@@ -1,3 +1,38 @@
+Changes in 0.9.4
+----------------
+
+o CPU fixes: several unofficial instructions compared with real
+  Atari800XE and their emulation fixed. ADC/SBC "V" bit bug found
+  and fixed (Thor source used, which in turn was taken from Frodo
+  emulator, AFAIK). Compatibility greatly improved again! <RASTER>
+
+o Antic fix (improves sound quality in non-interrupt driven sound
+  update routines). <Perry>
+
+o Voxware sound driver updated (tested under Linux).
+  pokey11.[ch] files removed. <Robert Brewer>
+
+o the crashing in UI when switching to Atari5200 mode fixed. <Perry>
+
+o internal monitor improved (symbolic names for often used hardware
+  registers etc). Line assembler implemented. Single instruction
+  step mode implemented.
+  Monitor remembers not only last N PC addresses, but also
+  last N jumps. To enable these features edit your Makefile
+  CFLAGS = -DMONITOR_BREAK -DMONITOR_HINTS -DMONITOR_ASSEMBLER.
+  <Golda>
+
+o additional WIN32 code (Atari800 User Interface is used in
+  Win port now) <Rich>
+
+o all Hardware_GetByte(address) routines return 0xff for unknown 
+  address now.
+
+o fixed several files so Makefile.pm works now. <Perry>
+
+o NMIEN is not readable now. <Thor>
+
+
 Changes in 0.9.3
 ----------------
 
@@ -26,17 +61,17 @@ o all HardwareGetByte(address) routines return now 0 for unknown
   address (probably not ideal, but deterministic at least).
 
 o several routines from ANTIC, CPU and POKEYSND modules moved to
-  POKEY module, where they actually belongs.
+  POKEY module, where they actually belong.
 
 o CPU emulation fixed (INDIRECT_X mode was overflowing) <Thor,
-  Golda, Raster>
+  Golda, RASTER>
 
 o CPU and Antic speeded up *slightly* by using type casts instead
   of direct anding with 0xff (the compiler got a chance to 
-  optimize it at least). <Raster>
+  optimize it at least). <RASTER>
 
 o a lot of uneccessary castings to (UWORD) and (UBYTE) was removed
-  from CPU emulation ;-) <Petr>
+  from CPU emulation
 
 o DiskDir of UI enhanced - now you can define up to eight
   directories where disk images are stored - then you can
@@ -76,7 +111,7 @@ Changes in 0.9.1
 o new POKEY v2.4 with sound channels filtering! Exclusively
   written by Ron Fries for Atari800 emulator. Thanks, Ron!
 
-o merge of Perry's and (Raster & Joy)'s source tree - great!
+o merge of Perry's and (RASTER & Petr)'s source tree - great!
   Current source can be compiled for DOS by either Makefile.dos
   or by Perry's Makefile.pm (with Pentium optimizations).
   Perry's Makefile needs DOS game library Allegro. The only
@@ -91,7 +126,7 @@ o major rewrite of DOS keyboard emulation - now allows two
   Better handling of START/SELECT/OPTION keys (these console keys
   are independent of the rest of keyboard).
   Screen view movement changed to Control-numeric pad (just
-  like emulated joy, but with Control key). <Raster>
+  like emulated joy, but with Control key). <RASTER>
 
 o ANTIC speeded up by narrowing the screen width to 42 chars
   (originally it was 48 chars wide, but no TV can show more 
@@ -101,7 +136,7 @@ o ANTIC speeded up by narrowing the screen width to 42 chars
 o Emulation of 320 kB of memory added. Two different modes are
   supported - Rambo and Compy Shop. Extended memory tested by
   Q-meg (alternative operating system for Atari320XE).
-  ROM/ShadowRAM and AtariXL Basic switching optimized. <Raster>
+  ROM/ShadowRAM and AtariXL Basic switching optimized. <RASTER>
 
 o Atari5200 emulation corrected (loading of ROMs, keyboard,
   paddles). Special support for Bounty Bob on Atari5200
@@ -116,10 +151,10 @@ Changes in 0.9.0
 
 o slight speed up in antic.c <Perry>
 
-o the right-most vertical line was missing on screen <Raster>
+o the right-most vertical line was missing on screen <RASTER>
 
 o DOS: BREAK key should not have auto-repeat,  Invers key added
-  <Raster>
+  <RASTER>
 
 o ANTIC now contains #ifdef POKEY_UPDATE. That should be defined
   in Makefiles for architectures where it's impossible to update
@@ -146,7 +181,7 @@ o GTIA now supports all possible combinations of PMG collisions. It
 
 o -configure now preloads the default filenames of ROM images. It also
   presets hold_option to 1 (for game players is better not to confuse
-  them with Atari Basic). <Raster>
+  them with Atari Basic). <RASTER>
 
 o xcolpf1 kludge was removed (antic, gtia, rt-config files).
 o DIRECT_VIDEO support was removed (configure.c)
@@ -157,13 +192,13 @@ o sio.c opens files in binary mode - works on DOS
 o Atari800 monitor changes: disassembler rewritten (now recognizes all 256
   opcodes and displays also cycles and hex codes), different (more logical?)
   commands: [D]isassembler, [C]hange memory, dump [M]emory (previously Y, M, D)
-  <Raster>
+  <RASTER>
 
 o Fixed DMACTL and GRACTL registers (difference between enabled PMG and enabled
-  DMA for PMG). <Raster>
+  DMA for PMG). <RASTER>
 
 o Introduced PMG flickering (try out POKE 53248,160:POKE 704,14:POKE 53277,3).
-  <Raster>
+  <RASTER>
 
 o DOS keyboard: added Ctrl-1 (stops scrolling), Ctrl-2 (bell), Ctrl-3 (EOF) and
   HOME key clears screen, END key stands for Atari BREAK key. INSERT and DELETE
@@ -175,7 +210,7 @@ Changes in 0.8.8
 
 o Antic, GTIA and CPU are now synchronized. Very precise timing
   (up to 99.87% compared to real Atari800XE) with CPU cycle counting
-  was implemented by Raster. This should be the final solution for
+  was implemented by RASTER. This should be the final solution for
   numerous DLI problems.
 
 Changes in 0.8.7
@@ -231,7 +266,7 @@ o DOS port emulates TAB and HELP key (HELP is mapped to F10 - not optimal,
 o DOS port has faster screen update with dosmemputl (Perry)
 
 o files on virtual drive are opened in binary mode (Perry)
-  and are listed in uppercase (Raster's suggestion)
+  and are listed in uppercase (RASTER's suggestion)
 
 o fixed bug in SIO_Mount causing crashes when mounting drives in Disk management
 

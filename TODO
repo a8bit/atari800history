@@ -19,3 +19,12 @@ o ADDLOG should become the standard for reporting errors (all printf() should
 o A new feature that would allow user to "freeze" the emulated program,
   save everything to disk and later restore the emulator in the same state.
   Idea invented by Rich so he hopefully will write the code as well :-)
+
+o enable digitised sound in the 'official' DOS port (Makefile.pm already does
+  support the digitised sound). The same applies to keyclick sound.
+
+o move the keyboard emulation of joy to cursor keys (fire to Ctrl and/or Alt)
+  and/or emulate two joysticks on the same keyboard. Though keep the current
+  state, the new features enable with a command switch
+
+o fix all known bugs (see BUGS file)

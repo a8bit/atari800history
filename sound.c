@@ -7,7 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/soundcard.h>
 
-#include "pokey11.h"
+#include "pokeysnd.h"
 
 static char *rcsid = "$Id: sound.c,v 1.5 1998/02/21 15:20:42 david Exp $";
 
@@ -22,6 +22,8 @@ static char *rcsid = "$Id: sound.c,v 1.5 1998/02/21 15:20:42 david Exp $";
 
 static char dsp_buffer[44100];
 static int sndbufsize;
+
+static int gain = 8;
 
 static sound_enabled = TRUE;
 static int dsp_fd;
@@ -96,7 +98,7 @@ void Voxware_Initialise(int *argc, char *argv[])
 		ioctl(dsp_fd, SNDCTL_DSP_SPEED, &dsp_sample_rate);
 		ioctl(dsp_fd, SOUND_PCM_READ_RATE, &dsp_sample_rate);
 
-		Pokey_sound_init(FREQ_17_EXACT, dsp_sample_rate);
+		Pokey_sound_init(FREQ_17_EXACT, dsp_sample_rate, 1);
 	}
 }
 
@@ -123,18 +125,18 @@ void Voxware_UpdateSound(void)
 void Atari_AUDC(int channel, int byte)
 {
 	channel--;
-	Update_pokey_sound(0xd201 + channel + channel, byte);
+	Update_pokey_sound(/* 0xd201 */ 1 + channel + channel, byte, 0, gain);
 }
 
 void Atari_AUDF(int channel, int byte)
 {
 	channel--;
-	Update_pokey_sound(0xd200 + channel + channel, byte);
+	Update_pokey_sound(/* 0xd200 */ 0 + channel + channel, byte, 0, gain);
 }
 
 void Atari_AUDCTL(int byte)
 {
-	Update_pokey_sound(0xd208, byte);
+	Update_pokey_sound(/* 0xd208 */ 8, byte, 0, gain);
 }
 
 #else

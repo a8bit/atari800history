@@ -363,7 +363,7 @@ int dossound_Initialise(int *argc, char *argv[])
 		}
 		memset(buffer, 0x00 /*,0x80 */ , buffer_len * updates_per_frame);
 
-		Pokey_sound_init(FREQ_17_EXACT, emulation_rate, 1, 1);
+		Pokey_sound_init(FREQ_17_EXACT, emulation_rate, 1);
 	}
 	else {
 		timesync = TRUE;

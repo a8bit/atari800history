@@ -269,7 +269,7 @@ OBJECTS	=	atari.o \
 		ui.o \
                 list.o \
                 sound.o \
-                pokey11.o
+                pokeysnd.o
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -334,8 +334,8 @@ rt-config.o	:	rt-config.c $(INCLUDES)
 sound.o		:	sound.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
 
-pokey11.o	:	pokey11.c pokey11.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
+pokeysnd.o	:	pokeysnd.c pokeysnd.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokeysnd.c
 
 clean	:
 	rm -f configure

@@ -4,7 +4,12 @@
 #include "atari.h"
 
 #define MAX_DRIVES 8
+#ifdef WIN32
+#include "windows.h"
+#define FILENAME_LEN MAX_PATH
+#else
 #define FILENAME_LEN 256
+#endif
 
 extern char sio_status[256];
 extern char sio_filename[MAX_DRIVES][FILENAME_LEN];

@@ -32,7 +32,8 @@ static int trig0;
 static int stick0;
 static int trig1;
 static int stick1;
-static int LPTjoy_addr[3] = {0,0,0};
+static int LPTjoy_addr[3] =
+{0, 0, 0};
 static int LPTjoy_num = 0;
 static int joyswap = FALSE;
 
@@ -117,7 +118,7 @@ void read_joystick(int centre_x, int centre_y)
 	if (jsy > (centre_y + threshold))
 		stick0 &= 0xfd;
 }
-#endif	/* AT_USE_ALLEGRO_JOY */
+#endif							/* AT_USE_ALLEGRO_JOY */
 
 int test_LPTjoy(int portno)
 {
@@ -125,7 +126,7 @@ int test_LPTjoy(int portno)
 
 	if (portno < 1 || portno > 3)
 		return FALSE;
-	addr = _farpeekw(_dos_ds,(portno-1)*2+0x408);
+	addr = _farpeekw(_dos_ds, (portno - 1) * 2 + 0x408);
 	if (addr == 0)
 		return FALSE;
 
@@ -140,17 +141,17 @@ void read_LPTjoy(int LPTidx, int joyport)
 {
 	int state = STICK_CENTRE, trigger = 1, val;
 
-	val = inportb(LPTjoy_addr[LPTidx]+1);
-	if (!(val&(1<<4)))
+	val = inportb(LPTjoy_addr[LPTidx] + 1);
+	if (!(val & (1 << 4)))
 		state &= STICK_FORWARD;
-	else if (!(val&(1<<5)))
+	else if (!(val & (1 << 5)))
 		state &= STICK_BACK;
-	if (!(val&(1<<6)))
+	if (!(val & (1 << 6)))
 		state &= STICK_RIGHT;
-	else if ((val&(1<<7)))
+	else if ((val & (1 << 7)))
 		state &= STICK_LEFT;
 
-	if (!(val&(1<<3)))
+	if (!(val & (1 << 3)))
 		trigger = 0;
 
 	if (joyport == 0) {
@@ -395,7 +396,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	if (joy_in)
 		joystick0(&js0_centre_x, &js0_centre_y);
 #else
-	joy_in = ( initialise_joystick() == 0 ? TRUE : FALSE );
+	joy_in = (initialise_joystick() == 0 ? TRUE : FALSE);
 #endif
 	if (joy_in)
 		printf(" found!\n");
@@ -451,17 +452,20 @@ int Atari_Exit(int run_monitor)
 
 /* -------------------------------------------------------------------------- */
 
-void Atari_DisplayScreen(UBYTE * screen)
-{
+void Atari_DisplayScreen(UBYTE * ascreen)
+ {
 	static int lace = 0;
+	unsigned long vga_ptr;
 
-	UBYTE *vga_ptr;
 	UBYTE *scr_ptr;
 	int ypos;
 	int x;
-
-	vga_ptr = (UBYTE *) 0xa0000;
-	scr_ptr = &screen[first_lno * ATARI_WIDTH + first_col];
+#ifdef AT_USE_ALLEGRO_COUNTER
+	static char speedmessage[200];
+	extern int speed_count;
+#endif
+	vga_ptr = 0xa0000;
+	scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
 
 	if (ypos_inc == 2) {
 		if (lace) {
@@ -477,7 +481,8 @@ void Atari_DisplayScreen(UBYTE * screen)
    _farnspokel((int) (vga_ptr + x), *(long *) (scr_ptr + x));
    }
  */
-		_dosmemputl(scr_ptr, 320 / 4, (long) vga_ptr);
+		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+
 		vga_ptr += vga_ptr_inc;
 		scr_ptr += scr_ptr_inc;
 	}
@@ -500,6 +505,8 @@ int Atari_Keyboard(void)
 	int keycode;
 	int shift_mask;
 	static int stillpressed;	/* is 5200 button 2 still pressed */
+
+	extern int ui_is_active;	/* to workaround a problem in 5200 stuff */
 
 #ifdef AT_USE_ALLEGRO_JOY
 	extern volatile int joy_left, joy_right, joy_up, joy_down;
@@ -568,7 +575,7 @@ int Atari_Keyboard(void)
  */
 
 /* Atari5200 stuff */
-	if (machine == Atari5200) {
+	if (machine == Atari5200 && !ui_is_active) {
 		POT[0] = 120;
 		POT[1] = 120;
 		if (!(stick0 & 0x04))
@@ -587,9 +594,9 @@ int Atari_Keyboard(void)
 		case 0x3f:				/* F5 */
 			/* if (SHIFT_KEY) */
 			keycode = AKEY_COLDSTART;	/* 5200 has no warmstart */
-		/*	else
-			keycode = AKEY_WARMSTART;
-		*/
+			/*  else
+			   keycode = AKEY_WARMSTART;
+			 */
 
 			break;
 		case 0x43:
@@ -1075,7 +1082,7 @@ int Atari_TRIG(int num)
 int Atari_POT(int num)
 {
 	if (machine == Atari5200) {
-		if (num >=0 && num < 2)
+		if (num >= 0 && num < 2)
 			return POT[num];
 	}
 

@@ -119,9 +119,15 @@ Perry McFarlane <ce596@freenet.toronto.on.ca>
 Thomas Richter <thor@math.tu-berlin.de>
 - GTIA collisions and third colour of players
 - new SIO code with formatting support
+- POKEY timers
+- ADC/SBC "V" bit bug found and fixed using Frodo 6502 emu source
 
 Petr Sumbera
 - LPTjoy idea and design of the interface
 
 Robert Golias <Golda>
-- UI enhancements
+- UI enhancements and DJGPP fixes
+- Monitor enhancements (esp. line assembler)
+
+Robert W. Brewer <rbrewer@Op.Net>
+- Voxware sound driver updated for POKEY v2.4

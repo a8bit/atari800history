@@ -51,4 +51,7 @@ extern UBYTE IRQ;
 #define REMEMBER_PC_STEPS 16
 extern UWORD remember_PC[REMEMBER_PC_STEPS];
 
+#define REMEMBER_JMP_STEPS 16
+extern UWORD remember_JMP[REMEMBER_JMP_STEPS];
+
 #endif

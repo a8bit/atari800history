@@ -407,7 +407,7 @@ void new_pm_scanline(void)
 
 UBYTE GTIA_GetByte(UWORD addr)
 {
-	UBYTE byte = 0;
+	UBYTE byte = 0xff;
 
 	addr &= 0xff1f;
 	switch (addr) {

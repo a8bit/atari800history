@@ -1754,6 +1754,9 @@ void ANTIC_RunDisplayList(void)
 	IR = 0;
 	normal_lastline = 0;
 	for (i = (ATARI_HEIGHT + 8 - ypos); i > 0; i--) {
+		firstlinecycles = nextlinecycles = DMAR;
+ 		anticmode = (IR & 0x0f);
+ 		anticm8 = (anticmode << 3);
 		do_antic();
 	}
 	nlines = 0;
@@ -1775,7 +1778,7 @@ void ANTIC_RunDisplayList(void)
 
 UBYTE ANTIC_GetByte(UWORD addr)
 {
-	UBYTE byte = 0;
+	UBYTE byte = 0xff;
 
 	addr &= 0xff0f;
 	switch (addr) {
@@ -1801,9 +1804,12 @@ UBYTE ANTIC_GetByte(UWORD addr)
 	case _VCOUNT:
 		byte = ypos >> 1;
 		break;
+/*
+	I have been told NMIEN was not readable on real Atari800
 	case _NMIEN:
 		byte = NMIEN;
 		break;
+*/
 	case _NMIST:
 		byte = NMIST;
 		break;

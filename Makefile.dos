@@ -1,5 +1,6 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
+#CFLAGS		= -c -O2 -DGNU_C -DMONITOR_BREAK -DMONITOR_HINTS -DMONITOR_ASSEMBLER
 CFLAGS		= -c -O2 -DGNU_C
 LD		= gcc
 LDFLAGS		=
@@ -123,9 +124,6 @@ prompts.o       :       prompts.c prompts.h
 
 sound.o		:       sound.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
-
-pokey11.o	:       pokey11.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
 
 sound_dos.o		:       sound_dos.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) sound_dos.c

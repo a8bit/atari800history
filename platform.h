@@ -11,7 +11,11 @@ void SetupVgaEnvironment();
 #endif
 int Atari_Exit(int run_monitor);
 int Atari_Keyboard(void);
-void Atari_DisplayScreen(UBYTE * screen);
+#ifdef WIN32
+void (*Atari_DisplayScreen)(UBYTE *screen);
+#else
+void Atari_DisplayScreen (UBYTE *screen);
+#endif
 
 int Atari_PORT(int num);
 int Atari_TRIG(int num);

@@ -40,7 +40,7 @@ void PIA_Initialise(int *argc, char *argv[])
 
 UBYTE PIA_GetByte(UWORD addr)
 {
-	UBYTE byte = 0;
+	UBYTE byte = 0xff;
 
 	if (machine == Atari)
 		addr &= 0xff03;

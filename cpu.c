@@ -1,8 +1,6 @@
 /* CPU.C
  *    Original Author     :   David Firth          *
- *      Trim by             :   Radek Sterba, RASTER *  
- *    Date of changes     :   28th Feb 1998        */
-
+ *    Last changes        :   26th April 1998, RASTER */
 /*
    Ideas for Speed Improvements
    ============================
@@ -93,6 +91,11 @@ extern int wsync_halt;			/* WSYNC_HALT */
 #ifdef MONITOR_BREAK
 UWORD remember_PC[REMEMBER_PC_STEPS];
 extern UWORD break_addr;
+UWORD remember_JMP[REMEMBER_JMP_STEPS];
+extern UBYTE break_step;
+extern UBYTE break_ret;
+extern UBYTE break_cim;
+extern int ret_nesting;
 #endif
 
 static UBYTE attrib[65536];
@@ -232,14 +235,33 @@ void NMI(void)
 	UBYTE data;
 
 	memory[0x0100 + S--] = regPC >> 8;
-	memory[0x0100 + S--] = (UBYTE)regPC;
+	memory[0x0100 + S--] = (UBYTE) regPC;
 	PHP;
 	SetI;
 	regPC = (memory[0xfffb] << 8) | memory[0xfffa];
 	regS = S;
+#ifdef MONITOR_BREAK
+	ret_nesting++;
+#endif
 }
 
 /* check pending IRQ, helps in (not only) Lucasfilm games */
+#ifdef MONITOR_BREAK
+#define CPUCHECKIRQ							\
+{									\
+	if (IRQ) {							\
+		if (!(regP & I_FLAG)) {					\
+			memory[0x0100 + S--] = PC >> 8;			\
+			memory[0x0100 + S--] = (UBYTE)PC;		\
+			PHP;						\
+			SetI;						\
+			PC = (memory[0xffff] << 8) | memory[0xfffe];	\
+			IRQ = 0;					\
+			ret_nesting+=1;					\
+		}							\
+	}								\
+}
+#else
 #define CPUCHECKIRQ											\
 {															\
 	if (IRQ) {												\
@@ -253,12 +275,12 @@ void NMI(void)
 		}													\
 	}														\
 }
-
+#endif
 /* sets the IRQ flag and checks it */
 void GenerateIRQ(void)
 {
 	IRQ = 1;
-	GO(0);			/* does not execute any instruction */
+	GO(0);						/* does not execute any instruction */
 }
 
 /*
@@ -292,7 +314,7 @@ int cycles[256] =
 	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,		/* Cx */
 	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,		/* Dx */
 	2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,		/* Ex */
-	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7	/* Fx */
+	2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7  	/* Fx */
 };
 
 /* decrement 1 or 2 cycles for conditional jumps */
@@ -1023,11 +1045,14 @@ int GO(int ncycles)
 		if (!(regP & I_FLAG)) {
 			UWORD retadr = PC + 1;
 			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = (UBYTE)retadr;
+			memory[0x0100 + S--] = (UBYTE) retadr;
 			SetB;
 			PHP;
 			SetI;
 			PC = (memory[0xffff] << 8) | memory[0xfffe];
+#ifdef MONITOR_BREAK
+			ret_nesting++;
+#endif
 		}
 		goto next;
 
@@ -1153,8 +1178,13 @@ int GO(int ncycles)
 	  opcode_20:				/* JSR abcd */
 		{
 			UWORD retadr = PC + 1;
+#ifdef MONITOR_BREAK
+			memmove(&remember_JMP[0], &remember_JMP[1], 2 * (REMEMBER_JMP_STEPS - 1));
+			remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
+			ret_nesting++;
+#endif
 			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = (UBYTE)retadr;
+			memory[0x0100 + S--] = (UBYTE) retadr;
 			PC = (memory[PC + 1] << 8) | memory[PC];
 		}
 		goto next;
@@ -1320,6 +1350,11 @@ int GO(int ncycles)
 		data = memory[0x0100 + ++S];
 		PC = (memory[0x0100 + ++S] << 8) | data;
 		CPUCHECKIRQ;
+#ifdef MONITOR_BREAK
+		if (break_ret && ret_nesting <= 0)
+			break_step = 1;
+		ret_nesting--;
+#endif
 		goto next;
 
 	  opcode_41:				/* EOR (ab,x) */
@@ -1453,6 +1488,11 @@ int GO(int ncycles)
 	  opcode_60:				/* RTS */
 		data = memory[0x0100 + ++S];
 		PC = ((memory[0x0100 + ++S] << 8) | data) + 1;
+#ifdef MONITOR_BREAK
+		if (break_ret && ret_nesting <= 0)
+			break_step = 1;
+		ret_nesting--;
+#endif
 		goto next;
 
 	  opcode_61:				/* ADC (ab,x) */
@@ -1509,7 +1549,7 @@ int GO(int ncycles)
 #ifdef CPU65C02
 		PC = (memory[addr + 1] << 8) | memory[addr];
 #else							/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
-		if ( (UBYTE)addr == 0xff)
+		if ((UBYTE) addr == 0xff)
 			PC = (memory[addr & ~0xff] << 8) | memory[addr];
 		else
 			PC = (memory[addr + 1] << 8) | memory[addr];
@@ -2111,6 +2151,11 @@ int GO(int ncycles)
 		UPDATE_LOCAL_REGS;
 		data = memory[0x0100 + ++S];
 		PC = ((memory[0x0100 + ++S] << 8) | data) + 1;
+#ifdef MONITOR_BREAK
+		if (break_ret && ret_nesting <= 0)
+			break_step = 1;
+		ret_nesting--;
+#endif
 		goto next;
 
 	  opcode_f2:				/* ESC #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
@@ -2134,6 +2179,7 @@ int GO(int ncycles)
    XAA [unofficial - X AND Mem to Acc]
    MKA [unofficial - Acc AND #$40 to Acc]
    MKX [unofficial - X AND #$40 to X]
+   Changes 26th April 1998 - tested on real Atari:
  */
 
 	  opcode_02:				/* CIM [unofficial - crash intermediate] */
@@ -2149,177 +2195,147 @@ int GO(int ncycles)
 		/* opcode_d2: Used for ESCRTS #ab (JAM) */
 		/* opcode_f2: Used for ESC #ab (JAM) */
 		PC--;
-
+		data = 0;
+#ifdef MONITOR_BREAK
+		break_cim = 1;
+		data = ESC_BREAK;
+#endif
+		UPDATE_GLOBAL_REGS;
+		CPU_GetStatus();
+		AtariEscape(data);
+		CPU_PutStatus();
+		UPDATE_LOCAL_REGS;
 		goto next;
-
 
 	  opcode_83:				/* AXS (ab,x) [unofficial - Store result A AND X] */
 		INDIRECT_X;
-
 		Z = N = A & X;
-
 		PutByte(addr, Z);
-
 		goto next;
-
 
 	  opcode_87:				/* AXS zpage [unofficial - Store result A AND X] */
 		ZPAGE;
-
 		Z = N = memory[addr] = A & X;
-
 		goto next;
-
 
 	  opcode_8f:				/* AXS abcd [unofficial - Store result A AND X] */
 		ABSOLUTE;
-
 		Z = N = A & X;
-
 		PutByte(addr, Z);
-
 		goto next;
-
 
 	  opcode_93:				/* AXS (ab),y [unofficial - Store result A AND X] */
 		INDIRECT_Y;
-
 		Z = N = A & X;
-
 		PutByte(addr, Z);
-
 		goto next;
-
 
 	  opcode_97:				/* AXS zpage,y [unofficial - Store result A AND X] */
 		ZPAGE_Y;
-
 		Z = N = memory[addr] = A & X;
-
 		goto next;
+
 
 
 	  opcode_03:				/* ASO (ab,x) [unofficial - ASL then ORA with Acc] */
 		INDIRECT_X;
-
 		data = GetByte(addr);
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		PutByte(addr, data); 
+		Z = N = A |= data;
 		goto next;
-
 
 	  opcode_07:				/* ASO zpage [unofficial - ASL then ORA with Acc] */
 		ZPAGE;
-
 		data = memory[addr];
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		memory[addr] = data; 
+		Z = N = A |= data;
 		goto next;
-
-
-	  opcode_0b:				/* ASO #ab [unofficial - ASL then ORA with Acc] */
-		data = memory[PC++];
-
-		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
-		goto next;
-
 
 	  opcode_0f:				/* ASO abcd [unofficial - ASL then ORA with Acc] */
 		ABSOLUTE;
-
 		data = GetByte(addr);
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		PutByte(addr, data); 
+		Z = N = A |= data;
 		goto next;
-
 
 	  opcode_13:				/* ASO (ab),y [unofficial - ASL then ORA with Acc] */
 		INDIRECT_Y;
-
 		data = GetByte(addr);
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		PutByte(addr, data); 
+		Z = N = A |= data;
 		goto next;
-
 
 	  opcode_17:				/* ASO zpage,x [unofficial - ASL then ORA with Acc] */
 		ZPAGE_X;
-
 		data = memory[addr];
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		memory[addr] = data; 
+		Z = N = A |= data;
 		goto next;
-
 
 	  opcode_1b:				/* ASO abcd,y [unofficial - ASL then ORA with Acc] */
 		ABSOLUTE_Y;
-
 		data = GetByte(addr);
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		PutByte(addr, data); 
+		Z = N = A |= data;
 		goto next;
-
 
 	  opcode_1f:				/* ASO abcd,x [unofficial - ASL then ORA with Acc] */
 		ABSOLUTE_X;
-
 		data = GetByte(addr);
-
 		C = (data & 0x80) ? 1 : 0;
-
-		Z = N = A | (data << 1);
-
+		data = (data << 1);
+		PutByte(addr, data); 
+		Z = N = A |= data;
 		goto next;
 
 
-	  opcode_8b:				/* XAA #ab [unofficial - X AND Mem to Acc] */
-		Z = N = A = X & memory[PC++];
 
+	  opcode_0b:				/* ASO #ab [unofficial - ASL then ORA with Acc] */
+		/* !!! Tested on real Atari => AND #ab */
+		AND(memory[PC++]);
+		goto next;
+
+
+
+	  opcode_8b:				/* XAA #ab [unofficial - X AND Mem to Acc] */
+		/* !!! Tested on real Atari => AND #ab */
+		AND(memory[PC++]);
 		goto next;
 
 
 	  opcode_9b:				/* XAA abcd,y [unofficial - X AND Mem to Acc] */
+		/* !!! Tested on real Atari => Store result A AND X AND 0x01 to mem (no modify FLAG) !!!!! */
+		/* address mode ABSOLUTE Y */
 		ABSOLUTE_Y;
-
-		Z = N = A = X & GetByte(addr);
-
+		PutByte( addr, A & X & 0x01 );
 		goto next;
 
 
-	  opcode_9f:				/* MKA abcd [unofficial - Acc AND #$40 to Acc] */
-		ABSOLUTE;
-
-		Z = N = A &= 0x04;
-
+	  opcode_9f:				/* MKA abcd [unofficial - Acc AND #$04 to Acc] */
+		/* !!! Tested on real Atari => Store result A AND X AND 0x01 to mem (no modify FLAG) !!!!! */
+		/* address mode ABSOLUTE Y */
+		ABSOLUTE_Y;
+		PutByte( addr, A & X & 0x01 );
 		goto next;
 
 
-	  opcode_9e:				/* MKX abcd [unofficial - X AND #$40 to X] */
-		ABSOLUTE;
-
-		Z = N = X &= 0x04;
-
+	  opcode_9e:				/* MKX abcd [unofficial - X AND #$04 to X] */
+		/* !!! Tested on real Atari => Store result A AND X AND 0x01 to mem (no modify FLAG) !!!!! */
+		/* address mode ABSOLUTE Y */
+		ABSOLUTE_Y;
+		PutByte( addr, A & X & 0x01 );
 		goto next;
 
 
@@ -2327,150 +2343,118 @@ int GO(int ncycles)
    LSE [unofficial - LSR then EOR result with A]
    ALR [unofficial - Acc AND Data, LSR result]
    ARR [unofficial - Acc AND Data, ROR result]
+   Changes 26th April 1998 - tested on real Atari:
  */
 	  opcode_43:				/* LSE (ab,x) [unofficial - LSR then EOR result with A] */
 		INDIRECT_X;
-
 		data = GetByte(addr);
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		PutByte(addr, data);
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_47:				/* LSE zpage [unofficial - LSR then EOR result with A] */
 		ZPAGE;
-
 		data = memory[addr];
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		memory[addr] = data;
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_4f:				/* LSE abcd [unofficial - LSR then EOR result with A] */
 		ABSOLUTE;
-
 		data = GetByte(addr);
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		PutByte(addr, data);
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_53:				/* LSE (ab),y [unofficial - LSR then EOR result with A] */
 		INDIRECT_Y;
-
 		data = GetByte(addr);
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		PutByte(addr, data);
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_57:				/* LSE zpage,x [unofficial - LSR then EOR result with A] */
 		ZPAGE_X;
-
 		data = memory[addr];
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		memory[addr] = data;
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_5b:				/* LSE abcd,y [unofficial - LSR then EOR result with A] */
 		ABSOLUTE_Y;
-
 		data = GetByte(addr);
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		PutByte(addr, data);
+		Z = N = A ^= data;
 		goto next;
 
 
 	  opcode_5f:				/* LSE abcd,x [unofficial - LSR then EOR result with A] */
 		ABSOLUTE_X;
-
 		data = GetByte(addr);
-
 		C = data & 1;
-
-		Z = N = A ^ (data >> 1);
-
+		data = data >> 1;
+		PutByte(addr, data);
+		Z = N = A ^= data;
 		goto next;
+
 
 
 	  opcode_4b:				/* ALR #ab [unofficial - Acc AND Data, LSR result] */
 		data = A & memory[PC++];
-
 		C = data & 1;
-
-		Z = N = (data >> 1);
-
+		Z = N = A = (data >> 1);
 		goto next;
 
 
 	  opcode_6b:				/* ARR #ab [unofficial - Acc AND Data, ROR result] */
 		data = A & memory[PC++];
-
 		if (C) {
-
 			C = data & 1;
-
-			Z = N = (data >> 1) | 0x80;
-
+			Z = N = A = (data >> 1) | 0x80;
 		}
-
 		else {
-
 			C = data & 1;
-
-			Z = N = (data >> 1);
-
+			Z = N = A = (data >> 1);
 		}
-
 		goto next;
 
 
 /* UNDOCUMENTED INSTRUCTIONS (Part III)
    RLA [unofficial - ROL Mem, then AND with A]
+   Changes 26th April 1998 - tested on real Atari:
  */
 	  opcode_23:				/* RLA (ab,x) [unofficial - ROL Mem, then AND with A] */
 		INDIRECT_X;
 
 	  rla:
 		data = GetByte(addr);
-
 		if (C) {
-
 			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1) | 1;
-
+			data = (data << 1) | 1;
 		}
-
 		else {
-
 			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1);
-
+			data = (data << 1);
 		}
-
-		PutByte(addr, Z);
-
-		Z = N = A & Z;
-
+		PutByte(addr, data);
+		Z = N = A &= data;
 		goto next;
 
 
@@ -2479,102 +2463,69 @@ int GO(int ncycles)
 
 	  rla_zpage:
 		data = memory[addr];
-
 		if (C) {
-
 			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1) | 1;
-
+			data = (data << 1) | 1;
 		}
-
 		else {
-
 			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1);
-
+			data = (data << 1);
 		}
-
-		memory[addr] = Z;
-
-		Z = N = A & Z;
-
+		memory[addr] = data;
+		Z = N = A &= data;
 		goto next;
 
 
 	  opcode_2b:				/* RLA #ab [unofficial - ROL Mem, then AND with A] */
-		data = memory[PC++];
-
-		if (C) {
-
-			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1) | 1;
-
-		}
-
-		else {
-
-			C = (data & 0x80) ? 1 : 0;
-			Z = N = (data << 1);
-
-		}
-
-		Z = N = A & Z;
-
+		/* !!! Tested on real Atari => AND #ab */
+		AND(memory[PC++]);
 		goto next;
 
 
 	  opcode_2f:				/* RLA abcd [unofficial - ROL Mem, then AND with A] */
 		ABSOLUTE;
-
 		goto rla;
 
 
 	  opcode_33:				/* RLA (ab),y [unofficial - ROL Mem, then AND with A] */
 		INDIRECT_Y;
-
 		goto rla;
 
 
 	  opcode_37:				/* RLA zpage,x [unofficial - ROL Mem, then AND with A] */
 		ZPAGE_X;
-
 		goto rla_zpage;
 
 
 	  opcode_3b:				/* RLA abcd,y [unofficial - ROL Mem, then AND with A] */
 		ABSOLUTE_Y;
-
 		goto rla;
 
 
 	  opcode_3f:				/* RLA abcd,x [unofficial - ROL Mem, then AND with A] */
 		ABSOLUTE_X;
-
 		goto rla;
 
 
 /* R.S.980113<<<
    R.S.980114>>>
    RRA [unofficial - ROR Mem, then ADC to Acc]
+   Changes 26th April 1998 - tested on real Atari:
  */
 
 	  opcode_63:				/* RRA (ab,x) [unofficial - ROR Mem, then ADC to Acc] */
 		INDIRECT_X;
 	  rra:
 		data = GetByte(addr);
-
 		if (C) {
 			C = data & 1;
-			Z = N = (data >> 1) | 0x80;
+			data = (data >> 1) | 0x80;
 		}
-
 		else {
 			C = data & 1;
-			Z = N = (data >> 1);
+			data = (data >> 1);
 		}
-
-		PutByte(addr, Z);
-
+		PutByte(addr, data);
 		goto adc;
 
 
@@ -2583,76 +2534,68 @@ int GO(int ncycles)
 
 	  rra_zpage:
 		data = memory[addr];
-
 		if (C) {
 			C = data & 1;
-			Z = N = (data >> 1) | 0x80;
+			data = (data >> 1) | 0x80;
 		}
-
 		else {
 			C = data & 1;
-			Z = N = (data >> 1);
+			data = (data >> 1);
 		}
-
-		memory[addr] = Z;
-
+		memory[addr] = data;
 		goto adc;
 
 
 	  opcode_6f:				/* RRA abcd [unofficial - ROR Mem, then ADC to Acc] */
 		ABSOLUTE;
-
 		goto rra;
 
 
 	  opcode_73:				/* RRA (ab),y [unofficial - ROR Mem, then ADC to Acc] */
 		INDIRECT_Y;
-
 		goto rra;
 
 
 	  opcode_77:				/* RRA zpage,x [unofficial - ROR Mem, then ADC to Acc] */
 		ZPAGE_X;
-
 		goto rra_zpage;
 
 
 	  opcode_7b:				/* RRA abcd,y [unofficial - ROR Mem, then ADC to Acc] */
 		ABSOLUTE_Y;
-
 		goto rra;
 
 
 	  opcode_7f:				/* RRA abcd,x [unofficial - ROR Mem, then ADC to Acc] */
 		ABSOLUTE_X;
-
 		goto rra;
 
 
-/* OAL [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
 
-	  opcode_ab:				/* OAL #ab [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
-		A |= 0xEE;
+/* 
+   OAL [unofficial - ORA Acc with #$EE, then AND with data, then TAX] 
+   Changes 26th April 1998 - tested on real Atari:
+*/
 
+	  opcode_ab:  /* OAL #ab [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
+		/* !!! Tested on real Atari => AND #ab, TAX */
 		A &= memory[PC++];
-
 		Z = N = X = A;
-
 		goto next;
 
 
-/* DCM [unofficial - DEC Mem then CMP with Acc] */
+/* 
+  DCM [unofficial - DEC Mem then CMP with Acc] 
+  26th April 1998 - tested on real Atari:
+*/
 
 	  opcode_c3:				/* DCM (ab,x) [unofficial - DEC Mem then CMP with Acc] */
 		INDIRECT_X;
 
 	  dcm:
 		data = GetByte(addr) - 1;
-
 		PutByte(addr, data);
-
 		CMP(data);
-
 		goto next;
 
 
@@ -2660,44 +2603,37 @@ int GO(int ncycles)
 		ZPAGE;
 
 	  dcm_zpage:
-
 		data = memory[addr] = memory[addr] - 1;
-
 		CMP(data);
-
 		goto next;
 
 
 	  opcode_cf:				/* DCM abcd [unofficial - DEC Mem then CMP with Acc] */
 		ABSOLUTE;
-
 		goto dcm;
 
 
 	  opcode_d3:				/* DCM (ab),y [unofficial - DEC Mem then CMP with Acc] */
 		INDIRECT_Y;
-
 		goto dcm;
 
 
 	  opcode_d7:				/* DCM zpage,x [unofficial - DEC Mem then CMP with Acc] */
 		ZPAGE_X;
-
 		goto dcm_zpage;
 
 
 	  opcode_db:				/* DCM abcd,y [unofficial - DEC Mem then CMP with Acc] */
 		ABSOLUTE_Y;
-
 		goto dcm;
 
 
 	  opcode_df:				/* DCM abcd,x [unofficial - DEC Mem then CMP with Acc] */
 		ABSOLUTE_X;
-
 		goto dcm;
 
 
+/* end of changes 26th April 1998 */
 /* SAX   [unofficial - A AND X, then SBC Mem, store to X] */
 
 	  opcode_cb:				/* SAX #ab [unofficial - A AND X, then SBC Mem, store to X] */
@@ -2712,12 +2648,12 @@ int GO(int ncycles)
 			UWORD t_data;
 
 
-			t_data = data + ! C;
+			t_data = data + !C;
 
 			temp = X - t_data;
 
 
-			Z = N = (UBYTE)temp;
+			Z = N = (UBYTE) temp;
 
 
 			V = (~(X ^ t_data)) & (Z ^ X) & 0x80;
@@ -2835,7 +2771,7 @@ int GO(int ncycles)
 		ABSOLUTE_Y;
 
 		Z = N = A = X = GetByte(addr) & 0xfd;
-		S = (UBYTE)(A - 4);
+		S = (UBYTE) (A - 4);
 
 		goto next;
 
@@ -2846,8 +2782,39 @@ int GO(int ncycles)
 		goto sbc;
 
 
+/* ---------------------------------------------- */
+/* ADC and SBC routines */
+
 	  adc:
 		if (!(regP & D_FLAG)) {
+
+	/* THOR: */
+      UWORD tmp;
+      /* Binary mode */
+      tmp = A + data + (UWORD)C;
+      C = tmp > 0xff;
+      V = !((A ^ data) & 0x80) && ((A ^ tmp) & 0x80);
+      Z = N = A = tmp;
+    } else {
+      UWORD al,ah;      
+      /* Decimal mode */
+      al = (A & 0x0f) + (data & 0x0f) + (UWORD)C; /* lower nybble */
+      if (al > 9) al += 6;          /* BCD fixup for lower nybble */
+      ah = (A >> 4) + (data >> 4);  /* Calculate upper nybble */
+      if (al > 0x0f) ah++;
+      
+      Z = A + data + (UWORD)C;	/* Set flags */
+      N = ah << 4;	        /* Only highest bit used */
+      V = (((ah << 4) ^ A) & 0x80) && !((A ^ data) & 0x80);
+      
+      if (ah > 9) ah += 6;	/* BCD fixup for upper nybble */
+      C = ah > 0x0f;		/* Set carry flag */
+      A = (ah << 4) | (al & 0x0f);	/* Compose result */
+    }
+    goto next;
+
+
+	/* OLD
 			UWORD temp;
 			UWORD t_data;
 
@@ -2855,6 +2822,7 @@ int GO(int ncycles)
 			Z = N = temp = A + t_data;
 
 			V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
+
 			C = temp >> 8;
 			A = Z;
 		}
@@ -2873,22 +2841,53 @@ int GO(int ncycles)
 			A = Z;
 		}
 		goto next;
+	 OLD */
 
 	  sbc:
+
 		if (!(regP & D_FLAG)) {
+
+	/* THOR */
+      UWORD tmp;
+
+      tmp = A - data - !C;
+      
+      C = tmp < 0x100;
+      V = ((A ^ tmp) & 0x80) && ((A ^ data) & 0x80);
+      Z = N = A = tmp;
+    } else {
+      UWORD al, ah, tmp;
+
+      tmp = A - data - !C;
+      
+      al = (A & 0x0f) - (data & 0x0f) - !C;	/* Calculate lower nybble */
+      ah = (A >> 4) - (data >> 4);		/* Calculate upper nybble */
+      if (al & 0x10) {
+	al -= 6;	/* BCD fixup for lower nybble */
+	ah--;
+      }
+      if (ah & 0x10) ah -= 6;	 /* BCD fixup for upper nybble */
+      
+      C = tmp < 0x100;		 /* Set flags */
+      V = ((A ^ tmp) & 0x80) && ((A ^ data) & 0x80);
+      Z = N = tmp;
+      
+      A = (ah << 4) | (al & 0x0f);	/* Compose result */
+    }
+    goto next;
+
+
+	/* OLD
 			UWORD temp;
 			UWORD t_data;
 
-			t_data = data + ! C;
+			t_data = data + !C;
 			temp = A - t_data;
 
-			Z = N = (UBYTE)temp;
+			Z = N = (UBYTE) temp;
 
-/*
- * This was the old code that I have been using upto version 0.5.2
- *  C = (A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
- */
 			V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
+
 			C = (temp > 255) ? 0 : 1;
 			A = Z;
 		}
@@ -2909,8 +2908,21 @@ int GO(int ncycles)
 			A = Z;
 		}
 		goto next;
+	  OLD */
+
+
 
 	  next:
+#ifdef MONITOR_BREAK
+		if (break_step) {
+			data = ESC_BREAK;
+			UPDATE_GLOBAL_REGS;
+			CPU_GetStatus();
+			AtariEscape(data);
+			CPU_PutStatus();
+			UPDATE_LOCAL_REGS;
+		}
+#endif
 		continue;
 	}
 

@@ -41,7 +41,7 @@ ULONG TimeBase = DIV_64;
 
 UBYTE POKEY_GetByte(UWORD addr)
 {
-	UBYTE byte = 0;
+	UBYTE byte = 0xff;
 	static int rand_init = 0;
 
 	addr &= 0xff0f;

@@ -23,8 +23,8 @@
 extern char	memory_log[];
 extern char	scratch[];
 extern unsigned int	memory_log_index;
-#define ADDLOG( x ) { memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
-#define ADDLOGTEXT( x ) { memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
+#define ADDLOG( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
+#define ADDLOGTEXT( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
 #else
 #ifdef VMS
 #include <unixio.h>
@@ -236,7 +236,7 @@ int SeekSector(int unit, int sector)
 	int size;
 
 	sprintf(sio_status, "%d: %d", unit + 1, sector);
-	SizeOfSector(unit, sector, &size, &offset);
+	SizeOfSector((UBYTE)unit, sector, &size, &offset);
 	/* printf("Sector %x,Offset: %x\n",sector,offset); */
 	if (offset > lseek(disk[unit], 0L, SEEK_END)) {
 #ifdef DEBUG
@@ -383,7 +383,7 @@ int ReadStatusBlock(int unit, UBYTE * buffer)
 	int size;
 
 	if (drive_status[unit] != Off) {
-		SizeOfSector(unit, 0x168, &size, NULL);
+		SizeOfSector((UBYTE)unit, 0x168, &size, NULL);
 		buffer[0] = 40;			/* # of tracks */
 		buffer[1] = 1;			/* step rate. No idea what this means */
 		buffer[2] = 0;			/* sectors per track. HI byte */
@@ -457,7 +457,7 @@ void SIO(void)
 	UBYTE result = 0x00;
 	ATPtr data = DPeek(0x304);
 	int length = DPeek(0x308);
-	int realsize;
+	int realsize = 0;
 	int cmd = Peek(0x302);
 
 #ifdef MOTIF
@@ -629,13 +629,13 @@ void Command_Frame(void)
 			break;
 		case 0x50:				/* Write */
 		case 0x57:
-			SizeOfSector(unit, sector, &realsize, NULL);
+			SizeOfSector((UBYTE)unit, sector, &realsize, NULL);
 			ExpectedBytes = realsize + 1;
 			DataIndex = 0;
 			TransferStatus = SIO_WriteFrame;
 			break;
 		case 0x52:				/* Read */
-			SizeOfSector(unit, sector, &realsize, NULL);
+			SizeOfSector((UBYTE)unit, sector, &realsize, NULL);
 			DataBuffer[0] = ReadSector(unit, sector, DataBuffer + 1);
 			DataBuffer[1 + realsize] = ChkSum(DataBuffer + 1, realsize);
 			DataIndex = 0;
@@ -697,8 +697,10 @@ void SwitchCommandFrame(int onoff)
 	if (onoff) {				/* Enabled */
 		if (TransferStatus != SIO_NoFrame)
 #ifdef WIN32
+		{
 			sprintf( scratch, "Unexpected command frame %x.\n", TransferStatus);
 			ADDLOG( scratch );
+		}
 #else
 			printf("Unexpected command frame %x.\n", TransferStatus);
 #endif
@@ -716,8 +718,10 @@ void SwitchCommandFrame(int onoff)
 			TransferStatus != SIO_ReadFrame) {
 			if (!(TransferStatus == SIO_CommandFrame && CommandIndex == 0))
 #ifdef WIN32
+			{
 				sprintf( scratch, "Command frame %02x unfinished.\n", TransferStatus);
 				ADDLOG( scratch );
+			}
 #else
 				printf("Command frame %02x unfinished.\n", TransferStatus);
 #endif
@@ -821,8 +825,10 @@ void SIO_PutByte(int byte)
 		break;
 	default:
 #ifdef WIN32
+		{
 		sprintf( scratch, "Unexpected data output :%x\n", byte);
 		ADDLOG( scratch );
+		}
 #else
 		printf("Unexpected data output :%x\n", byte);
 #endif

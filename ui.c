@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
-#include <dirent.h>
 #include <stdlib.h>				/* for free() */
-
+#ifdef WIN32
+#include "winatari.h"
+#else
+#include <dirent.h>
+#endif
 #include "rt-config.h"
 #include "atari.h"
 #include "cpu.h"
@@ -14,6 +17,7 @@
 #define FALSE 0
 #define TRUE 1
 
+int ui_is_active = FALSE;
 static int current_disk_directory = 0;
 static char charset[8192];
 extern UBYTE atarixl_os[16384];
@@ -21,6 +25,15 @@ extern unsigned char ascii_to_screen[128];
 
 extern int mach_xlxe;
 extern int Ram256;
+
+#ifdef WIN32
+extern int		iKbBuffer[KEYBOARD_BUFFER_SIZE];
+extern int		nKbBufferChars;
+extern ULONG	unAtariState;
+extern void SafeShowScreen( void );
+extern HWND		MainhWnd;
+unsigned long hThread = 0L;
+#endif
 
 unsigned char key_to_ascii[256] =
 {
@@ -69,11 +82,26 @@ int GetKeyPress(UBYTE * screen)
 {
 	int keycode;
 
-	usleep(100000UL);
+#ifdef DJGPP
+	usleep(100000UL);		/* try to slow down the crazy autorepeat */
+#endif
 	do {
 #ifndef BASIC
 		Atari_DisplayScreen(screen);
 #endif
+#ifdef WIN32
+		while( !nKbBufferChars )
+		{
+			SafeShowScreen();
+			SleepEx( 100, TRUE );
+		}
+		if( !(unAtariState & ATARI_RUNNING ) || !hThread )
+		{
+			hThread = 0L;
+/*			ExitThread( 0 ); */
+			_endthread();
+		}
+#endif	/* WIN32 */
 		keycode = Atari_Keyboard();
 	} while (keycode == AKEY_NONE);
 
@@ -380,6 +408,39 @@ int FilenameSort(char *filename1, char *filename2)
 
 List *GetDirectory(char *directory)
 {
+#ifdef WIN32
+	List *list = NULL;
+	char	filesearch[MAX_PATH];
+	WIN32_FIND_DATA FindFileData;
+	HANDLE	hSearch;
+	
+	strcpy( filesearch, directory );
+	strcat( filesearch, "\\*.*" );
+
+	hSearch = FindFirstFile( filesearch, &FindFileData );
+	
+	if( hSearch )
+	{
+		list = ListCreate();
+		if (!list) {
+			MessageBox( NULL, "Out of memory", "Atari800Win", MB_OK );
+			return NULL;
+		}
+		ListAddTail( list, FindFileData.cFileName);
+
+		while( FindNextFile( hSearch, &FindFileData ) ) {
+			char *filename = _strdup( FindFileData.cFileName );
+			if( !filename )
+				MessageBox( NULL, "Out of memory", "Atari800Win", MB_OK );
+			else
+				ListAddTail( list, filename);
+		}
+
+		FindClose( hSearch );
+
+		ListSort(list, FilenameSort);
+	}
+#else
 	DIR *dp = NULL;
 	List *list = NULL;
 
@@ -407,6 +468,7 @@ List *GetDirectory(char *directory)
 
 		ListSort(list, FilenameSort);
 	}
+#endif
 	return list;
 }
 
@@ -823,6 +885,10 @@ void ui(UBYTE * screen)
 		"Exit Emulator"
 	};
 
+	ui_is_active = TRUE;
+#ifdef WIN32
+	unAtariState |= ATARI_UI_ACTIVE;
+#endif
 	/* Sound_Active(FALSE); */
 	if (!initialised) {
 		if (mach_xlxe)
@@ -865,9 +931,23 @@ void ui(UBYTE * screen)
 			Coldstart();
 			break;
 		case 6:
+#ifdef WIN32
+			PostMessage( MainhWnd, WM_CLOSE, 0, 0L );
+			hThread = 0L;
+			/* ExitThread(0); */
+			_endthread();
+#else
 			Atari800_Exit(0);
 			exit(0);
+#endif
 		}
 	}
 	/* Sound_Active(TRUE); */
+	ui_is_active = FALSE;
+#ifdef WIN32
+	unAtariState &= ~ATARI_UI_ACTIVE;
+	hThread = 0L;
+	/* ExitThread(0); */
+	_endthread();
+#endif
 }
