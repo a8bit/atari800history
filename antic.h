@@ -25,8 +25,6 @@
 
 extern UBYTE CHACTL;
 extern UBYTE CHBASE;
-extern UBYTE DLISTH;
-extern UBYTE DLISTL;
 extern UBYTE DMACTL;
 extern UBYTE HSCROL;
 extern UBYTE NMIEN;
@@ -35,14 +33,9 @@ extern UBYTE PMBASE;
 extern UBYTE VSCROL;
 
 extern int ypos;
-extern int wsync_halt;
-extern int antic23f;			/* true if in antic modes 2, 3 or f */
+extern UBYTE wsync_halt;
 
 extern UBYTE *scrn_ptr;
-extern int xmin;
-extern int xmax;
-extern int dmactl_xmin_noscroll;
-extern int dmactl_xmax_noscroll;
 extern ULONG *atari_screen;
 #ifdef BITPL_SCR
 extern ULONG *atari_screen_b;
@@ -51,8 +44,9 @@ extern ULONG *atari_screen2;
 #endif
 
 void ANTIC_Initialise(int *argc, char *argv[]);
+void ANTIC_Reset(void);
 void ANTIC_RunDisplayList(void);
 UBYTE ANTIC_GetByte(UWORD addr);
-int ANTIC_PutByte(UWORD addr, UBYTE byte);
+void ANTIC_PutByte(UWORD addr, UBYTE byte);
 
 #endif

@@ -34,11 +34,6 @@
 #endif
 
 typedef enum {
-	TV_PAL,
-	TV_NTSC
-} TVmode;
-
-typedef enum {
 	Atari,
 	AtariXL,
 	AtariXE,
@@ -51,17 +46,33 @@ typedef enum {
 #define LED_WRITE		0x20
 #define LED_OTHER		0x40
 
-extern TVmode tv_mode;
+#define TV_PAL 312
+#define TV_NTSC 262
+
+extern int tv_mode;				/* now it is simply number of scanlines */
 extern Machine machine;
 extern int verbose;
-extern unsigned int cpu_clock;		/* Global tacts counter */
 extern int draw_display;		/* Draw actualy generated screen */
 
 #define FALSE	0
 #define TRUE	1
-#define ATARI_WIDTH  (384)
-#define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9g"
+
+#define ATARI_WIDTH  384
+#define ATARI_HEIGHT 240
+
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9h"
+
+extern int xpos;
+extern int xpos_limit;
+#define WSYNC_C	110
+#define LINE_C	114
+#define max_ypos tv_mode		/* number of scanlines */
+/* if tv_mod is enum, max_ypos is (tv_mod == TV_PAL ? 312 : 262) */
+
+#ifndef NO_VOL_ONLY
+extern unsigned int screenline_cpu_clock;
+#define cpu_clock (screenline_cpu_clock + xpos)
+#endif
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -169,6 +180,7 @@ struct ATR_Header {
 #define AKEY_PIL -6
 #define AKEY_UI -7
 #define AKEY_SCREENSHOT -8
+#define AKEY_SCREENSHOT_INTERLACE -9
 
 #define AKEY_SHFT 0x40
 #define AKEY_CTRL 0x80
@@ -384,7 +396,7 @@ int Initialise_Atari320XE(void);
 int Initialise_Atari5200(void);
 int Atari800_Exit(int run_monitor);
 UBYTE Atari800_GetByte(UWORD addr);
-int Atari800_PutByte(UWORD addr, UBYTE byte);
+void Atari800_PutByte(UWORD addr, UBYTE byte);
 void AtariEscape(UBYTE esc_code);
 int Initialise_EmuOS(void);
 int Insert_Cartridge(char *filename);

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -754,13 +755,13 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			status = get_hex(NULL, &addr1);
 			status |= get_hex(NULL, &addr2);
 
-			if (status) {
+			if (status && addr1 <= addr2) {
 				SetROM(addr1, addr2);
 				printf("Changed Memory from %4x to %4x into ROM\n",
 					   addr1, addr2);
 			}
 			else {
-				printf("*** Memory Unchanged (Missing Parameter) ***\n");
+				printf("*** Memory Unchanged (Bad or missing Parameter) ***\n");
 			}
 		}
 		else if (strcmp(t, "RAM") == 0) {
@@ -772,13 +773,13 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			status = get_hex(NULL, &addr1);
 			status |= get_hex(NULL, &addr2);
 
-			if (status) {
+			if (status && addr1 <= addr2) {
 				SetRAM(addr1, addr2);
 				printf("Changed Memory from %4x to %4x into RAM\n",
 					   addr1, addr2);
 			}
 			else {
-				printf("*** Memory Unchanged (Missing Parameter) ***\n");
+				printf("*** Memory Unchanged (Bad or missing Parameter) ***\n");
 			}
 		}
 		else if (strcmp(t, "HARDWARE") == 0) {
@@ -790,13 +791,13 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			status = get_hex(NULL, &addr1);
 			status |= get_hex(NULL, &addr2);
 
-			if (status) {
+			if (status && addr1 <= addr2) {
 				SetHARDWARE(addr1, addr2);
 				printf("Changed Memory from %4x to %4x into HARDWARE\n",
 					   addr1, addr2);
 			}
 			else {
-				printf("*** Memory Unchanged (Missing Parameter) ***\n");
+				printf("*** Memory Unchanged (Bad or missing Parameter) ***\n");
 			}
 		}
 #endif
@@ -1027,8 +1028,8 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				   "COLPM3=%02x    COLPF0=%02x    COLPF1=%02x\n",
 				   COLPM0, COLPM1, COLPM2, COLPM3, COLPF0, COLPF1);
 			printf("COLPF2=%02x    COLPF3=%02x    COLBK= %02x    "
-				   "PRIOR= %02x    GRACTL=%02x\n",
-				   COLPF2, COLPF3, COLBK, PRIOR, GRACTL);
+				   "PRIOR= %02x    VDELAY=%02x    GRACTL=%02x\n",
+				   COLPF2, COLPF3, COLBK, PRIOR, VDELAY, GRACTL);
 		}
 #ifdef MONITOR_ASSEMBLER
                 else if (strcmp(t,"A") == 0)
@@ -1183,10 +1184,10 @@ int find_symbol(UWORD addr)
       else if (symtable[mi].addr>addr) hi=mi;
         else lo=mi+1;
   }
-  if (symtable[mi].addr==addr) 
-         /* return the lowest index of symbol with given address */
-         if (mi>0 && symtable[mi-1].addr==addr) return mi-1; else return mi;
-    else return -1;
+  if (symtable[mi].addr==addr)
+        /* return the lowest index of symbol with given address */
+	return (mi>0 && symtable[mi-1].addr==addr) ? mi-1 : mi;
+  else return -1;
 }
 #endif
 UWORD show_instruction(UWORD inad, int wid)

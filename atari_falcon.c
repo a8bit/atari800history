@@ -240,7 +240,7 @@ void SetupEmulatedEnvironment(void)
 #ifdef BITPL_SCR
 	if (delta_screen) {
 		if (atari_screen_b != NULL) {
-			memset(atari_screen_b, 0, ((ATARI_HEIGHT + 16) * ATARI_WIDTH));
+			memset(atari_screen_b, 0, (ATARI_HEIGHT * ATARI_WIDTH));
 		}
 	}
 #endif

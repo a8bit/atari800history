@@ -11,13 +11,13 @@ int PutByte(UWORD addr, UBYTE byte);
 extern UBYTE memory[65536];
 extern UBYTE attrib[65536];
 #define	GetByte(addr)		((attrib[addr] == HARDWARE) ? Atari800_GetByte(addr) : memory[addr])
-#define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) if (Atari800_PutByte(addr,byte)) break;
+#define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) Atari800_PutByte(addr,byte);
 #define RAM 0
 #define ROM 1
 #define HARDWARE 2
-void SetRAM(int addr1, int addr2);
-void SetROM(int addr1, int addr2);
-void SetHARDWARE(int addr1, int addr2);
+#define SetRAM(addr1,addr2) memset(attrib+addr1,RAM,addr2-addr1+1)
+#define SetROM(addr1,addr2) memset(attrib+addr1,ROM,addr2-addr1+1)
+#define SetHARDWARE(addr1,addr2) memset(attrib+addr1,HARDWARE,addr2-addr1+1)
 #endif
 #define Poke(x,y) (dPutByte((x),(y)))
 

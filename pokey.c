@@ -143,7 +143,7 @@ int POKEY_siocheck(void)
 	return ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL & 0x28) == 0x28);
 }
 
-int POKEY_PutByte(UWORD addr, UBYTE byte)
+void POKEY_PutByte(UWORD addr, UBYTE byte)
 {
 #ifdef STEREO
 	pokey_select= ((addr>>4))&0x01;
@@ -270,8 +270,6 @@ int POKEY_PutByte(UWORD addr, UBYTE byte)
 		SKSTAT = byte;
 		break;
 	}
-
-	return FALSE;
 }
 
 void POKEY_Initialise(int *argc, char *argv[])
@@ -303,10 +301,10 @@ void POKEY_Initialise(int *argc, char *argv[])
 
 void POKEY_Scanline(void)
 {
-	static int prev_cpu_clock=0;
+/*	static int prev_cpu_clock=0;
 	int dt=cpu_clock-prev_cpu_clock;
 	prev_cpu_clock=cpu_clock;
-
+*/
 #ifdef POKEY_UPDATE
 	pokey_update();
 #endif
@@ -353,25 +351,25 @@ void POKEY_Scanline(void)
 		}
 	}
 
-	if (DELAYED_XMTDONE_IRQ > 0) {
-		if (--DELAYED_XMTDONE_IRQ == 0) {
-			IRQST &= 0xf7;
-			if (IRQEN & 0x08) {
+	if (DELAYED_XMTDONE_IRQ > 0)
+		DELAYED_XMTDONE_IRQ--;
+	else {
+		IRQST &= 0xf7;
+		if (IRQEN & 0x08) {
 #ifdef DEBUG2
-				printf("SERIO: XMTDONE Interrupt triggered\n");
+			printf("SERIO: XMTDONE Interrupt triggered\n");
 #endif
-				/* IRQST &= 0xf7; */
-				GenerateIRQ();
-			}
-#ifdef DEBUG2
-			else {
-				printf("SERIO: XMTDONE Interrupt missed\n");
-			}
-#endif
+			/* IRQST &= 0xf7; */
+			GenerateIRQ();
 		}
+#ifdef DEBUG2
+		else {
+			printf("SERIO: XMTDONE Interrupt missed\n");
+		}
+#endif
 	}
 
-	if ((DivNIRQ[CHAN1] += dt) > DivNMax[CHAN1] ) {
+	if ((DivNIRQ[CHAN1] += LINE_C) > DivNMax[CHAN1] ) {
 		DivNIRQ[CHAN1] -= DivNMax[CHAN1];
 		if (IRQEN & 0x01) {
 			IRQST &= 0xfe;
@@ -379,7 +377,7 @@ void POKEY_Scanline(void)
 		}
 	}
 
-	if ((DivNIRQ[CHAN2] += dt) > DivNMax[CHAN2] ) {
+	if ((DivNIRQ[CHAN2] += LINE_C) > DivNMax[CHAN2] ) {
 		DivNIRQ[CHAN2] -= DivNMax[CHAN2];
 		if (IRQEN & 0x02) {
 			IRQST &= 0xfd;
@@ -387,11 +385,11 @@ void POKEY_Scanline(void)
 		}
 	}
 
-	if ((DivNIRQ[CHAN3] += dt) > DivNMax[CHAN3] ) {
+	if ((DivNIRQ[CHAN3] += LINE_C) > DivNMax[CHAN3] ) {
 		DivNIRQ[CHAN3] -= DivNMax[CHAN3];
 	}
 
-	if ((DivNIRQ[CHAN4] += dt) > DivNMax[CHAN4] ) {
+	if ((DivNIRQ[CHAN4] += LINE_C) > DivNMax[CHAN4] ) {
 		DivNIRQ[CHAN4] -= DivNMax[CHAN4];
 		if (IRQEN & 0x04) {
 			IRQST &= 0xfb;

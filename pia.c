@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "atari.h"
 #include "config.h"
@@ -9,9 +10,6 @@
 #include "sio.h"
 #include "log.h"
 #include "statesav.h"
-
-#define FALSE 0
-#define TRUE 1
 
 UBYTE PACTL;
 UBYTE PBCTL;
@@ -83,7 +81,7 @@ UBYTE PIA_GetByte(UWORD addr)
 	return byte;
 }
 
-int PIA_PutByte(UWORD addr, UBYTE byte)
+void PIA_PutByte(UWORD addr, UBYTE byte)
 {
 	addr &= 0x03;		/* HW registers are mirrored */
 	switch (addr) {
@@ -127,10 +125,9 @@ int PIA_PutByte(UWORD addr, UBYTE byte)
 			PORTB_handler(byte);
 		}
 	}
-	return FALSE;
 }
 
-void PIAStateSave( )
+void PIAStateSave(void)
 {
 	SaveUBYTE( &PACTL, 1 );
 	SaveUBYTE( &PBCTL, 1 );
@@ -147,7 +144,7 @@ void PIAStateSave( )
 	SaveUBYTE( &PORTB_mask, 1 );
 }
 
-void PIAStateRead( )
+void PIAStateRead(void)
 {
 	ReadUBYTE( &PACTL, 1 );
 	ReadUBYTE( &PBCTL, 1 );

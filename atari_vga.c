@@ -1081,7 +1081,7 @@ int Atari_Keyboard(void)
                 case 0x44:                              /* F10 */
                         if (!norepkey)
                         {
-                            keycode = AKEY_SCREENSHOT;
+                            keycode = SHIFT_KEY ? AKEY_SCREENSHOT_INTERLACE : AKEY_SCREENSHOT;
                             norepkey=TRUE;
                         }else
                             keycode = AKEY_NONE;
@@ -1197,7 +1197,7 @@ int Atari_Keyboard(void)
         case 0x44:                                      /* F10 */
                 if (!norepkey)
                 {
-                     keycode = AKEY_SCREENSHOT;
+                     keycode = SHIFT_KEY ? AKEY_SCREENSHOT_INTERLACE : AKEY_SCREENSHOT;
                      norepkey = TRUE;
                 }
                 else

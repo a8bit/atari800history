@@ -56,34 +56,7 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "binload.h"
 #endif
 
-/*** New by S.B. ***/
-
-#ifdef AMIGA
-#ifdef __MAXON__
-
-struct timeval
-{
-	ULONG tv_secs;
-	ULONG tv_micro;
-};
-
-#endif
-
-struct timezone
-{
-	int tz;
-};
-
-void gettimeofday( struct timeval *tv, void *null );
-
-#define tv_sec tv_secs
-#define tv_usec tv_micro
-
-#endif
-
-/*** End new by S.B. ***/
-
-TVmode tv_mode = TV_PAL;
+int tv_mode = TV_PAL;
 Machine machine = Atari;
 int mach_xlxe = FALSE;
 int verbose = FALSE;
@@ -116,9 +89,6 @@ int ReadAtariExe( char *filename );
 
 int	os = 2;
 
-extern SaveVal( void *value, int size );
-extern UBYTE NMIEN;
-extern UBYTE NMIST;
 extern UBYTE PORTA;
 extern UBYTE PORTB;
 
@@ -163,8 +133,6 @@ void Warmstart(void)
 	if (os == 3)
 		Initialise_Monty();
 
-	NMIEN = 0x00;
-	NMIST = 0x00;
 	PORTA = 0x00;
 /* After reset must by actived rom os */
 	if (mach_xlxe) {
@@ -173,7 +141,31 @@ void Warmstart(void)
 	else
 		PORTB = 0xff;
 
+	ANTIC_Reset();
 	CPU_Reset();
+}
+
+void Coldstart(void)
+{
+	if (os == 3) {
+		os = 2;		/* Fiddle OS to prevent infinite recursion */
+		Initialise_Monty();
+		os = 3;
+	}
+	PORTA = 0x00;
+	if (mach_xlxe) {
+		selftest_enabled = TRUE;	/* necessary for init RAM */
+		PORTB = 0x00;			/* necessary for init RAM */
+		PIA_PutByte(_PORTB, 0xff);	/* turn on operating system */
+	}
+	else
+		PORTB = 0xff;
+	Poke(0x244, 1);
+	ANTIC_Reset();
+	CPU_Reset();
+
+	if (hold_option)
+		next_console_value = 0x03;	/* Hold Option During Reboot */
 }
 
 int Initialise_AtariXE(void)
@@ -461,9 +453,9 @@ int main(int argc, char **argv)
 #ifdef WIN32
 		atari_screen = (ULONG *)screenbuff;
 #else
-		atari_screen = (ULONG *) malloc((ATARI_HEIGHT + 16) * ATARI_WIDTH);
+		atari_screen = (ULONG *) malloc(ATARI_HEIGHT * ATARI_WIDTH);
 #ifdef BITPL_SCR
-		atari_screen_b = (ULONG *) malloc((ATARI_HEIGHT + 16) * ATARI_WIDTH);
+		atari_screen_b = (ULONG *) malloc(ATARI_HEIGHT * ATARI_WIDTH);
 		atari_screen1 = atari_screen;
 		atari_screen2 = atari_screen_b;
 #endif
@@ -935,9 +927,8 @@ UBYTE Atari800_GetByte(UWORD addr)
 	return byte;
 }
 
-int Atari800_PutByte(UWORD addr, UBYTE byte)
+void Atari800_PutByte(UWORD addr, UBYTE byte)
 {
-	int abort = FALSE;
 /*
    ============================================================
    GTIA, POKEY, PIA and ANTIC do not fully decode their address
@@ -947,40 +938,38 @@ int Atari800_PutByte(UWORD addr, UBYTE byte)
  */
 	switch (addr & 0xff00) {
 	case 0x4f00:
-		abort = bounty_bob1(addr);
+		bounty_bob1(addr);
 		break;
 	case 0x5f00:
-		abort = bounty_bob2(addr);
+		bounty_bob2(addr);
 		break;
 	case 0xd000:				/* GTIA */
-		abort = GTIA_PutByte((UWORD)(addr - 0xd000), byte);
+		GTIA_PutByte(addr, byte);
 		break;
 	case 0xd200:				/* POKEY */
-		abort = POKEY_PutByte((UWORD)(addr - 0xd200), byte);
+		POKEY_PutByte((UWORD)(addr - 0xd200), byte);
 		break;
 	case 0xd300:				/* PIA */
-		abort = PIA_PutByte((UWORD)(addr - 0xd300), byte);
+		PIA_PutByte((UWORD)(addr - 0xd300), byte);
 		break;
 	case 0xd400:				/* ANTIC */
-		abort = ANTIC_PutByte((UWORD)(addr - 0xd400), byte);
+		ANTIC_PutByte(addr, byte);
 		break;
 	case 0xd500:				/* Super Cartridges */
-		abort = SuperCart_PutByte((UWORD)(addr), byte);
+		SuperCart_PutByte((UWORD)(addr), byte);
 		break;
 	case 0xc000:				/* GTIA - 5200 */
-		abort = GTIA_PutByte((UWORD)(addr - 0xc000), byte);
+		GTIA_PutByte((UWORD)(addr - 0xc000), byte);
 		break;
 	case 0xe800:				/* POKEY - 5200 AAA added other pokey space */
-		abort = POKEY_PutByte((UWORD)(addr - 0xe800), byte);
+		POKEY_PutByte((UWORD)(addr - 0xe800), byte);
 		break;
 	case 0xeb00:				/* POKEY - 5200 */
-		abort = POKEY_PutByte((UWORD)(addr - 0xeb00), byte);
+		POKEY_PutByte((UWORD)(addr - 0xeb00), byte);
 		break;
 	default:
 		break;
 	}
-
-	return abort;
 }
 
 #ifdef SNAILMETER
@@ -1081,6 +1070,9 @@ void Atari800_Hardware(void)
 		case AKEY_SCREENSHOT:
 			Save_PCX((UBYTE *)atari_screen);
 			break;
+		case AKEY_SCREENSHOT_INTERLACE:
+			Save_PCX_interlaced();
+			break;
 		case AKEY_NONE:
 			last_key = -1;
 			break;
@@ -1102,19 +1094,23 @@ void Atari800_Hardware(void)
 		 */
 
 #ifndef BASIC
+#ifndef SVGA_SPEEDUP
 		if (++test_val == refresh_rate) {
+#endif
 			ANTIC_RunDisplayList();			/* generate screen */
 #ifdef SNAILMETER
 			if (emu_too_fast == 0)
 				ShowRealSpeed(atari_screen, refresh_rate);
 #endif
 			Atari_DisplayScreen((UBYTE *) atari_screen);
+#ifndef SVGA_SPEEDUP
 			test_val = 0;
 		}
 		else {
 #ifdef VERY_SLOW
-			for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
-				GO(114);
+			for (ypos = 0; ypos < max_ypos; ypos++) {
+				GO(LINE_C);
+				xpos -= LINE_C - DMAR;
 			}
 #else
 			draw_display=0;
@@ -1122,9 +1118,11 @@ void Atari800_Hardware(void)
 			Atari_DisplayScreen((UBYTE *) atari_screen);
 #endif
 		}
+#endif
 #else
-		for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
-			GO(114);
+		for (ypos = 0; ypos < max_ypos; ypos++) {
+			GO(LINE_C);
+			xpos -= LINE_C - DMAR;
 		}
 #endif
 

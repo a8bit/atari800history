@@ -21,10 +21,13 @@
 #include "ui.h"
 #include "log.h"
 #include "statesav.h"
+#include "config.h"
 
 #ifdef USE_NEW_BINLOAD
 #include "binload.h"
 #endif
+
+extern int refresh_rate;
 
 #define FILENAME_SIZE	32
 
@@ -117,7 +120,11 @@ int GetKeyPress(UBYTE * screen)
 	int keycode;
 
 #ifndef BASIC
-		Atari_DisplayScreen(screen);
+#ifdef SVGA_SPEEDUP
+	int i;
+		for(i=0;i<refresh_rate;i++)
+#endif
+			Atari_DisplayScreen(screen);
 #endif
 
 	while(1)
@@ -990,10 +997,10 @@ void CartManagement(UBYTE * screen)
 					char fname[FILENAME_SIZE+1];
 
 					memset(fname, ' ', FILENAME_SIZE);
+					fname[FILENAME_SIZE] = '\0';
 					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
 					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-					fname[FILENAME_SIZE] = '\0';
 					RemoveSpaces(fname);
 
 					for (i = 0; i < nbytes; i++)
@@ -1043,10 +1050,10 @@ void CartManagement(UBYTE * screen)
 					close(fd);
 
 					memset(fname, ' ', FILENAME_SIZE);
+					fname[FILENAME_SIZE] = '\0';
 					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
 					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-					fname[FILENAME_SIZE] = '\0';
 					RemoveSpaces(fname);
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
@@ -1163,10 +1170,10 @@ int SaveState(UBYTE *screen)
 	char fname[FILENAME_SIZE+1];
 
 	memset(fname, ' ', FILENAME_SIZE);
+	fname[FILENAME_SIZE] = '\0';
 	Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 	Print(screen, 0x94, 0x9a, "Filename", 4, 9);
 	EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-	fname[FILENAME_SIZE] = '\0';
 	RemoveSpaces(fname);
         if (!fname[0])
           return 0;

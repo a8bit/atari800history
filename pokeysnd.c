@@ -166,7 +166,6 @@ static uint8 Outbit[4 * MAXPOKEYS];		/* current state of the output (high or low
 
 static uint8 Outvol[4 * MAXPOKEYS];		/* last output volume for each channel */
 
-
 /* Initialze the bit patterns for the polynomials. */
 
 /* The 4bit and 5bit patterns are the identical ones used in the pokey chip. */
@@ -211,9 +210,13 @@ static uint32 Base_mult[MAXPOKEYS];		/* selects either 64Khz or 15Khz clock mult
 
 extern int atari_speaker;
 
+#ifndef NOSNDINTER
 static uint16 last_val = 0;		/* last output value */
+#endif
 #ifdef STEREO
+#ifndef NOSNDINTER
 static uint16 last_val2 = 0;		/* last output value */
+#endif
 extern int pokey_select;
 extern int stereo_enabled;
 #endif
@@ -323,6 +326,9 @@ void Pokey_sound_init(uint32 freq17, uint16 playback_freq, uint8 num_pokeys)
 		AUDC[chan] = 0;
 		AUDF[chan] = 0;
 		AUDV[chan] = 0;
+#ifndef	NO_VOL_ONLY
+		sampbuf_AUDV[chan] = 0;
+#endif
 	}
 
 	for (chip = 0; chip < MAXPOKEYS; chip++) {
@@ -540,11 +546,11 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 #ifdef STEREO
 				if( chip&0x01 )
 				{
-				sampbuf_lastval2+=AUDV[chan + chip_offs]-7*gain
+				sampbuf_lastval2+=AUDV[chan + chip_offs]
 					-sampbuf_AUDV[chan + chip_offs];
 
 				sampbuf_val2[sampbuf_ptr2]=sampbuf_lastval2;
-				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs]-7*gain;
+				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs];
 				sampbuf_cnt2[sampbuf_ptr2]=
 					(cpu_clock-sampbuf_last2)*128*samp_freq/178979;
 				sampbuf_last2=cpu_clock;
@@ -560,11 +566,11 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 				else
 				{
 #endif
-				sampbuf_lastval+=AUDV[chan + chip_offs]-7*gain
+				sampbuf_lastval+=AUDV[chan + chip_offs]
 					-sampbuf_AUDV[chan + chip_offs];
 
 				sampbuf_val[sampbuf_ptr]=sampbuf_lastval;
-				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs]-7*gain;
+				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs];
 				sampbuf_cnt[sampbuf_ptr]=
 					(cpu_clock-sampbuf_last)*128*samp_freq/178979;
 				sampbuf_last=cpu_clock;
@@ -667,51 +673,43 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 	/* The current output is pre-determined and then adjusted based on each */
 	/* output change for increased performance (less over-all math). */
 	/* add the output values of all 4 channels */
-	cur_val = SAMP_MID;
+	cur_val = SAMP_MIN;
 #ifdef STEREO
-	cur_val2 = SAMP_MID;
+	cur_val2 = SAMP_MIN;
 #endif
 
 	count = Num_pokeys;
 	do {
-		cur_val -= *vol_ptr / 2;
 		if (*out_ptr++)
 			cur_val += *vol_ptr;
 		vol_ptr++;
 
-		cur_val -= *vol_ptr / 2;
 		if (*out_ptr++)
 			cur_val += *vol_ptr;
 		vol_ptr++;
 
-		cur_val -= *vol_ptr / 2;
 		if (*out_ptr++)
 			cur_val += *vol_ptr;
 		vol_ptr++;
 
-		cur_val -= *vol_ptr / 2;
 		if (*out_ptr++)
 			cur_val += *vol_ptr;
 		vol_ptr++;
 #ifdef STEREO
 		count--;
-		if( count )
-		{	cur_val2 -= *vol_ptr / 2;
+		if( count ) {
 			if (*out_ptr++)
 				cur_val2 += *vol_ptr;
 			vol_ptr++;
 
-			cur_val2 -= *vol_ptr / 2;
 			if (*out_ptr++)
 				cur_val2 += *vol_ptr;
 			vol_ptr++;
 
-			cur_val2 -= *vol_ptr / 2;
 			if (*out_ptr++)
 				cur_val2 += *vol_ptr;
 			vol_ptr++;
 
-			cur_val2 -= *vol_ptr / 2;
 			if (*out_ptr++)
 				cur_val2 += *vol_ptr;
 			vol_ptr++;
@@ -1052,7 +1050,7 @@ void Update_serio_sound( int out, UBYTE data )
 	while( bits )
 	{
 		sampbuf_lastval-=pv;
-		pv=(bits&0x01)*8*4-4*4;	/* FIXME!!! - set volume from AUDV */
+		pv=(bits&0x01)*AUDV[3];	/* FIXME!!! - set volume from AUDV */
 		sampbuf_lastval+=pv;
 
 	sampbuf_val[sampbuf_ptr]=sampbuf_lastval;
@@ -1068,7 +1066,7 @@ void Update_serio_sound( int out, UBYTE data )
 			sampbuf_rptr=0;
 	}
 			/* 1789790/19200 = 93 */
-		future+=93;	/* ~ 19200 bit/s - FIXME!!! set speed form AUDF */
+		future+=93;	/* ~ 19200 bit/s - FIXME!!! set speed form AUDF [2] ??? */
 		bits>>=1;
 	}
 	sampbuf_lastval-=pv;
@@ -1086,7 +1084,7 @@ void Update_consol_sound( int set )
 	if( !set && samp_consol_val==0 )	return;
 	sampbuf_lastval-=samp_consol_val;
 	if( prev_atari_speaker!=atari_speaker )
-	{	samp_consol_val=atari_speaker*8*4-7*4;	/* gain */
+	{	samp_consol_val=atari_speaker*8*4;	/* gain */
 		prev_cpu_clock=cpu_clock;
 	}
 	else if( !set )

@@ -16,6 +16,7 @@ by configure's build-in test.
 */
 
 ?VERY_SLOW		Is your computer very slow (disables generating screen completely)
+?(SVGALIB)SVGA_SPEEDUP	Draw every 1/50 sec only 1/refresh of screen
 ?SNAILMETER		Enable Snailmeter (shows how much is the emulator slower than original)
 ?(LINUX)REALTIME	Run atari800 as Linux realtime process
 ?(LINUX)LINUX_JOYSTICK	Enable LINUX Joystick

@@ -2,8 +2,8 @@ CC		= gcc
 CPPFLAGS	= $(OTHER)
 CFLAGS		= -c -O2 -Wall -DGNU_C
 LD		= gcc
-LDFLAGS		=
-LDLIBS		= -lm
+LDFLAGS		= -s
+LDLIBS		=
 
 ifeq (atari800.djgpp,$(wildcard atari800.djgpp))
 include atari800.djgpp
@@ -24,18 +24,17 @@ default :
 	@echo . 
 	@echo To reconfigure options, type: make config
 	@echo To clean directory, type: make clean
-	@echo To install the Emulator, type:
 
 basic :
-	@make atari800 CPPFLAGS="-DBASIC" OBJ="atari_basic.o sound.o"
+	@make atari800.exe CPPFLAGS="-DBASIC" OBJ="atari_basic.o sound.o"
 	@echo Finished.
 
 pdcurses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="$(LDLIBS) -lcurso" OBJ="atari_curses.o sound.o"
+	@make atari800.exe CPPFLAGS="-DCURSES" LDLIBS="$(LDLIBS) -lcurso" OBJ="atari_curses.o sound.o"
 	@echo Finished.
 
 vga :
-	@make atari800 CPPFLAGS="-DVGA" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o vga_gfx.o"
+	@make atari800.exe CPPFLAGS="-DVGA" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o vga_gfx.o"
 	@echo Finished.
 
 #
@@ -60,11 +59,11 @@ INCLUDES        =       Makefile \
 			supercart.h \
 			platform.h
 
-config config.h	:	configure config.in
-	configure
+config config.h	:	configure.exe config.in
+	configure.exe
 
-configure	:	configure.o prompts.o
-	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
+configure.exe	:	configure.o prompts.o
+	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure.exe
 
 configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
@@ -91,10 +90,10 @@ OBJECTS =       atari.o \
 		pbi.o \
 		statesav.o
 
-atari800        :       $(OBJECTS) $(OBJ) joycfg.exe
-	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
+atari800.exe    :       $(OBJECTS) $(OBJ) joycfg.exe
+	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800.exe
 
-atari.o         :       atari.c $(INCLUDES) config.h
+atari.o         :       atari.c $(INCLUDES) config.h ataripcx.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o           :       cpu.c $(INCLUDES)
@@ -180,10 +179,12 @@ joycfg.exe	:	joycfg.o pcjoy.h
 
 joycfg.o	:	joycfg.c pcjoy.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) joycfg.c	
+
+memory.o	:	memory.c memory.h memory-d.c memory-d.h emuos.h $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) memory.c
 		
 clean   :
 	del configure.exe
-	del configure
 	del config.h
 	del core
 	del *.o

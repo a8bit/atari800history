@@ -61,33 +61,6 @@ int load_image(char *filename, int addr, int nbytes)
 	return status;
 }
 
-void SetRAM(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = RAM;
-	}
-}
-
-void SetROM(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = ROM;
-	}
-}
-
-void SetHARDWARE(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = HARDWARE;
-	}
-}
-
 /*
  * Load a standard 8K ROM from the specified file
  */
@@ -540,30 +513,6 @@ int Initialise_Monty(void)
 		Coldstart();
 	}
 	return status;
-}
-
-void Coldstart(void)
-{
-	if (os == 3) {
-		os = 2;		/* Fiddle OS to prevent infinite recursion */
-		Initialise_Monty();
-		os = 3;
-	}
-	NMIEN = 0x00;
-	NMIST = 0x00;
-	PORTA = 0x00;
-	if (mach_xlxe) {
-		selftest_enabled = TRUE;	/* necessary for init RAM */
-		PORTB = 0x00;			/* necessary for init RAM */
-		PIA_PutByte(_PORTB, 0xff);	/* turn on operating system */
-	}
-	else
-		PORTB = 0xff;
-	memory[0x244] = 1;
-	CPU_Reset();
-
-	if (hold_option)
-		next_console_value = 0x03;	/* Hold Option During Reboot */
 }
 
 int Initialise_AtariXL(void)

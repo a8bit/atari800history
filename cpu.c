@@ -1,6 +1,6 @@
 /* CPU.C
  *    Original Author     :   David Firth          *
- *    Last changes        :   3rd March 2000, Piotr Fusik */
+ *    Last changes        :   17th March 2000, Piotr Fusik */
 /*
    Ideas for Speed Improvements
    ============================
@@ -187,12 +187,12 @@ void CPU_PutStatus(void)
 
 #define AND(t_data) data = t_data; Z = N = A &= data
 #define CMP(t_data) data = t_data; Z = N = A - data; C = (A >= data)
-#define CPX(t_data) data = t_data; Z = N = X - data; C = (X >= data);
-#define CPY(t_data) data = t_data; Z = N = Y - data; C = (Y >= data);
-#define EOR(t_data) data = t_data; Z = N = A ^= data;
-#define LDA(data) Z = N = A = data;
-#define LDX(data) Z = N = X = data;
-#define LDY(data) Z = N = Y = data;
+#define CPX(t_data) data = t_data; Z = N = X - data; C = (X >= data)
+#define CPY(t_data) data = t_data; Z = N = Y - data; C = (Y >= data)
+#define EOR(t_data) data = t_data; Z = N = A ^= data
+#define LDA(data) Z = N = A = data
+#define LDX(data) Z = N = X = data
+#define LDY(data) Z = N = Y = data
 #define ORA(t_data) data = t_data; Z = N = A |= data
 
 #define PHP(x) data =  (N & 0x80); \
@@ -222,6 +222,7 @@ void NMI(void)
 	SetI;
 	regPC = dGetWord(0xfffa);
 	regS = S;
+	xpos += 7;		/* getting interrupt takes 7 cycles */
 #ifdef MONITOR_BREAK
 	ret_nesting++;
 #endif
@@ -238,6 +239,7 @@ void NMI(void)
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
 			IRQ = 0;					\
+			xpos += 7;					\
 			ret_nesting+=1;					\
 		}							\
 	}								\
@@ -252,6 +254,7 @@ void NMI(void)
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
 			IRQ = 0;					\
+			xpos += 7;					\
 		}							\
 	}								\
 }
@@ -292,13 +295,22 @@ int cycles[256] =
 };
 
 /* decrement 1 or 2 cycles for conditional jumps */
-#define NCYCLES_JMP	if ( ((SWORD) sdata + (UBYTE) PC) & 0xff00) ncycles-=2; else ncycles--;
+#define BRANCH(cond)	if (cond) {			\
+		SWORD sdata = (SBYTE)dGetByte(PC++);\
+		if ( (sdata + (UBYTE)PC) & 0xff00)	\
+			xpos++;							\
+		xpos++;								\
+		PC += sdata;						\
+		goto next;							\
+	}										\
+	PC++;									\
+	goto next;
 /* decrement 1 cycle for X (or Y) index overflow */
-#define NCYCLES_Y		if ( (UBYTE) addr < Y ) ncycles--;
-#define NCYCLES_X		if ( (UBYTE) addr < X ) ncycles--;
+#define NCYCLES_Y		if ( (UBYTE) addr < Y ) xpos++;
+#define NCYCLES_X		if ( (UBYTE) addr < X ) xpos++;
 
 
-int GO(int ncycles)
+void GO(int limit)
 {
 	UBYTE insn;
 
@@ -407,6 +419,15 @@ int GO(int ncycles)
    2. The timing of the IRQs are not that critical.
  */
 
+	if (wsync_halt) {
+		if (limit<WSYNC_C)
+			return;
+		xpos = WSYNC_C;
+		wsync_halt = 0;
+	}
+
+	xpos_limit = limit;			/* needed for WSYNC store inside ANTIC */
+
 	UPDATE_LOCAL_REGS;
 
 	CPUCHECKIRQ;
@@ -455,7 +476,7 @@ int GO(int ncycles)
 #endif
 #endif
 
-	while (ncycles > 0 && !wsync_halt) {
+	while (xpos < xpos_limit) {
 
 #ifdef TRACE
 		if (tron) {
@@ -483,7 +504,7 @@ int GO(int ncycles)
 		}
 #endif
 		insn = dGetByte(PC);
-		ncycles -= cycles[insn];
+		xpos += cycles[insn];
 
 #ifdef GNU_C
 		PC++;
@@ -1098,13 +1119,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_10:				/* BPL */
-		if (!(N & 0x80)) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(!(N & 0x80))
 
 	  opcode_11:				/* ORA (ab),y */
 		INDIRECT_Y;
@@ -1255,13 +1270,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_30:				/* BMI */
-		if (N & 0x80) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(N & 0x80)
 
 	  opcode_31:				/* AND (ab),y */
 		INDIRECT_Y;
@@ -1408,13 +1417,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_50:				/* BVC */
-		if (!V) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(!V)
 
 	  opcode_51:				/* EOR (ab),y */
 		INDIRECT_Y;
@@ -1572,13 +1575,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_70:				/* BVS */
-		if (V) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(V)
 
 	  opcode_71:				/* ADC (ab),y */
 		INDIRECT_Y;
@@ -1706,13 +1703,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_90:				/* BCC */
-		if (!C) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(!C)
 
 	  opcode_91:				/* STA (ab),y */
 		INDIRECT_Y;
@@ -1823,13 +1814,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_b0:				/* BCS */
-		if (C) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(C)
 
 	  opcode_b1:				/* LDA (ab),y */
 		INDIRECT_Y;
@@ -1959,13 +1944,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_d0:				/* BNE */
-		if (Z) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(Z)
 
 	  opcode_d1:				/* CMP (ab),y */
 		INDIRECT_Y;
@@ -2080,13 +2059,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_f0:				/* BEQ */
-		if (!Z) {
-			SBYTE sdata = dGetByte(PC);
-			NCYCLES_JMP;
-			PC += (SWORD) sdata;
-		}
-		PC++;
-		goto next;
+		BRANCH(!Z)
 
 	  opcode_f1:				/* SBC (ab),y */
 		INDIRECT_Y;
@@ -2828,7 +2801,6 @@ int GO(int ncycles)
     goto next;
 
 	  next:
-		cpu_clock += cycles[insn];
 
 #ifdef MONITOR_BREAK
 		if (break_step) {
@@ -2844,11 +2816,6 @@ int GO(int ncycles)
 	}
 
 	UPDATE_GLOBAL_REGS;
-	if (wsync_halt && ncycles >= 0)
-	{	cpu_clock += ncycles;
-		return 0;				/* WSYNC stopped CPU */
-	}
-	return ncycles;
 }
 
 void CPU_Initialise(void)
@@ -2870,14 +2837,7 @@ void CPU_Reset(void)
 
 	regP = 0x30;				/* The unused bit is always 1 */
 	regS = 0xff;
-	regPC = (GetByte(0xfffd) << 8) | GetByte(0xfffc);
-}
-
-/* sets the IRQ flag and checks it */
-void GenerateIRQ(void)
-{
-	IRQ = 1;
-	GO(0);				/* does not execute any instruction */
+	regPC = dGetWord(0xfffc);
 }
 
 void CpuStateSave( UBYTE SaveVerbose )

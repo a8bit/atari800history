@@ -13,6 +13,8 @@
 #include "platform.h"
 #include "log.h"
 
+extern int refresh_rate;
+
 #ifdef JOYMOUSE
 #include <vgamouse.h>
 
@@ -569,7 +571,7 @@ void Atari_DisplayScreen(UBYTE * screen)
 {
   static int writepage = 0;
   UBYTE *vbuf = screen + first_lno * ATARI_WIDTH + 32;
-  
+ 
 #ifdef SET_LED
   if (LEDstatus)  /*draw disk LED*/
   {
@@ -584,6 +586,16 @@ void Atari_DisplayScreen(UBYTE * screen)
 #endif
 
   if( invisible || !draw_display )	goto after_screen_update; 
+#ifdef SVGA_SPEEDUP
+  vga_copytoplanar256(vbuf+ATARI_WIDTH*(240/refresh_rate)*writepage, ATARI_WIDTH,
+		      ((320 * (240/refresh_rate)) >> 2) * writepage
+		      , (320 >> 2), 320,
+		      240/refresh_rate);
+  vga_setdisplaystart(0);
+  writepage++;
+  if( writepage >= refresh_rate )
+	  writepage=0;
+#else
   vga_copytoplanar256(vbuf, ATARI_WIDTH,
 		      ((320 * 240) >> 2) * writepage
 		      , 320 >> 2, 320,
@@ -591,6 +603,7 @@ void Atari_DisplayScreen(UBYTE * screen)
   vga_setdisplaystart(320 * 240 * writepage);
   vga_setpage(0);
   writepage ^= 1;
+#endif
 
 #ifdef JOYMOUSE
 	vgamouse_stick = 0xff;

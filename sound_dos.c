@@ -7,7 +7,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static sound_enabled = TRUE;
+static int sound_enabled = TRUE;
 
 int playback_freq = FREQ_17_APPROX / 28 / 3;
 int buffersize = 440;

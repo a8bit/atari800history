@@ -53,14 +53,12 @@ static void BIN_load( void )
 	if( (i=read(bin_fd,buf,4))!=4 )
 	{	close(bin_fd); bin_fd=-1;
 		regS=orig_regS;
-		if( i==0 || i==2 )	/* Ok all loaded */
-		{	set_vect( orig_dos_l, orig_dos_h );
-			regPC=(dGetByte(736)|dGetByte(737)<<8);
-		}
-		else
-		{	/* error */
-			Aprint("Boot Error\n");
-		}
+		if( i!=0 )
+			Aprint("Boot Error: Garbage %d byte(s) at end of file\n"
+					,i);
+		/* Ok all loaded */
+		set_vect( orig_dos_l, orig_dos_h );
+		regPC=(dGetByte(736)|dGetByte(737)<<8);
 		return;
 	}
 	if( buf[0]==0xff && buf[1]==0xff )
@@ -69,7 +67,7 @@ static void BIN_load( void )
 		if( (i=read(bin_fd,buf+2,2))!=2 )
 		{	close(bin_fd); bin_fd=-1;
 			regS=orig_regS;
-			Aprint("Boot Error\n");
+			Aprint("Boot Error 2\n");
 			return;
 		}
 	}

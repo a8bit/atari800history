@@ -5,6 +5,7 @@ MAN_PATH	= ${PREFIX}/man
 
 CC		= gcc
 CFLAGS		= -c -O2 -Wall
+#CFLAGS		= -c -O3 -Wall -march=pentium -fschedule-insns2 -fomit-frame-pointer -ffast-math -funroll-loops -funroll-all-loops -fexpensive-optimizations
 CPPFLAGS	= -c -O2 -Wall
 LD		= gcc
 LDFLAGS		= -s $(LIBDIRS)
@@ -51,6 +52,7 @@ all :
 	@echo "where <version> is one of"
 	@echo "  svga"
 	@echo "  x11"
+	@echo "  x11-shm"
 	@echo ""
 	@echo "To reconfigure options, type: make config"
 	@echo "To clean directory, type: make clean"
@@ -71,6 +73,13 @@ x11:
 	OBJECTS="$(OBJECTS) atari_x11.o" \
 	LDLIBS="$(LDLIBS) -L/usr/X11R6/lib -lX11" \
 	DEFS="$(DEFS) -DX11" \
+	INCLUDE="$(INCLUDE)"
+
+x11-shm:
+	make atari800 \
+	OBJECTS="$(OBJECTS) atari_x11.o" \
+	LDLIBS="$(LDLIBS) -L/usr/X11R6/lib -lX11 -lXext -lXau" \
+	DEFS="$(DEFS) -DX11 -DSHM" \
 	INCLUDE="$(INCLUDE)"
 
 atari800: $(OBJECTS)

@@ -146,7 +146,7 @@ int Device_isvalid(char ch)
 	return valid;
 }
 
-void Device_GetFilename()
+void Device_GetFilename(void)
 {
 	int bufadr;
 	int offset = 0;

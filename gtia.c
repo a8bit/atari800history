@@ -25,18 +25,12 @@
 #include "sio.h"
 #include "statesav.h"
 
-#define FALSE 0
-#define TRUE 1
-
 #ifndef NO_CONSOL_SOUND
 void Update_consol_sound( int set );
 #endif /* NO_CONSOL_SOUND */
 
 int atari_speaker;
 int consol_mask;
-extern int DELAYED_SERIN_IRQ;
-extern int DELAYED_SEROUT_IRQ;
-extern int DELAYED_XMTDONE_IRQ;
 extern int rom_inserted;
 extern int mach_xlxe;
 
@@ -84,6 +78,7 @@ UBYTE P1PL;
 UBYTE P2PL;
 UBYTE P3PL;
 UBYTE PRIOR;
+UBYTE VDELAY;
 UBYTE GRACTL;
 
 extern UBYTE player_dma_enabled;
@@ -168,22 +163,12 @@ extern signed char pm_lookup_multi_5p[256];
 
 int next_console_value = 7;
 
-UWORD pl0adr;
-UWORD pl1adr;
-UWORD pl2adr;
-UWORD pl3adr;
-UWORD m0123adr;
-
-static int PM_XPos[256];
 static UBYTE PM_Width[4] =
 {1, 2, 1, 4};					/*{ 2, 4, 2, 8}; */ /* 1/2 size pm scanline */
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
 	int i;
-
-	for (i = 0; i < 256; i++)
-		PM_XPos[i] = (i - 0x20);	/*<< 1 */ /* for 1/2 size pmscanline */
 
 	for (i = 0; i < 9; i++)
 		colour_lookup[i] = 0x00;
@@ -194,142 +179,39 @@ void GTIA_Initialise(int *argc, char *argv[])
 void new_pm_scanline(void)
 {
 	static int dirty;
-	if (dirty)
+	if (dirty) {
 		memset(pm_scanline, 0, ATARI_WIDTH / 2);
-	dirty = FALSE;
+		dirty = FALSE;
+	}
 
 /*
    =============================
-   Display graphics for Player 0
+   Display graphics for Players
    =============================
  */
-	if (GRAFP0) {
-		UBYTE grafp0 = GRAFP0;
-		int sizep0 = global_sizep0;
-		int hposp0 = global_hposp0;
-		int i;
 
-		dirty = TRUE;
+#define DO_PLAYER(n)	if (GRAFP##n) {	\
+	UBYTE grafp = GRAFP##n;				\
+	int sizep = global_sizep##n;		\
+	unsigned hposp = global_hposp##n;	\
+	dirty = TRUE;						\
+	do {								\
+		if (grafp & 0x80) {				\
+			int j;						\
+			for (j = 0; j < sizep; j++, hposp++)	\
+				if ( hposp < ATARI_WIDTH / 2 )	\
+					P##n##PL |= pm_scanline[hposp] |= 1 << n;	\
+		}								\
+		else							\
+			hposp += sizep;				\
+		grafp <<= 1;					\
+	} while (grafp);					\
+}
 
-		for (i = 0; i < 8; i++) {
-			if (grafp0 & 0x80) {
-				int j;
-
-				for (j = 0; j < sizep0; j++) {
-					if ((hposp0 >= 0) && (hposp0 < ATARI_WIDTH / 2)) {
-						/* UBYTE playfield = scrn_ptr[hposp0 << 1]; */
-						pm_scanline[hposp0] |= 0x01;
-						P0PL |= pm_scanline[hposp0];
-					}
-					hposp0++;
-				}
-			}
-			else {
-				hposp0 += sizep0;
-			}
-
-			grafp0 = grafp0 << 1;
-		}
-	}
-/*
-   =============================
-   Display graphics for Player 1
-   =============================
- */
-	if (GRAFP1) {
-		UBYTE grafp1 = GRAFP1;
-		int sizep1 = global_sizep1;
-		int hposp1 = global_hposp1;
-		int i;
-
-		dirty = TRUE;
-
-		for (i = 0; i < 8; i++) {
-			if (grafp1 & 0x80) {
-				int j;
-
-				for (j = 0; j < sizep1; j++) {
-					if ((hposp1 >= 0) && (hposp1 < ATARI_WIDTH / 2)) {
-						/* UBYTE playfield = scrn_ptr[hposp1 << 1]; */
-						pm_scanline[hposp1] |= 0x02;
-						P1PL |= pm_scanline[hposp1];
-					}
-					hposp1++;
-				}
-			}
-			else {
-				hposp1 += sizep1;
-			}
-
-			grafp1 = grafp1 << 1;
-		}
-	}
-/*
-   =============================
-   Display graphics for Player 2
-   =============================
- */
-	if (GRAFP2) {
-		UBYTE grafp2 = GRAFP2;
-		int sizep2 = global_sizep2;
-		int hposp2 = global_hposp2;
-		int i;
-
-		dirty = TRUE;
-
-		for (i = 0; i < 8; i++) {
-			if (grafp2 & 0x80) {
-				int j;
-
-				for (j = 0; j < sizep2; j++) {
-					if ((hposp2 >= 0) && (hposp2 < ATARI_WIDTH / 2)) {
-						/* UBYTE playfield = scrn_ptr[hposp2 << 1]; */
-						pm_scanline[hposp2] |= 0x04;
-						P2PL |= pm_scanline[hposp2];
-					}
-					hposp2++;
-				}
-			}
-			else {
-				hposp2 += sizep2;
-			}
-
-			grafp2 = grafp2 << 1;
-		}
-	}
-/*
-   =============================
-   Display graphics for Player 3
-   =============================
- */
-	if (GRAFP3) {
-		UBYTE grafp3 = GRAFP3;
-		int sizep3 = global_sizep3;
-		int hposp3 = global_hposp3;
-		int i;
-
-		dirty = TRUE;
-
-		for (i = 0; i < 8; i++) {
-			if (grafp3 & 0x80) {
-				int j;
-
-				for (j = 0; j < sizep3; j++) {
-					if ((hposp3 >= 0) && (hposp3 < ATARI_WIDTH / 2)) {
-						/* UBYTE playfield = scrn_ptr[hposp3 << 1]; */
-						pm_scanline[hposp3] |= 0x08;
-						P3PL |= pm_scanline[hposp3];
-					}
-					hposp3++;
-				}
-			}
-			else {
-				hposp3 += sizep3;
-			}
-
-			grafp3 = grafp3 << 1;
-		}
-	}
+	DO_PLAYER(0)
+	DO_PLAYER(1)
+	DO_PLAYER(2)
+	DO_PLAYER(3)
 
 /*
    =============================
@@ -408,7 +290,7 @@ void new_pm_scanline(void)
 				}
 			}
 
-			grafm = grafm << 1;
+			grafm <<= 1;
 		}
 	}
 }
@@ -539,7 +421,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 	return byte;
 }
 
-int GTIA_PutByte(UWORD addr, UBYTE byte)
+void GTIA_PutByte(UWORD addr, UBYTE byte)
 {
 	UWORD cword;
 	addr &= 0x1f;
@@ -679,35 +561,35 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _HPOSM0:
 		HPOSM0 = byte;
-		global_hposm0 = PM_XPos[byte];
+		global_hposm0 = byte - 0x20;
 		break;
 	case _HPOSM1:
 		HPOSM1 = byte;
-		global_hposm1 = PM_XPos[byte];
+		global_hposm1 = byte - 0x20;
 		break;
 	case _HPOSM2:
 		HPOSM2 = byte;
-		global_hposm2 = PM_XPos[byte];
+		global_hposm2 = byte - 0x20;
 		break;
 	case _HPOSM3:
 		HPOSM3 = byte;
-		global_hposm3 = PM_XPos[byte];
+		global_hposm3 = byte - 0x20;
 		break;
 	case _HPOSP0:
 		HPOSP0 = byte;
-		global_hposp0 = PM_XPos[byte];
+		global_hposp0 = byte - 0x20;
 		break;
 	case _HPOSP1:
 		HPOSP1 = byte;
-		global_hposp1 = PM_XPos[byte];
+		global_hposp1 = byte - 0x20;
 		break;
 	case _HPOSP2:
 		HPOSP2 = byte;
-		global_hposp2 = PM_XPos[byte];
+		global_hposp2 = byte - 0x20;
 		break;
 	case _HPOSP3:
 		HPOSP3 = byte;
-		global_hposp3 = PM_XPos[byte];
+		global_hposp3 = byte - 0x20;
 		break;
 	case _SIZEM:
 		SIZEM = byte;
@@ -733,26 +615,26 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		global_sizep3 = PM_Width[byte & 0x03];
 		break;
 	case _PRIOR:
-		if ((byte & 0x30) != (PRIOR & 0x30)) {
-		switch(byte&0x30){
+		switch (byte & 0x30) {
 		case 0x00:
-                new_pm_lookup=pm_lookup_normal;
-		break;
+	       	        new_pm_lookup=pm_lookup_normal;
+			break;
 		case 0x10:
-                new_pm_lookup=pm_lookup_5p;
-		break;
+       	        	new_pm_lookup=pm_lookup_5p;
+			break;
 		case 0x20:
-                new_pm_lookup=pm_lookup_multi;
-		break;
+        	        new_pm_lookup=pm_lookup_multi;
+			break;
 		case 0x30:
-                new_pm_lookup=pm_lookup_multi_5p;
-		break;
+        	        new_pm_lookup=pm_lookup_multi_5p;
+			break;
 		}
-		}
-		if ((byte & 0x0f) != (PRIOR & 0x0f)) {
-			memcpy(&cur_prior, &prior_table[( (byte&0x0f)*(NUM_PLAYER_TYPES*5) )], (NUM_PLAYER_TYPES*5));
-                }
+		if ((byte ^ PRIOR) & 0x0f)
+			memcpy(&cur_prior, &prior_table[( (byte&0x0f)*(NUM_PLAYER_TYPES*5) )], NUM_PLAYER_TYPES*5);
 		PRIOR = byte;
+		break;
+	case _VDELAY:
+		VDELAY = byte;
 		break;
 	case _GRACTL:
 		GRACTL = byte;
@@ -762,8 +644,6 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		missile_flickering = ((missile_dma_enabled | missile_gra_enabled) == 0x01);
 		break;
 	}
-
-	return FALSE;
 }
 
 void GTIAStateSave( void )
@@ -812,6 +692,7 @@ void GTIAStateSave( void )
 	SaveUBYTE( &P2PL, 1 );
 	SaveUBYTE( &P3PL, 1 );
 	SaveUBYTE( &PRIOR, 1 );
+	SaveUBYTE( &VDELAY, 1 );
 	SaveUBYTE( &GRACTL, 1 );
 
 	SaveINT( &global_hposp0, 1 );
@@ -828,16 +709,6 @@ void GTIAStateSave( void )
 	SaveINT( &global_sizep3, 1 );
 	SaveINT( &global_sizem[0], 4 );
 	SaveINT( &next_console_value, 1 );
-
-	SaveUWORD( &pl0adr, 24 );
-	SaveUWORD( &pl1adr, 24 );
-	SaveUWORD( &pl2adr, 24 );
-	SaveUWORD( &pl3adr, 24 );
-	SaveUWORD( &m0123adr, 24 );
-
-
-	SaveINT( &PM_XPos[0], 256 );
-	SaveUBYTE( &PM_Width[0], 4 );
 }
 
 void GTIAStateRead( void )
@@ -886,6 +757,7 @@ void GTIAStateRead( void )
 	ReadUBYTE( &P2PL, 1 );
 	ReadUBYTE( &P3PL, 1 );
 	ReadUBYTE( &PRIOR, 1 );
+	ReadUBYTE( &VDELAY, 1 );
 	ReadUBYTE( &GRACTL, 1 );
 
 	ReadINT( &global_hposp0, 1 );
@@ -902,14 +774,4 @@ void GTIAStateRead( void )
 	ReadINT( &global_sizep3, 1 );
 	ReadINT( &global_sizem[0], 4 );
 	ReadINT( &next_console_value, 1 );
-
-	ReadUWORD( &pl0adr, 24 );
-	ReadUWORD( &pl1adr, 24 );
-	ReadUWORD( &pl2adr, 24 );
-	ReadUWORD( &pl3adr, 24 );
-	ReadUWORD( &m0123adr, 24 );
-
-
-	ReadINT( &PM_XPos[0], 256 );
-	ReadUBYTE( &PM_Width[0], 4 );
 }

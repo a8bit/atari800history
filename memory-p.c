@@ -385,29 +385,6 @@ void RestoreSIO( void )
 	exit(1);
 }
 
-void Coldstart(void)
-{
-	if (os == 3) {
-		os = 2;
-		Initialise_Monty();
-		os = 3;
-	}
-	NMIEN = 0x00;
-	NMIST = 0x00;
-	PORTA = 0x00;
-	if (mach_xlxe) {
-		selftest_enabled = TRUE;
-		PORTB = 0x00;
-		PIA_PutByte(_PORTB, 0xff);
-	} else {
-		PORTB = 0xff;
-	}
-	main_bank[0x244] = 1;
-	CPU_Reset();
-
-	if (hold_option) next_console_value = 0x03;
-}
-
 int Initialise_Monty(void)
 {
 	Aprint("Initialise_Monty called");

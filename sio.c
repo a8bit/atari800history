@@ -956,9 +956,9 @@ void SIO_PutByte(int byte)
 			Aprint("Invalid data frame!");
 		}
 		break;
-	default:
+/*	default:
 		Aprint("Unexpected data output :%x", byte);
-	}
+*/	}
 	DELAYED_SEROUT_IRQ += SEROUT_INTERVAL;
 
 }

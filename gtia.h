@@ -108,20 +108,15 @@ extern UBYTE P1PL;
 extern UBYTE P2PL;
 extern UBYTE P3PL;
 extern UBYTE PRIOR;
-
-extern UWORD m0123adr;
-extern UWORD pl0adr;
-extern UWORD pl1adr;
-extern UWORD pl2adr;
-extern UWORD pl3adr;
+extern UBYTE VDELAY;
 
 extern UBYTE colour_lookup[9];
 extern int colour_translation_table[256];
 extern int next_console_value;
 
 void GTIA_Initialise(int *argc, char *argv[]);
-void Atari_ScanLine(void);
+void new_pm_scanline(void);
 UBYTE GTIA_GetByte(UWORD addr);
-int GTIA_PutByte(UWORD addr, UBYTE byte);
+void GTIA_PutByte(UWORD addr, UBYTE byte);
 
 #endif

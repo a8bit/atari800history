@@ -17,6 +17,6 @@ extern int xe_bank;
 
 void PIA_Initialise(int *argc, char *argv[]);
 UBYTE PIA_GetByte(UWORD addr);
-int PIA_PutByte(UWORD addr, UBYTE byte);
+void PIA_PutByte(UWORD addr, UBYTE byte);
 
 #endif

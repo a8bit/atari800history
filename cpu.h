@@ -17,8 +17,8 @@ void CPU_GetStatus(void);
 void CPU_PutStatus(void);
 void CPU_Reset(void);
 void NMI(void);
-int GO(int cycles);
-void GenerateIRQ(void);
+void GO(int limit);
+#define GenerateIRQ() (IRQ = 1)
 
 #ifdef CPUASS
 extern void CPU_INIT(void);

@@ -21,4 +21,6 @@ o simplify and correct synchronization code in main emulator loop - some
 
 o update the m68k assembler version of cpu.c
 
+o clean up the source and start using GNU autoconfig stuff
+
 o fix all known bugs (see BUGS file)

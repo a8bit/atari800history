@@ -1,3 +1,18 @@
+Changes in 0.9.9h (pre-1.0)
+-----------------
+
+o a big bunch of changes from Piotr, completely rewritten Antic emulation,
+  changed Antic<->CPU synchronization, improved sound, improved PCX screen
+  shots including interlaced screenshots and much more.
+
+  The rewritten Antic will need proper testing. Please do test and report
+  problems.
+
+o new binloader improved, sound improved <Marek>
+
+o Amiga updates and general clean up <Sebastian>
+
+
 Changes in 0.9.9g
 -----------------
 
