@@ -47,6 +47,8 @@ int screensaver(int on)
 	JCLKSTRUCT *jclk;
 	int oldval;
 
+	CHECK_CLOCKY_STRUCT;
+
 	if (!get_cookie((long) 'JCLK', &adr))
 		return 0;
 
@@ -164,6 +166,7 @@ void SetupFalconEnvironment(void)
 	}
 
 #if nodebug
+	memset(nova_vram, 0, DELKA_VIDEORAM);
 	Setscreen(nova_vram, nova_vram, -1);
 
 	/* check current resolution - if it is one of supported, do not touch VIDEL */
@@ -366,13 +369,13 @@ int Atari_Keyboard(void)
 		if (key_buf[0x70])
 			trig0 = 0;
 		if (key_buf[0x6d] || key_buf[0x6e] || key_buf[0x6f])
-			stick0 -= (STICK_CENTRE-STICK_BACK);
+			stick0 -= (STICK_CENTRE - STICK_BACK);
 		if (key_buf[0x6f] || key_buf[0x6c] || key_buf[0x69])
-			stick0 -= (STICK_CENTRE-STICK_RIGHT);
+			stick0 -= (STICK_CENTRE - STICK_RIGHT);
 		if (key_buf[0x6d] || key_buf[0x6a] || key_buf[0x67])
-			stick0 -= (STICK_CENTRE-STICK_LEFT);
+			stick0 -= (STICK_CENTRE - STICK_LEFT);
 		if (key_buf[0x67] || key_buf[0x68] || key_buf[0x69])
-			stick0 -= (STICK_CENTRE-STICK_FORWARD);
+			stick0 -= (STICK_CENTRE - STICK_FORWARD);
 	}
 
 	scancode = 0;

@@ -19,11 +19,9 @@ you have the ROM for the 5200 Games System it should be called
 Installation of the Emulator
 ----------------------------
 
-1. Create a toplevel directory called "atari800" and a subdirectory
-   called "roms".
+1. Create a toplevel directory called "atari800"
 
    mkdir c:\atari800
-   mkdir c:\atari800\roms
 
 2. Copy the Atari800 ZIP file into the newly create "atari800"
    directory and unzip.
@@ -32,6 +30,6 @@ Installation of the Emulator
    cd c:\atari800
    pkunzip *.zip
 
-3. Copy the Operating System ROMS into "c:\atari800\roms"
+3. Copy the Operating System ROMS into "c:\atari800"
 
 4. Start the emulator by typing "atari800".

@@ -1,6 +1,6 @@
 /*****************************************************************************/
 /*                                                                           */
-/* Module:  POKEY Chip Emulator, V2.3                                        */
+/* Module:  POKEY Chip Emulator, V2.4                                        */
 /* Purpose: To emulate the sound generation hardware of the Atari POKEY chip. */
 /* Author:  Ron Fries                                                        */
 /*                                                                           */
@@ -19,6 +19,7 @@
 /* 01/19/98 - Ron Fries - Changed signed/unsigned sample support to a        */
 /*                        compile-time option.  Defaults to unsigned -       */
 /*                        define SIGNED_SAMPLES to create signed.            */
+/* 03/22/98 - Ron Fries - Added 'filter' support to channels 1 & 2.          */
 /*                                                                           */
 /* V2.0 Detailed Changes                                                     */
 /* ---------------------                                                     */
@@ -85,7 +86,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "pokey23.h"
+#include "pokeysnd.h"
 
 /* CONSTANT DEFINITIONS */
 
@@ -133,7 +134,7 @@
 #define CHIP4      12
 #define SAMPLE    127
 
-// LBO - changed for cross-platform support
+/* LBO - changed for cross-platform support */
 #ifndef FALSE
 #define FALSE       0
 #endif
@@ -166,18 +167,26 @@ static uint8 Outvol[4 * MAXPOKEYS];		/* last output volume for each channel */
 /* efficient processing. */
 
 static uint8 bit4[POLY4_SIZE] =
+#ifdef PERRY_MODIFIED_POLY
+{1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0};
+#else
 {1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0};
+#endif
 
 static uint8 bit5[POLY5_SIZE] =
+#ifdef PERRY_MODIFIED_POLY
+{1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0};
+#else
 {0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1};
+#endif
 
 static uint8 bit17[POLY17_SIZE];	/* Rather than have a table with 131071 */
-							/* entries, I use a random number generator. */
-							/* It shouldn't make much difference since */
-							/* the pattern rarely repeats anyway. */
+				/* entries, I use a random number generator. */
+				/* It shouldn't make much difference since */
+				/* the pattern rarely repeats anyway. */
 
 static uint32 Poly_adjust;		/* the amount that the polynomial will need */
-						   /* to be adjusted to process the next bit */
+			   /* to be adjusted to process the next bit */
 
 static uint32 P4 = 0,			/* Global position pointer for the 4-bit  POLY array */
  P5 = 0,						/* Global position pointer for the 5-bit  POLY array */
@@ -191,6 +200,8 @@ static uint32 Samp_n_max,		/* Sample max.  For accuracy, it is *256 */
  Samp_n_cnt[2];					/* Sample cnt. */
 
 static uint32 Base_mult[MAXPOKEYS];		/* selects either 64Khz or 15Khz clock mult */
+
+extern int atari_speaker;
 
 /*****************************************************************************/
 /* In my routines, I treat the sample output as another divide by N counter  */
@@ -488,9 +499,17 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 				(Div_n_max[chan + chip_offs] < (Samp_n_max >> 8))) {
 				/* indicate the channel is 'on' */
 				Outvol[chan + chip_offs] = 1;
-				/* and set channel freq to max to reduce processing */
-				Div_n_max[chan + chip_offs] = 0x7fffffffL;
-				Div_n_cnt[chan + chip_offs] = 0x7fffffffL;
+
+				/* can only ignore channel if filtering off */
+				if ((chan == CHAN3 && !(AUDCTL[chip] & CH1_FILTER)) ||
+					(chan == CHAN4 && !(AUDCTL[chip] & CH2_FILTER)) ||
+					(chan == CHAN1) ||
+					(chan == CHAN2) ||
+					(Div_n_max[chan + chip_offs] < (Samp_n_max >> 8))) {
+					/* and set channel freq to max to reduce processing */
+					Div_n_max[chan + chip_offs] = 0x7fffffffL;
+					Div_n_cnt[chan + chip_offs] = 0x7fffffffL;
+				}
 			}
 		}
 	}
@@ -573,6 +592,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 
 		count--;
 	} while (count);
+#ifdef USE_DOSSOUND
+	cur_val += 32 * atari_speaker;
+#endif
 
 	/* loop until the buffer is filled */
 	while (n) {
@@ -667,39 +689,62 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			/* to understand what is happening.  I won't be able to provide */
 			/* much description to explain it here. */
 
-			/* if the output is pure or the output is poly5 and the poly5 bit */
-			/* is set */
-			if ((audc & NOTPOLY5) || bit5[P5]) {
-				/* if the PURE bit is set */
-				if (audc & PURE) {
-					/* then simply toggle the output */
-					toggle = TRUE;
-				}
-				/* otherwise if POLY4 is selected */
-				else if (audc & POLY4) {
-					/* then compare to the poly4 bit */
-					toggle = (bit4[P4] == !(*out_ptr));
-				}
-				else {
-					/* if 9-bit poly is selected on this chip */
-					if (AUDCTL[next_event >> 2] & POLY9) {
-						/* compare to the poly9 bit */
-						toggle = (bit17[P9] == !(*out_ptr));
+			/* if VOLUME only then nothing to process */
+			if (!(audc & VOL_ONLY)) {
+				/* if the output is pure or the output is poly5 and the poly5 bit */
+				/* is set */
+				if ((audc & NOTPOLY5) || bit5[P5]) {
+					/* if the PURE bit is set */
+					if (audc & PURE) {
+						/* then simply toggle the output */
+						toggle = TRUE;
+					}
+					/* otherwise if POLY4 is selected */
+					else if (audc & POLY4) {
+						/* then compare to the poly4 bit */
+						toggle = (bit4[P4] == !(*out_ptr));
 					}
 					else {
-						/* otherwise compare to the poly17 bit */
-						toggle = (bit17[P17] == !(*out_ptr));
+						/* if 9-bit poly is selected on this chip */
+						if (AUDCTL[next_event >> 2] & POLY9) {
+							/* compare to the poly9 bit */
+							toggle = (bit17[P9] == !(*out_ptr));
+						}
+						else {
+							/* otherwise compare to the poly17 bit */
+							toggle = (bit17[P17] == !(*out_ptr));
+						}
 					}
 				}
 			}
 
-			/* At this point I haven't emulated the filters.  Though I don't
-			   expect it to be complicated, I don't believe this feature is
-			   used much anyway.  I'll work on it later. */
-			/* if ((next_event == CHAN1) || (next_event == CHAN3)) */
-			/* {                                                   */
-			/*    INSERT FILTER HERE                               */
-			/* }                                                   */
+			/* check channel 1 filter (clocked by channel 3) */
+			if (AUDCTL[next_event >> 2] & CH1_FILTER) {
+				/* if we're processing channel 3 */
+				if ((next_event & 0x03) == CHAN3) {
+					/* check output of channel 1 on same chip */
+					if (Outvol[next_event & 0xfd]) {
+						/* if on, turn it off */
+						Outvol[next_event & 0xfd] = 0;
+
+						cur_val -= AUDV[next_event & 0xfd];
+					}
+				}
+			}
+
+			/* check channel 2 filter (clocked by channel 4) */
+			if (AUDCTL[next_event >> 2] & CH2_FILTER) {
+				/* if we're processing channel 4 */
+				if ((next_event & 0x03) == CHAN4) {
+					/* check output of channel 2 on same chip */
+					if (Outvol[next_event & 0xfd]) {
+						/* if on, turn it off */
+						Outvol[next_event & 0xfd] = 0;
+
+						cur_val -= AUDV[next_event & 0xfd];
+					}
+				}
+			}
 
 			/* if the current output bit has changed */
 			if (toggle) {
@@ -746,4 +791,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			n--;
 		}
 	}
+}
+
+int pokeysnd_siocheck(void)
+{
+	return ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL[0] & 0x28) == 0x28);
 }

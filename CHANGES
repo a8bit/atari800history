@@ -1,12 +1,73 @@
+Changes in 0.9.1
+----------------
+
+o new POKEY v2.4 with sound channels filtering! Exclusively
+  written by Ron Fries for Atari800 emulator. Thanks, Ron!
+
+o merge of Perry's and (Raster & Joy)'s source tree - great!
+  Current source can be compiled for DOS by either Makefile.dos
+  or by Perry's Makefile.pm (with Pentium optimizations).
+  Perry's Makefile needs DOS game library Allegro. The only
+  functional difference between these two DOS versions is that
+  Makefile.pm enables keyclicks (due to different sound handling).
+
+o major rewrite of DOS keyboard emulation - now allows two
+  modes of operation: native (the labels on English PC keyboard
+  are valid) and original (the keyboard layout is the same as
+  the original Atari800 keyboard). You can switch between these
+  two modes on-the-fly by pressing Control+F1 and Shift+F1).
+  Better handling of START/SELECT/OPTION keys (these console keys
+  are independent of the rest of keyboard).
+  Screen view movement changed to Control-numeric pad (just
+  like emulated joy, but with Control key). <Raster>
+
+o ANTIC speeded up by narrowing the screen width to 42 chars
+  (originally it was 48 chars wide, but no TV can show more 
+  than about 43 chars..). This should speed things up for
+  about 10% in wide modes and PM graphics. <Perry>
+
+o Emulation of 320 kB of memory added. Two different modes are
+  supported - Rambo and Compy Shop. Extended memory tested by
+  Q-meg (alternative operating system for Atari320XE).
+  ROM/ShadowRAM and AtariXL Basic switching optimized. <Raster>
+
+o Atari5200 emulation corrected (loading of ROMs, keyboard,
+  paddles). Special support for Bounty Bob on Atari5200
+  added. <Perry>
+
+o new SIO code that supports formatting (written by <thor>,
+  updated by Perry and Petr).
+
+
+Changes in 0.9.0
+----------------
+
+o slight speed up in antic.c <Perry>
+
+o the right-most vertical line was missing on screen <Raster>
+
+o DOS: BREAK key should not have auto-repeat,  Invers key added
+  <Raster>
+
+o ANTIC now contains #ifdef POKEY_UPDATE. That should be defined
+  in Makefiles for architectures where it's impossible to update
+  sound buffers in DMA interrupt (i.e. Unices etc)
+
+o source cleaned up (no C++ style of comments), docs updated
+
+
 Changes in 0.8.9
 ----------------
 
-o Antic's DIRECT_VIDEO mode was completely rewritten. Now it is the
+o ANTIC's DIRECT_VIDEO mode was completely rewritten. Now it is the
   default mode of emulation, much faster than the previous approach.
-  Antic's scrolling in both horizontal and vertical direction is now
+  This version of ANTIC is also 'line-oriented' - that means video
+  emulation is accurate to single scanlines. It allows such tricks
+  like changing charset during displaying an ANTIC text mode line.
+  ANTIC's scrolling in both horizontal and vertical direction is now
   supported in all graphics modes. Thanks Perry for all these things.
 
-o Gtia now supports all possible combinations of PMG collisions. It
+o GTIA now supports all possible combinations of PMG collisions. It
   also supports third colour (many games are much more colourful now,
   just like they were on original Atari800). Thanks Thomas Richter and
   Perry.

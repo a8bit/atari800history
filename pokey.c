@@ -13,6 +13,10 @@
 #include "sio.h"
 #include "platform.h"
 
+#ifdef USE_DOSSOUND
+#include "pokeysnd.h"
+#endif
+
 #define FALSE 0
 #define TRUE 1
 
@@ -21,6 +25,7 @@ static char *rcsid = "$Id: pokey.c,v 1.11 1998/02/21 15:20:28 david Exp $";
 UBYTE KBCODE;
 UBYTE IRQST;
 UBYTE IRQEN;
+UBYTE SKSTAT;
 int SHIFT_KEY = FALSE, KEYPRESSED = FALSE;
 
 UBYTE POKEY_GetByte(UWORD addr)
@@ -71,7 +76,8 @@ UBYTE POKEY_GetByte(UWORD addr)
 		byte = rand();
 		break;
 	case _SERIN:
-		byte = SIO_SERIN();
+		/* byte = SIO_SERIN(); */
+		byte = SIO_GetByte();
 /*
    colour_lookup[8] = colour_translation_table[byte];
  */
@@ -137,6 +143,7 @@ int POKEY_PutByte(UWORD addr, UBYTE byte)
 	case _POTGO:
 		break;
 	case _SEROUT:
+	/*
 		{
 			int cmd_flag = (PBCTL & 0x08) ? 0 : 1;
 
@@ -147,17 +154,24 @@ int POKEY_PutByte(UWORD addr, UBYTE byte)
 				   memory[0x35], memory[0x34],
 				   PC);
 #endif
-
-/*
-   colour_lookup[8] = colour_translation_table[byte];
- */
+			colour_lookup[8] = colour_translation_table[byte];
 			SIO_SEROUT(byte, cmd_flag);
+		}
+	*/
+		if ((SKSTAT & 0x70) == 0x20) {
+			if (pokeysnd_siocheck()) {
+				/* if ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL & 0x28)==0x28) */
+				SIO_PutByte(byte);
+			}
 		}
 		break;
 	case _STIMER:
 #ifdef DEBUG1
 		printf("WR: STIMER = %x\n", byte);
 #endif
+		break;
+	case _SKSTAT:
+		SKSTAT = byte;
 		break;
 	}
 

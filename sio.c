@@ -1,12 +1,21 @@
 /*
 
- * All Input is assumed to be going to RAM
+ * All Input is assumed to be going to RAM (no longer, ROM works, too.)
  * All Output is assumed to be coming from either RAM or ROM
  *
  */
-
+#define Peek(a) (memory[(a)])
+#define DPeek(a) ( memory[(a)]+( memory[(a)+1]<<8 ) )
+#define Poke(a,b) ( memory[(a)] = (b) )
+/* PM Notes:
+   note the versions in Thors emu are able to deal with ROM better than
+   these ones.  These are only used for the 'fake' fast SIO replacement
+   Changed Setled to only under MOTIF consistantly (was #ifndef BASIC
+   in some places.)
+*/
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef VMS
 #include <unixio.h>
@@ -21,6 +30,11 @@
 #ifdef DJGPP
 #include "djgpp.h"
 #endif
+extern int DELAYED_SERIN_IRQ;
+extern int DELAYED_SEROUT_IRQ;
+extern int DELAYED_XMTDONE_IRQ;
+typedef int ATPtr;
+
 
 static char *rcsid = "$Id: sio.c,v 1.9 1998/02/21 14:55:21 david Exp $";
 
@@ -30,11 +44,13 @@ static char *rcsid = "$Id: sio.c,v 1.9 1998/02/21 14:55:21 david Exp $";
 #include "atari.h"
 #include "cpu.h"
 #include "sio.h"
+#include "pokeysnd.h"
+
+void CopyFromMem(int to, UBYTE *, int size);
+void CopyToMem(UBYTE *, ATPtr from, int size);
 
 #define	MAGIC1	0x96
 #define	MAGIC2	0x02
-
-#undef ORIGINAL_XFD_CODE		/* new code should support DD XFD images - PS */
 
 struct ATR_Header {
 	unsigned char magic1;
@@ -65,8 +81,17 @@ static enum DriveStatus {
 	ReadWrite
 } drive_status[MAX_DRIVES];
 
-char sio_status[256];
 char sio_filename[MAX_DRIVES][FILENAME_LEN];
+
+/* Serial I/O emulation support */
+UBYTE CommandFrame[6];
+int CommandIndex = 0;
+UBYTE DataBuffer[256 + 3];
+char sio_status[256];
+int DataIndex = 0;
+int TransferStatus = 0;
+int ExpectedBytes = 0;
+
 
 void SIO_Initialise(int *argc, char *argv[])
 {
@@ -74,6 +99,8 @@ void SIO_Initialise(int *argc, char *argv[])
 
 	for (i = 0; i < MAX_DRIVES; i++)
 		strcpy(sio_filename[i], "Empty");
+
+	TransferStatus = SIO_NoFrame;
 }
 
 int SIO_Mount(int diskno, char *filename)
@@ -85,9 +112,9 @@ int SIO_Mount(int diskno, char *filename)
 	drive_status[diskno - 1] = ReadWrite;
 	strcpy(sio_filename[diskno - 1], "Empty");
 
-	fd = open(filename, O_RDWR | O_BINARY);
+	fd = open(filename, O_RDWR | O_BINARY, 0777);
 	if (fd == -1) {
-		fd = open(filename, O_RDONLY | O_BINARY);
+		fd = open(filename, O_RDONLY | O_BINARY, 0777);
 		drive_status[diskno - 1] = ReadOnly;
 	}
 
@@ -128,12 +155,11 @@ int SIO_Mount(int diskno, char *filename)
 		}
 		else {
 			ULONG file_length = lseek(fd, 0L, SEEK_END);
+			lseek(fd, 0L, SEEK_SET);
 			format[diskno - 1] = XFD;
-#ifndef ORIGINAL_XFD_CODE
 			/* XFD might be of double density ! (PS) */
 			sectorsize[diskno - 1] = (file_length > (1040 * 128)) ? 256 : 128;
 			sectorcount[diskno - 1] = file_length / sectorsize[diskno - 1];
-#endif
 		}
 	}
 	else {
@@ -161,136 +187,210 @@ void SIO_DisableDrive(int diskno)
 	strcpy(sio_filename[diskno - 1], "Off");
 }
 
-void SeekSector(int dskno, int sector)
+void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 {
-	int offset;
+	int size = sectorsize[unit];
+	ULONG offset = 0;
 
-	sprintf(sio_status, "%d: %d", dskno + 1, sector);
-
-	switch (format[dskno]) {
+	switch (format[unit]) {
 	case XFD:
-#ifdef ORIGINAL_XFD_CODE		/* does not support double density XFD disks */
-		offset = (sector - 1) * 128;
-#else
-		offset = (sector - 1) * sectorsize[dskno] + 0;
-#endif
+		offset = (sector - 1) * size;
 		break;
-
 	case ATR:
 		if (sector < 4)
-			offset = (sector - 1) * 128 + 16;
-		else
-			offset = (sector - 1) * sectorsize[dskno] + 16;
-/*
-   offset = 3*128 + (sector-4) * sectorsize[dskno] + 16;
- */
+			size = 128;		/* special case for first three sectors in ATR image */
+
+		offset = (sector - 1) * size + 16;
 		break;
 	default:
 		printf("Fatal Error in atari_sio.c\n");
 		Atari800_Exit(FALSE);
-		exit(1);
 	}
 
-	if (offset > lseek(disk[dskno], 0L, SEEK_END)) {
-/*
-   printf("Seek after end of file\n");
-   Atari800_Exit(FALSE);
-   exit(1);
- */
-	}
-	else
-		lseek(disk[dskno], offset, SEEK_SET);
+	if (sz)
+		*sz = size;
+
+	if (ofs)
+		*ofs = offset;
 }
 
-void SIO(void)
+int SeekSector(int unit, int sector)
 {
-	/* UBYTE DDEVIC = memory[0x0300]; */
-	UBYTE DUNIT = memory[0x0301];
-	UBYTE DCOMND = memory[0x0302];
-	/* UBYTE DSTATS = memory[0x0303]; */
-	UBYTE DBUFLO = memory[0x0304];
-	UBYTE DBUFHI = memory[0x0305];
-	/* UBYTE DTIMLO = memory[0x0306]; */
-	UBYTE DBYTLO = memory[0x0308];
-	UBYTE DBYTHI = memory[0x0309];
-	UBYTE DAUX1 = memory[0x030a];
-	UBYTE DAUX2 = memory[0x030b];
+	ULONG offset;
+	int size;
 
-	int sector;
-	int buffer;
-	int count;
-	int i;
-
-	if (drive_status[DUNIT - 1] != Off) {
-		if (disk[DUNIT - 1] != -1) {
-			int offset;
-
-			sector = DAUX1 + DAUX2 * 256;
-			buffer = DBUFLO + DBUFHI * 256;
-			count = DBYTLO + DBYTHI * 256;
-
-			switch (format[DUNIT - 1]) {
-			case XFD:
-#ifdef ORIGINAL_XFD_CODE
-				offset = (sector - 1) * 128 + 0;
-#else
-				offset = (sector - 1) * sectorsize[DUNIT - 1] + 0;
+	sprintf(sio_status, "%d: %d", unit + 1, sector);
+	SizeOfSector(unit, sector, &size, &offset);
+	/* printf("Sector %x,Offset: %x\n",sector,offset); */
+	if (offset > lseek(disk[unit], 0L, SEEK_END)) {
+#ifdef DEBUG
+		printf("Seek after end of file\n");
 #endif
-				break;
-			case ATR:
-				if (sector < 4)
-					offset = (sector - 1) * 128 + 16;
-				else
-					offset = (sector - 1) * sectorsize[DUNIT - 1] + 16;
 /*
-   offset = 3*128 + (sector-4) * sectorsize[DUNIT-1] + 16;
- */
-				break;
-			default:
-				printf("Fatal Error in atari_sio.c\n");
-				Atari800_Exit(FALSE);
-				exit(1);
-			}
+		Atari800_Exit(FALSE);
+		exit(1);
+*/
+	}
+	else
+		lseek(disk[unit], offset, SEEK_SET);
 
-			if (offset > lseek(disk[DUNIT - 1], 0L, SEEK_END)) {
-/*
-   printf("Seek after end of file\n");
-   Atari800_Exit(FALSE);
-   exit(1);
- */
+	return size;
+}
+
+
+/* Unit counts from zero up */
+int ReadSector(int unit, int sector, UBYTE * buffer)
+{
+	int size;
+
+	if (drive_status[unit] != Off) {
+		if (disk[unit] != -1) {
+			if (sector <= sectorcount[unit]) {
+				size = SeekSector(unit, sector);
+				read(disk[unit], buffer, size);
+				return 'C';
 			}
 			else
-				lseek(disk[DUNIT - 1], offset, SEEK_SET);
+				return 'E';
+		}
+		else
+			return 'N';
+	}
+	else
+		return 0;
+}
 
-#ifdef DEBUG
-			printf("SIO: DCOMND = %x, SECTOR = %d, BUFADR = %x, BUFLEN = %d\n",
-				   DCOMND, sector, buffer, count);
-#endif
+int WriteSector(int unit, int sector, UBYTE * buffer)
+{
+	int size;
 
-			switch (DCOMND) {
-			case 0x50:
-			case 0x57:
-				if (drive_status[DUNIT - 1] == ReadWrite) {
-					write(disk[DUNIT - 1], &memory[buffer], count);
-					regY = 1;
-					ClrN;
+	if (drive_status[unit] != Off) {
+		if (disk[unit] != -1) {
+			if (drive_status[unit] == ReadWrite) {
+				if (sector <= sectorcount[unit]) {
+					size = SeekSector(unit, sector);
+					write(disk[unit], buffer, size);
+					return 'C';
 				}
-				else {
-					regY = 146;
-					SetN;
-				}
-				break;
-			case 0x52:
-				read(disk[DUNIT - 1], &memory[buffer], count);
-				regY = 1;
-				ClrN;
-				break;
-			case 0x21:			/* Single Density Format */
-			case 0x22:			/* Duel Density Format */
-			case 0x66:			/* US Doubler Format - I think! */
-				regY = 1;
-				ClrN;
-				break;
+				else
+					return 'E';
+			}
+			else
+				return 'E';
+		}
+		else
+			return 'N';
+	}
+	else
+		return 0;
+}
+
+int FormatSingle(int unit, UBYTE * buffer)
+{
+	int i;
+
+	if (drive_status[unit] != Off) {
+		if (disk[unit] != -1) {
+			if (drive_status[unit] == ReadWrite) {
+				sectorcount[unit] = 720;
+				sectorsize[unit] = 128;
+				format[unit] = XFD;
+				SeekSector(unit, 1);
+				memset(buffer, 0, 128);
+				for (i = 1; i <= 720; i++)
+					write(disk[unit], buffer, 128);
+				memset(buffer, 0xff, 128);
+				return 'C';
+			}
+			else
+				return 'E';
+		}
+		else
+			return 'N';
+	}
+	else
+		return 0;
+}
+
+int FormatEnhanced(int unit, UBYTE * buffer)
+{
+	int i;
+
+	if (drive_status[unit] != Off) {
+		if (disk[unit] != -1) {
+			if (drive_status[unit] == ReadWrite) {
+				sectorcount[unit] = 1040;
+				sectorsize[unit] = 128;
+				format[unit] = XFD;
+				SeekSector(unit, 1);
+				memset(buffer, 0, 128);
+				for (i = 1; i <= 1040; i++)
+					write(disk[unit], buffer, 128);
+				memset(buffer, 0xff, 128);
+				return 'C';
+			}
+			else
+				return 'E';
+		}
+		else
+			return 'N';
+	}
+	else
+		return 0;
+}
+
+int WriteStatusBlock(int unit, UBYTE * buffer)
+{
+
+	if (drive_status[unit] != Off) {
+		/* We only care about the density right here. Setting everything else
+		   right here seems to be non-sense */
+		if (format[unit] == ATR) {
+			if (buffer[5] == 8) {
+				sectorsize[unit] = 256;
+			}
+			else {
+				sectorsize[unit] = 128;
+			}
+			sectorcount[unit] = 720;
+			return 'C';
+		}
+		else
+			return 'E';
+	}
+	else
+		return 0;
+}
+
+int ReadStatusBlock(int unit, UBYTE * buffer)
+{
+	int size;
+
+	if (drive_status[unit] != Off) {
+		SizeOfSector(unit, 0x168, &size, NULL);
+		buffer[0] = 40;			/* # of tracks */
+		buffer[1] = 1;			/* step rate. No idea what this means */
+		buffer[2] = 0;			/* sectors per track. HI byte */
+		buffer[3] = 18;			/* sectors per track. LO byte */
+		buffer[4] = 1;			/* # of heads */
+		if (size == 128) {
+			buffer[5] = 4;		/* density */
+			buffer[6] = 0;		/* HI bytes per sector */
+			buffer[7] = 128;	/* LO bytes per sector */
+		}
+		else {
+			buffer[5] = 8;		/* double density */
+			buffer[6] = 1;		/* HI bytes per sector */
+			buffer[7] = 0;		/* LO bytes per sector */
+		}
+		buffer[8] = 1;			/* drive is online */
+		buffer[9] = 192;		/* transfer speed. Whatever this means */
+		return 'C';
+	}
+	else
+		return 0;
+}
+
 /*
    Status Request from Atari 400/800 Technical Reference Notes
 
@@ -312,253 +412,450 @@ void SIO(void)
    Bit 5 = 1 indicates double density
    Bit 7 = 1 indicates duel density disk (1050 format)
  */
-			case 0x53:			/* Get Status */
-				for (i = 0; i < count; i++) {
-					if (sectorsize[DUNIT - 1] == 256)
-						memory[buffer + i] = 32 + 16;
-					else
-						memory[buffer + i] = 16;
-				}
-				regY = 1;
-				ClrN;
-				break;
-			default:
-				printf("SIO: DCOMND = %0x\n", DCOMND);
-				regY = 146;
-				SetN;
-				break;
-			}
+int DriveStatus(int unit, UBYTE * buffer)
+{
+	if (drive_status[unit] != Off) {
+		if (drive_status[unit] == ReadWrite) {
+			buffer[0] = (sectorsize[unit] == 256) ? (32 + 16) : (16);
+			buffer[1] = (disk[unit] != -1) ? (128) : (0);
 		}
 		else {
-			regY = 146;
-			SetN;
+			buffer[0] = (sectorsize[unit] == 256) ? (32) : (0);
+			buffer[1] = (disk[unit] != -1) ? (192) : (64);
 		}
+		if (sectorcount[unit] == 1040)
+			buffer[0] |= 128;
+		buffer[2] = 1;
+		buffer[3] = 0;
+		return 'C';
 	}
-	else {
-		regY = 138;
-		SetN;
-	}
-
-	memory[0x0303] = regY;
+	else
+		return 0;
 }
 
-static unsigned char cmd_frame[5];
-static int ncmd = 0;
-static int checksum = 0;
 
-static unsigned char data[256];
-static int offst;
+void SIO(void)
+{
+	int sector = DPeek(0x30a);
+	UBYTE unit = Peek(0x301) - 1;
+	UBYTE result = 0x00;
+	ATPtr data = DPeek(0x304);
+	int length = DPeek(0x308);
+	int realsize;
+	int cmd = Peek(0x302);
 
-static int buffer_offset;
-static int buffer_size;
+#ifdef MOTIF
+	Atari_Set_LED(1);
+#endif
 
-extern int DELAYED_SERIN_IRQ;
-extern int DELAYED_SEROUT_IRQ;
-extern int DELAYED_XMTDONE_IRQ;
+/*
+   printf("SIO: Unit %x,Sector %x,Data %x,Length %x,CMD %x\n",unit,sector,data,length,cmd);
+ */
 
-typedef enum {
-	SIO_Normal,
-	SIO_Put
-} SIO_State;
+	if (Peek(0x300) == 0x31)
+		switch (cmd) {
+		case 0x4e:				/* Read Status Block */
+			if (12 == length) {
+				result = ReadStatusBlock(unit, DataBuffer);
+				if (result == 'C')
+					CopyToMem(DataBuffer, data, 12);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x4f:				/* Write Status Block */
+			if (12 == length) {
+				CopyFromMem(data, DataBuffer, 12);
+				result = WriteStatusBlock(unit, DataBuffer);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x50:				/* Write */
+		case 0x57:
+			SizeOfSector(unit, sector, &realsize, NULL);
+			if (realsize == length) {
+				CopyFromMem(data, DataBuffer, realsize);
+				result = WriteSector(unit, sector, DataBuffer);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x52:				/* Read */
+			SizeOfSector(unit, sector, &realsize, NULL);
+			if (realsize == length) {
+				result = ReadSector(unit, sector, DataBuffer);
+				if (result == 'C')
+					CopyToMem(DataBuffer, data, realsize);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x53:				/* Status */
+			if (4 == length) {
+				result = DriveStatus(unit, DataBuffer);
+				CopyToMem(DataBuffer, data, 4);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x21:				/* Single Density Format */
+			if (length == 128) {
+				result = FormatSingle(unit, DataBuffer);
+				if (result == 'C')
+					CopyToMem(DataBuffer, data, realsize);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x22:				/* Enhanced Density Format */
+			if (length == 128) {
+				result = FormatEnhanced(unit, DataBuffer);
+				if (result == 'C')
+					CopyToMem(DataBuffer, data, realsize);
+			}
+			else
+				result = 'E';
+			break;
+		case 0x66:				/* US Doubler Format - I think! */
+			result = 'A';		/* Not yet supported... to be done later... */
+			break;
+		default:
+			result = 'N';
+		}
 
-static SIO_State sio_state = SIO_Normal;
+	switch (result) {
+	case 0x00:					/* Device disabled, generate timeout */
+		regY = 138;
+		SetN;
+		break;
+	case 'A':					/* Device acknoledge */
+	case 'C':					/* Operation complete */
+		regY = 1;
+		ClrN;
+		break;
+	case 'N':					/* Device NAK */
+		regY = 144;
+		SetN;
+		break;
+	case 'E':					/* Device error */
+	default:
+		regY = 146;
+		SetN;
+		break;
+	}
+
+	Poke(0x0303, regY);
+
+#ifdef MOTIF
+	Atari_Set_LED(0);
+#endif
+
+}
+
+void SIO_Initialize(void)
+{
+	TransferStatus = SIO_NoFrame;
+}
+
+
+UBYTE ChkSum(UBYTE * buffer, UWORD length)
+{
+	int i;
+	int checksum = 0;
+
+	for (i = 0; i < length; i++, buffer++) {
+		checksum += *buffer;
+		while (checksum > 255)
+			checksum -= 255;
+	}
+
+	return checksum;
+}
 
 void Command_Frame(void)
 {
-	sio_state = SIO_Normal;
+	int unit;
+	int result = 'A';
+	int sector;
+	int realsize;
 
-	switch (cmd_frame[1]) {
-	case 'R':					/* Read */
-#ifdef DEBUG
-		printf("Read command\n");
-#endif
-		{
-			int sector;
-			int dskno;
-			int i;
 
-			dskno = cmd_frame[0] - 0x31;
-			sector = cmd_frame[2] + cmd_frame[3] * 256;
-#ifdef DEBUG
-			printf("Sector: %d(%x)\n", sector, sector);
-#endif
-			SeekSector(dskno, sector);
-
-			data[0] = 0x41;		/* ACK */
-			data[1] = 0x43;		/* OPERATION COMPLETE */
-
-			read(disk[dskno], &data[2], 128);
-			checksum = 0;
-			for (i = 2; i < 130; i++) {
-				checksum += (unsigned char) data[i];
-				while (checksum > 255)
-					checksum = checksum - 255;
-			}
-			data[130] = checksum;
-
-			buffer_offset = 0;
-			buffer_size = 131;
-
-			DELAYED_SEROUT_IRQ = 1;
-			DELAYED_XMTDONE_IRQ = 3;
-			DELAYED_SERIN_IRQ = 150;	/* BEFORE 7 */
-		}
-		break;
-	case 'S':					/* Status */
-#ifdef DEBUG
-		printf("Status command\n");
-#endif
-		data[0] = 0x41;			/* ACK */
-		data[1] = 0x43;			/* OPERATION COMPLETE */
-		data[2] = 0x10;			/* 2ea */
-		data[3] = 0x00;			/* 2eb */
-		data[4] = 0x01;			/* 2ec */
-		data[5] = 0x00;			/* 2ed */
-		data[6] = 0x11;			/* Checksum */
-		buffer_offset = 0;
-		buffer_size = 7;
-
-		DELAYED_SEROUT_IRQ = 1;
-		DELAYED_XMTDONE_IRQ = 5;
-		DELAYED_SERIN_IRQ = 150;
-		break;
-	case 'W':					/* Write with verify */
-	case 'P':					/* Put without verify */
-#ifdef DEBUG
-		printf("Put or Write command\n");
-#endif
-		data[0] = 0x41;			/* ACK */
-		buffer_offset = 0;
-		buffer_size = 1;
-		DELAYED_SEROUT_IRQ = 1;
-		DELAYED_XMTDONE_IRQ = 3;
-		DELAYED_SERIN_IRQ = 150;	/* BEFORE 7 */
-		sio_state = SIO_Put;
-		break;
-	case '!':					/* Format */
-		printf("Format command\n");
-		break;
-	case 'T':					/* Read Address */
-		printf("Read Address command\n");
-		break;
-	case 'Q':					/* Read Spin */
-		printf("Read Spin command\n");
-		break;
-	case 'U':					/* Motor On */
-		printf("Motor On command\n");
-		break;
-	case 'V':					/* Verify Sector */
-		printf("Verify Sector\n");
-		break;
-	default:
-		printf("Unknown command: %02x\n", cmd_frame[1]);
-		printf("Command frame: %02x %02x %02x %02x %02x\n",
-			   cmd_frame[0], cmd_frame[1], cmd_frame[2],
-			   cmd_frame[3], cmd_frame[4]);
-		buffer_offset = 0;
-		buffer_size = 0;
-		DELAYED_XMTDONE_IRQ = 3;
-		break;
+	sector = CommandFrame[2] | (((UWORD) (CommandFrame[3])) << 8);
+	unit = CommandFrame[0] - '1';
+	if (unit > 8) {				/* UBYTE - range ! */
+		printf("Unknown command frame: %02x %02x %02x %02x %02x\n",
+			   CommandFrame[0], CommandFrame[1], CommandFrame[2],
+			   CommandFrame[3], CommandFrame[4]);
+		result = 0;
 	}
+	else
+		switch (CommandFrame[1]) {
+		case 0x4e:				/* Read Status */
+			DataBuffer[0] = ReadStatusBlock(unit, DataBuffer + 1);
+			DataBuffer[13] = ChkSum(DataBuffer + 1, 12);
+			DataIndex = 0;
+			ExpectedBytes = 14;
+			TransferStatus = SIO_ReadFrame;
+			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			break;
+		case 0x4f:
+			ExpectedBytes = 13;
+			DataIndex = 0;
+			TransferStatus = SIO_WriteFrame;
+			break;
+		case 0x50:				/* Write */
+		case 0x57:
+			SizeOfSector(unit, sector, &realsize, NULL);
+			ExpectedBytes = realsize + 1;
+			DataIndex = 0;
+			TransferStatus = SIO_WriteFrame;
+			break;
+		case 0x52:				/* Read */
+			SizeOfSector(unit, sector, &realsize, NULL);
+			DataBuffer[0] = ReadSector(unit, sector, DataBuffer + 1);
+			DataBuffer[1 + realsize] = ChkSum(DataBuffer + 1, realsize);
+			DataIndex = 0;
+			ExpectedBytes = 2 + realsize;
+			TransferStatus = SIO_ReadFrame;
+			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			break;
+		case 0x53:				/* Status */
+			DataBuffer[0] = DriveStatus(unit, DataBuffer + 1);
+			DataBuffer[1 + 4] = ChkSum(DataBuffer + 1, 4);
+			DataIndex = 0;
+			ExpectedBytes = 6;
+			TransferStatus = SIO_ReadFrame;
+			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			break;
+		case 0x21:				/* Single Density Format */
+			DataBuffer[0] = FormatSingle(unit, DataBuffer + 1);
+			DataBuffer[1 + 128] = ChkSum(DataBuffer + 1, 128);
+			DataIndex = 0;
+			ExpectedBytes = 2 + 128;
+			TransferStatus = SIO_FormatFrame;
+			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			break;
+		case 0x22:				/* Duel Density Format */
+			DataBuffer[0] = FormatEnhanced(unit, DataBuffer + 1);
+			DataBuffer[1 + 128] = ChkSum(DataBuffer + 1, 128);
+			DataIndex = 0;
+			ExpectedBytes = 2 + 128;
+			TransferStatus = SIO_FormatFrame;
+			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			break;
+		case 0x66:				/* US Doubler Format - I think! */
+			result = 'A';		/* Not yet supported... to be done later... */
+			break;
+		default:
+			printf("Command frame: %02x %02x %02x %02x %02x\n",
+				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
+				   CommandFrame[3], CommandFrame[4]);
+			break;
+			result = 0;
+		}
+
+	if (result == 0)
+		TransferStatus = SIO_NoFrame;
 }
 
-void SIO_SEROUT(unsigned char byte, int cmd)
+
+/* Enable/disable the command frame */
+void SwitchCommandFrame(int onoff)
 {
-	checksum += (unsigned char) byte;
-	while (checksum > 255)
-		checksum = checksum - 255;
 
-#ifdef DEBUG
-	printf("SIO_SEROUT: byte = %x, checksum = %x, cmd = %d\n",
-		   byte, checksum, cmd);
+	if (onoff) {				/* Enabled */
+		if (TransferStatus != SIO_NoFrame)
+			printf("Unexpected command frame %x.\n", TransferStatus);
+		CommandIndex = 0;
+		DataIndex = 0;
+		ExpectedBytes = 5;
+		TransferStatus = SIO_CommandFrame;
+#ifdef MOTIF
+		Atari_Set_LED(1);
 #endif
-
-	if (cmd) {
-		cmd_frame[ncmd++] = byte;
-		if (ncmd == 5) {
-			Command_Frame();
-
-			offst = 0;
-			checksum = 0;
-			ncmd = 0;
-		}
-		else {
-			DELAYED_SEROUT_IRQ = 1;
-		}
-
-		if (cmd_frame[0] == 0)
-			ncmd = 0;
-	}
-	else if (sio_state == SIO_Put) {
-		data[buffer_offset++] = byte;
-		if (buffer_offset == 130) {
-			int sector;
-			int dskno;
-			int i;
-
-			checksum = 0;
-
-			for (i = 1; i < 129; i++) {
-				checksum += (unsigned char) data[i];
-				while (checksum > 255)
-					checksum = checksum - 255;
-			}
-
-			if (checksum != data[129]) {
-				printf("Direct SIO Write Error\n");
-				printf("Calculated Checksum = %x\n", checksum);
-				printf("Actual Checksum = %x\n", data[129]);
-				exit(1);
-			}
-
-			dskno = cmd_frame[0] - 0x31;
-			sector = cmd_frame[2] + cmd_frame[3] * 256;
-
-#ifdef DEBUG
-			printf("Sector: %d(%x)\n", sector, sector);
-#endif
-
-			SeekSector(dskno, sector);
-
-			write(disk[dskno], &data[1], 128);
-			data[buffer_offset] = 0x41;		/* ACK */
-			data[buffer_offset + 1] = 0x43;		/* OPERATION COMPLETE */
-			buffer_size = buffer_offset + 2;
-			DELAYED_SEROUT_IRQ = 1;
-			DELAYED_XMTDONE_IRQ = 3;
-			DELAYED_SERIN_IRQ = 7;
-			DELAYED_XMTDONE_IRQ = 5;
-			DELAYED_SERIN_IRQ = 150;
-		}
-		else {
-			DELAYED_SEROUT_IRQ = 4;
-		}
+		/* printf("Command frame expecting.\n"); */
 	}
 	else {
-		DELAYED_SEROUT_IRQ = 1;
-		ncmd = 0;
+		if (TransferStatus != SIO_StatusRead && TransferStatus != SIO_NoFrame &&
+			TransferStatus != SIO_ReadFrame) {
+			if (!(TransferStatus == SIO_CommandFrame && CommandIndex == 0))
+				printf("Command frame %02x unfinished.\n", TransferStatus);
+			TransferStatus = SIO_NoFrame;
+		}
+		CommandIndex = 0;
 	}
 }
 
-int SIO_SERIN(void)
+UBYTE WriteSectorBack(void)
 {
-	int byte = 0;				/* initialise the value, just for sure */
+	UWORD sector;
+	UBYTE unit;
+	UBYTE result;
 
-	if (buffer_offset < buffer_size) {
-		byte = (int) data[buffer_offset++];
-
-#ifdef DEBUG
-		printf("SERIN: byte = %x\n", byte);
-#endif
-
-		if (buffer_offset < buffer_size) {
-#ifdef DEBUG
-			printf("Setting SERIN Interrupt again\n");
-#endif
-			DELAYED_SERIN_IRQ = 3;
-			DELAYED_SERIN_IRQ = 4;
+	sector = CommandFrame[2] | (((UWORD) (CommandFrame[3])) << 8);
+	unit = CommandFrame[0] - '1';
+	if (unit > 8) {				/* UBYTE range ! */
+		result = 0;
+	}
+	else
+		switch (CommandFrame[1]) {
+		case 0x4f:				/* Write Status Block */
+			result = WriteStatusBlock(unit, DataBuffer);
+			break;
+		case 0x50:				/* Write */
+		case 0x57:
+			result = WriteSector(unit, sector, DataBuffer);
+			break;
+		default:
+			result = 'E';
 		}
+
+	return result;
+}
+
+/* Put a byte that comes out of POKEY. So get it here... */
+void SIO_PutByte(int byte)
+{
+	UBYTE sum, result;
+
+	switch (TransferStatus) {
+	case SIO_CommandFrame:
+		if (CommandIndex < ExpectedBytes) {
+			CommandFrame[CommandIndex++] = byte;
+			if (CommandIndex >= ExpectedBytes) {
+				/* printf("%x\n",CommandFrame[0]); */
+				if (((CommandFrame[0] >= 0x31) && (CommandFrame[0] <= 0x38))) {
+					TransferStatus = SIO_StatusRead;
+					/* printf("Command frame done.\n"); */
+					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+				}
+				else
+					TransferStatus = SIO_NoFrame;
+			}
+		}
+		else {
+			printf("Invalid command frame!\n");
+			TransferStatus = SIO_NoFrame;
+		}
+		break;
+	case SIO_WriteFrame:		/* Expect data */
+		if (DataIndex < ExpectedBytes) {
+			DataBuffer[DataIndex++] = byte;
+			if (DataIndex >= ExpectedBytes) {
+				sum = ChkSum(DataBuffer, ExpectedBytes - 1);
+				if (sum == DataBuffer[ExpectedBytes - 1]) {
+					result = WriteSectorBack();
+					if (result) {
+						DataBuffer[0] = 'A';
+						DataBuffer[1] = result;
+						DataIndex = 0;
+						ExpectedBytes = 2;
+						DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+						TransferStatus = SIO_FinalStatus;
+						/* printf("Sector written, result= %x.\n",result); */
+					}
+					else
+						TransferStatus = SIO_NoFrame;
+				}
+				else {
+					DataBuffer[0] = 'E';
+					DataIndex = 0;
+					ExpectedBytes = 1;
+					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+					TransferStatus = SIO_FinalStatus;
+				}
+			}
+		}
+		else {
+			printf("Invalid data frame!\n");
+		}
+		break;
+	default:
+		printf("Unexpected data output :%x\n", byte);
+	}
+	DELAYED_SEROUT_IRQ += SEROUT_INTERVAL;
+
+}
+
+/* Get a byte from the floppy to the pokey. */
+
+int SIO_GetByte(void)
+{
+	int byte = 0;
+
+	switch (TransferStatus) {
+	case SIO_StatusRead:
+		byte = 'A';				/* Command acknoledged */
+		/* printf("Command status read\n"); */
+		Command_Frame();		/* Handle now the command */
+		break;
+	case SIO_FormatFrame:
+		TransferStatus = SIO_ReadFrame;
+		DELAYED_SERIN_IRQ += SERIN_INTERVAL << 3;
+	case SIO_ReadFrame:
+		if (DataIndex < ExpectedBytes) {
+			byte = DataBuffer[DataIndex++];
+			if (DataIndex >= ExpectedBytes) {
+				TransferStatus = SIO_NoFrame;
+#ifdef MOTIF
+				Atari_Set_LED(0);
+#endif
+				/* printf("Transfer complete.\n"); */
+			}
+			else {
+				DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			}
+		}
+		else {
+			printf("Invalid read frame!\n");
+			TransferStatus = SIO_NoFrame;
+		}
+		break;
+	case SIO_FinalStatus:
+		if (DataIndex < ExpectedBytes) {
+			byte = DataBuffer[DataIndex++];
+			if (DataIndex >= ExpectedBytes) {
+				TransferStatus = SIO_NoFrame;
+#ifdef MOTIF
+				Atari_Set_LED(0);
+#endif
+				/* printf("Write complete.\n"); */
+			}
+			else {
+				if (DataIndex == 0)
+					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+				else
+					DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			}
+		}
+		else {
+			printf("Invalid read frame!\n");
+#ifdef MOTIF
+			Atari_Set_LED(0);
+#endif
+			TransferStatus = SIO_NoFrame;
+		}
+		break;
+	default:
+		printf("Unexpected data reading!\n");
+		break;
 	}
 
 	return byte;
+}
+void CopyFromMem(ATPtr from, UBYTE * to, int size)
+{
+	memcpy(to, from + memory, size);
+}
+
+
+void CopyToMem(UBYTE * from, ATPtr to, int size)
+{
+	int i;
+
+	for (i = 0; i < size; i++) {
+		Poke(to, *from);
+		from++, to++;
+	}
 }

@@ -15,6 +15,16 @@
 
 #ifdef DJGPP
 #include "djgpp.h"
+int timesync = 1;
+#endif
+
+#ifdef USE_DOSSOUND
+#include <audio.h>
+#endif
+
+#ifdef AT_USE_ALLEGRO
+#include <allegro.h>
+static int i_love_bill = TRUE;	/* Perry, why this? */
 #endif
 
 static char *rcsid = "$Id: atari.c,v 1.48 1998/02/21 15:22:04 david Exp $";
@@ -38,6 +48,7 @@ static char *rcsid = "$Id: atari.c,v 1.48 1998/02/21 15:22:04 david Exp $";
 
 TVmode tv_mode = PAL;
 Machine machine = Atari;
+int mach_xlxe = FALSE;
 int verbose = FALSE;
 double fps;
 int nframes;
@@ -52,6 +63,8 @@ extern UBYTE PORTA;
 extern UBYTE PORTB;
 
 extern int xe_bank;
+extern int selftest_enabled;
+extern int Ram256;
 extern int rom_inserted;
 extern UBYTE atari_basic[8192];
 extern UBYTE atarixl_os[16384];
@@ -249,10 +262,51 @@ int Insert_32K_5200ROM(char *filename)
 
 	fd = open(filename, O_RDONLY, 0777);
 	if (fd != -1) {
-		read(fd, &memory[0x4000], 0x8000);
-		close(fd);
-		SetROM(0x4000, 0xbfff);
+		/* read the first 16k */
+		if (read(fd, &memory[0x4000], 0x4000) != 0x4000) {
+			close(fd);
+			return FALSE;
+		}
+		/* try and read next 16k */
 		cart_type = AGS32_CART;
+		if ((status = read(fd, &memory[0x8000], 0x4000)) == 0) {
+			/* note: AB__ ABB_ ABBB AABB */
+			memcpy(&memory[0x8000], &memory[0x6000], 0x2000);
+			memcpy(&memory[0xA000], &memory[0x6000], 0x2000);
+			memcpy(&memory[0x6000], &memory[0x4000], 0x2000);
+		}
+		else if (status != 0x4000) {
+			close(fd);
+			printf("%X", status);
+			exit(0);
+			return FALSE;
+		}
+		else {
+			UBYTE temp_byte;
+			if (read(fd, &temp_byte, 1) == 1) {
+				/* ABCD EFGH IJ */
+				if (!(cart_image = (UBYTE *) malloc(0x8000)))
+					return FALSE;
+				*cart_image = temp_byte;
+				if (read(fd, &cart_image[1], 0x1fff) != 0x1fff)
+					return FALSE;
+				memcpy(&cart_image[0x2000], &memory[0x6000], 0x6000);	/* IJ CD EF GH :CI */
+
+				memcpy(&memory[0xa000], &cart_image[0x0000], 0x2000);	/* AB CD EF IJ :MEM */
+
+				memcpy(&memory[0x8000], &cart_image[0x0000], 0x2000);	/* AB CD IJ IJ :MEM?ij copy */
+
+				memcpy(&cart_image[0x0000], &memory[0x4000], 0x2000);	/* AB CD EF GH :CI */
+
+				memcpy(&memory[0x5000], &cart_image[0x4000], 0x1000);	/* AE CD IJ IJ :MEM CD dont care? */
+
+				SetHARDWARE(0x4ff6, 0x4ff9);
+				SetHARDWARE(0x5ff6, 0x5ff9);
+			}
+		}
+		close(fd);
+		/* SetROM (0x4000, 0xbfff); */
+		/* cart_type = AGS32_CART; */
 		rom_inserted = TRUE;
 		status = TRUE;
 	}
@@ -386,6 +440,7 @@ void PatchOS(void)
 		break;
 	case AtariXL:
 	case AtariXE:
+	case Atari320XE:
 		memory[0xc314] = 0x8e;
 		memory[0xc315] = 0xff;
 		memory[0xc319] = 0x8e;
@@ -408,6 +463,7 @@ void PatchOS(void)
 		break;
 	case AtariXL:
 	case AtariXE:
+	case Atari320XE:
 		addr = 0xc42e;
 		break;
 	default:
@@ -494,8 +550,11 @@ void Coldstart(void)
 	NMIEN = 0x00;
 	NMIST = 0x00;
 	PORTA = 0xff;
-	if (machine == AtariXL || machine == AtariXE)
+	if (mach_xlxe) {
+		selftest_enabled = TRUE;	/* necessary for init RAM */
+		PORTB = 0x00;			/* necessary for init RAM */
 		PIA_PutByte(_PORTB, 0xff);	/* turn on operating system */
+	}
 	else
 		PORTB = 0xff;
 	memory[0x244] = 1;
@@ -520,7 +579,7 @@ void Warmstart(void)
 int Initialise_AtariOSA(void)
 {
 	int status;
-
+	mach_xlxe = FALSE;
 	status = load_image(atari_osa_filename, 0xd800, 0x2800);
 	if (status) {
 		machine = Atari;
@@ -540,7 +599,7 @@ int Initialise_AtariOSA(void)
 int Initialise_AtariOSB(void)
 {
 	int status;
-
+	mach_xlxe = FALSE;
 	status = load_image(atari_osb_filename, 0xd800, 0x2800);
 	if (status) {
 		machine = Atari;
@@ -560,7 +619,7 @@ int Initialise_AtariOSB(void)
 int Initialise_AtariXL(void)
 {
 	int status;
-
+	mach_xlxe = TRUE;
 	status = load_image(atari_xlxe_filename, 0xc000, 0x4000);
 	if (status) {
 		machine = AtariXL;
@@ -601,23 +660,27 @@ int Initialise_AtariXL(void)
 int Initialise_AtariXE(void)
 {
 	int status;
-
+	mach_xlxe = TRUE;
 	status = Initialise_AtariXL();
 	machine = AtariXE;
-	xe_bank = -1;
+	xe_bank = 0;
+	return status;
+}
 
+int Initialise_Atari320XE(void)
+{
+	int status;
+	mach_xlxe = TRUE;
+	status = Initialise_AtariXE();
+	machine = Atari320XE;
 	return status;
 }
 
 int Initialise_Atari5200(void)
 {
 	int status;
-
-	int i;
-
-	for (i = 0; i < 0xf800; i++)
-		memory[i] = 0x00;
-
+	mach_xlxe = FALSE;
+	memset(memory, 0, 0xf800);
 	status = load_image(atari_5200_filename, 0xf800, 0x800);
 	if (status) {
 		machine = Atari5200;
@@ -659,7 +722,7 @@ int Initialise_Monty(void)
 
 	if (status) {
 		machine = Atari;
-//      PatchOS ();
+		/* PatchOS (); */
 		SetRAM(0x0000, 0xbfff);
 		if (enable_c000_ram)
 			SetRAM(0xc000, 0xcfff);
@@ -705,8 +768,6 @@ int Initialise_EmuOS(void)
 
 int main(int argc, char **argv)
 {
-	FILE *fp;
-
 	int status;
 	int error;
 	int diskno = 1;
@@ -758,6 +819,9 @@ int main(int argc, char **argv)
 		machine = AtariXE;
 		break;
 	case 5:
+		machine = Atari320XE;
+		break;
+	case 6:
 		machine = Atari5200;
 		break;
 	default:
@@ -784,6 +848,15 @@ int main(int argc, char **argv)
 			machine = AtariXL;
 		else if (strcmp(argv[i], "-xe") == 0)
 			machine = AtariXE;
+		else if (strcmp(argv[i], "-320xe") == 0) {
+			machine = Atari320XE;
+			if (!Ram256)
+				Ram256 = 2;	/* default COMPY SHOP */
+		}
+		else if (strcmp(argv[i], "-rambo") == 0) {
+			machine = Atari320XE;
+			Ram256 = 1;
+		}
 		else if (strcmp(argv[i], "-5200") == 0)
 			machine = Atari5200;
 		else if (strcmp(argv[i], "-nobasic") == 0)
@@ -837,8 +910,10 @@ int main(int argc, char **argv)
 			printf("\t-configure    Update Configuration File\n");
 			printf("\t-config fnm   Specify Alternate Configuration File\n");
 			printf("\t-atari        Standard Atari 800 mode\n");
-			printf("\t-xl           Atari XL mode\n");
-			printf("\t-xe           Atari XE mode (Currently same as -xl)\n");
+			printf("\t-xl           Atari 800XL mode\n");
+			printf("\t-xe           Atari 130XE mode\n");
+			printf("\t-320xe        Atari 320XE mode (COMPY SHOP)\n");
+			printf("\t-rambo        Atari 320XE mode (RAMBO)\n");
 			printf("\t-5200         Atari 5200 Games System\n");
 			printf("\t-pal          Enable PAL TV mode\n");
 			printf("\t-ntsc         Enable NTSC TV mode\n");
@@ -853,6 +928,9 @@ int main(int argc, char **argv)
 			printf("\t-c            Enable RAM between 0xc000 and 0xd000\n");
 			printf("\t-v            Show version/release number\n");
 			argv[j++] = argv[i];
+			printf("\nPress Return/Enter to continue...");
+			getchar();
+			printf("\r                                 \n");
 		}
 		else if (strcmp(argv[i], "-a") == 0)
 			os = 1;
@@ -893,8 +971,7 @@ int main(int argc, char **argv)
 	 * Initialise basic 64K memory to zero.
 	 */
 
-	for (i = 0; i < 65536; i++)
-		memory[i] = 0;
+	memset(memory, 0, 65536);	/* Optimalize by Raster */
 
 	/*
 	 * Initialise Custom Chips
@@ -946,6 +1023,7 @@ int main(int argc, char **argv)
 
 	switch (machine) {
 	case Atari:
+		Ram256 = 0;
 		if (os == 1)
 			status = Initialise_AtariOSA();
 		else if (os == 2)
@@ -956,12 +1034,19 @@ int main(int argc, char **argv)
 			status = Initialise_EmuOS();
 		break;
 	case AtariXL:
+		Ram256 = 0;
 		status = Initialise_AtariXL();
 		break;
 	case AtariXE:
+		Ram256 = 0;
 		status = Initialise_AtariXE();
 		break;
+	case Atari320XE:
+		/* Ram256 is even now set */
+		status = Initialise_Atari320XE();
+		break;
 	case Atari5200:
+		Ram256 = 0;
 		status = Initialise_Atari5200();
 		break;
 	default:
@@ -1016,6 +1101,11 @@ int main(int argc, char **argv)
  * Reset CPU and start hardware emulation
  * ======================================
  */
+
+#ifdef DELAYED_VGAINIT
+	SetupVgaEnvironment();
+#endif
+
 	Atari800_Hardware();
 	printf("Fatal error: Atari800_Hardware() returned\n");
 	Atari800_Exit(FALSE);
@@ -1116,15 +1206,12 @@ void E_Device(UBYTE esc_code)
 
 void Escape(UBYTE esc_code)
 {
-	int addr;
-
 	switch (esc_code) {
 #ifdef MONITOR_BREAK
 	case ESC_BREAK:
 		Atari800_Exit(TRUE);
 		break;
 #endif
-	case ESC_BREAK:
 	case ESC_SIOV:
 		SIO();
 		break;
@@ -1200,6 +1287,25 @@ int Atari800_Exit(int run_monitor)
 	return Atari_Exit(run_monitor);
 }
 
+/* special support of Bounty Bob on Atari5200 */
+int bounty_bob1(UWORD addr)
+{
+	if (addr >= 0x4ff6 && addr <= 0x4ff9) {
+		addr -= 0x4ff6;
+		memcpy(&memory[0x4000], &cart_image[addr << 12], 0x1000);
+		return 0;
+	}
+}
+
+int bounty_bob2(UWORD addr)
+{
+	if (addr >= 0x5ff6 && addr <= 0x5ff9) {
+		addr -= 0x5ff6;
+		memcpy(&memory[0x5000], &cart_image[(addr << 12) + 0x4000], 0x1000);
+		return 0;
+	}
+}
+
 UBYTE Atari800_GetByte(UWORD addr)
 {
 	UBYTE byte;
@@ -1211,6 +1317,14 @@ UBYTE Atari800_GetByte(UWORD addr)
    ============================================================
  */
 	switch (addr & 0xff00) {
+	case 0x4f00:
+		bounty_bob1(addr);
+		byte = 0;
+		break;
+	case 0x5f00:
+		bounty_bob2(addr);
+		byte = 0;
+		break;
 	case 0xd000:				/* GTIA */
 		byte = GTIA_GetByte(addr - 0xd000);
 		break;
@@ -1250,6 +1364,12 @@ int Atari800_PutByte(UWORD addr, UBYTE byte)
    ============================================================
  */
 	switch (addr & 0xff00) {
+	case 0x4f00:
+		abort = bounty_bob1(addr);
+		break;
+	case 0x5f00:
+		abort = bounty_bob2(addr);
+		break;
 	case 0xd000:				/* GTIA */
 		abort = GTIA_PutByte(addr - 0xd000, byte);
 		break;
@@ -1267,6 +1387,9 @@ int Atari800_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case 0xc000:				/* GTIA - 5200 */
 		abort = GTIA_PutByte(addr - 0xc000, byte);
+		break;
+	case 0xe800:				/* POKEY - 5200 AAA added other pokey space */
+		abort = POKEY_PutByte(addr - 0xe800, byte);
 		break;
 	case 0xeb00:				/* POKEY - 5200 */
 		abort = POKEY_PutByte(addr - 0xeb00, byte);
@@ -1423,32 +1546,34 @@ void Atari800_Hardware(void)
 			fps = 1.0 / (curtime - lasttime);
 			lasttime = curtime;
 		}
-#else							// for dos, count ticks and use the ticks_per_second global variable
-		// Use the high speed clock tick function uclock()
-		if (deltatime > 0.0) {
-			static uclock_t lasttime = 0;
-			uclock_t curtime, uclockd;
-			unsigned long uclockd_hi, uclockd_lo;
-			unsigned long uclocks_per_int;
+#else							/* for dos, count ticks and use the ticks_per_second global variable */
+		/* Use the high speed clock tick function uclock() */
+		if (timesync) {
+			if (deltatime > 0.0) {
+				static uclock_t lasttime = 0;
+				uclock_t curtime, uclockd;
+				unsigned long uclockd_hi, uclockd_lo;
+				unsigned long uclocks_per_int;
 
-			uclocks_per_int = (deltatime * (double) UCLOCKS_PER_SEC) + 0.5;
-			// printf( "ticks_per_int %d, %.8X\n", uclocks_per_int, (unsigned long) lasttime );
+				uclocks_per_int = (deltatime * (double) UCLOCKS_PER_SEC) + 0.5;
+				/* printf( "ticks_per_int %d, %.8X\n", uclocks_per_int, (unsigned long) lasttime ); */
 
-			emu_too_fast = -1;
-			do {
-				curtime = uclock();
-				if (curtime > lasttime) {
-					uclockd = curtime - lasttime;
-				}
-				else {
-					uclockd = ((uclock_t) ~ 0 - lasttime) + curtime + (uclock_t) 1;
-				}
-				uclockd_lo = (unsigned long) uclockd;
-				uclockd_hi = (unsigned long) (uclockd >> 32);
-				emu_too_fast++;
-			} while ((uclockd_hi == 0) && (uclocks_per_int > uclockd_lo));
+				emu_too_fast = -1;
+				do {
+					curtime = uclock();
+					if (curtime > lasttime) {
+						uclockd = curtime - lasttime;
+					}
+					else {
+						uclockd = ((uclock_t) ~ 0 - lasttime) + curtime + (uclock_t) 1;
+					}
+					uclockd_lo = (unsigned long) uclockd;
+					uclockd_hi = (unsigned long) (uclockd >> 32);
+					emu_too_fast++;
+				} while ((uclockd_hi == 0) && (uclocks_per_int > uclockd_lo));
 
-			lasttime = curtime;
+				lasttime = curtime;
+			}
 		}
 #endif							/* DJGPP */
 #endif							/* FALCON */

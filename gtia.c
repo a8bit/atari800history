@@ -32,6 +32,7 @@ extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
 extern int rom_inserted;
 
+extern int mach_xlxe;
 
 UBYTE COLBK;
 UBYTE COLPF0;
@@ -162,14 +163,14 @@ UWORD m0123adr;
 
 static int PM_XPos[256];
 static UBYTE PM_Width[4] =
-{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; *///1/2 size pm scanline
+{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; *//* 1/2 size pm scanline */
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
 	int i;
 
 	for (i = 0; i < 256; i++)
-		PM_XPos[i] = (i - 0x20);	/*<< 1 *///for 1/2 size pmscanline
+		PM_XPos[i] = (i - 0x20);	/*<< 1 *//* for 1/2 size pmscanline */
 
 	for (i = 0; i < 9; i++)
 		colour_lookup[i] = 0x00;
@@ -179,7 +180,10 @@ void GTIA_Initialise(int *argc, char *argv[])
 
 void new_pm_scanline(void)
 {
-	int dirty = FALSE;
+	static int dirty;
+	if (dirty)
+		memset(pm_scanline, 0, ATARI_WIDTH / 2);
+	dirty = FALSE;
 
 /*
    =============================
@@ -437,7 +441,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte |= (pf_colls[7] & 0x80) >> 4;
 		break;
 	case _M0PL:
-		byte = M0PL & 0x0f;		//AAA fix for galaxian. easier to do it here.
+		byte = M0PL & 0x0f;		/* AAA fix for galaxian. easier to do it here. */
 
 		break;
 	case _M1PL:
@@ -503,13 +507,13 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte = Atari_TRIG(1);
 		break;
 	case _TRIG2:
-		if ((machine != AtariXL) && (machine != AtariXE))
+		if (!mach_xlxe)
 			byte = Atari_TRIG(2);
 		else
 			byte = 0;
 		break;
 	case _TRIG3:
-		if ((machine != AtariXL) && (machine != AtariXE))
+		if (!mach_xlxe)
 			byte = Atari_TRIG(3);
 		else
 			/* extremely important patch - thanks to this hundred of games start running (BruceLee) */
@@ -529,7 +533,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 	addr &= 0xff1f;
 	switch (addr) {
 	case _COLBK:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLBK = byte;
 		cword = colour_lookup[8] = colour_translation_table[byte];
@@ -537,7 +541,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[8] = cword;
 		break;
 	case _COLPF0:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF0 = byte;
 		cword = colour_lookup[4] = colour_translation_table[byte];
@@ -548,7 +552,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM0OR1_OR_PF0] = cl_word[R_COLPM0OR1] | cword;
 		break;
 	case _COLPF1:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF1 = byte;
 		cword = colour_lookup[5] = colour_translation_table[byte];
@@ -559,7 +563,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cword;
 		break;
 	case _COLPF2:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF2 = byte;
 		cword = colour_lookup[6] = colour_translation_table[byte];
@@ -570,7 +574,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM2OR3_OR_PF2] = cl_word[R_COLPM2OR3] | cword;
 		break;
 	case _COLPF3:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF3 = byte;
 		cword = colour_lookup[7] = colour_translation_table[byte];
@@ -581,7 +585,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM2OR3_OR_PF3] = cl_word[R_COLPM2OR3] | cword;
 		break;
 	case _COLPM0:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM0 = byte;
 		cword = colour_lookup[0] = colour_translation_table[byte];
@@ -594,7 +598,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cl_word[5];
 		break;
 	case _COLPM1:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM1 = byte;
 		cword = colour_lookup[1] = colour_translation_table[byte];
@@ -607,7 +611,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cl_word[5];
 		break;
 	case _COLPM2:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM2 = byte;
 		cword = colour_lookup[2] = colour_translation_table[byte];
@@ -620,7 +624,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		cl_word[R_COLPM2OR3_OR_PF3] = cl_word[R_COLPM2OR3] | cl_word[7];
 		break;
 	case _COLPM3:
-		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM3 = byte;
 		cword = colour_lookup[3] = colour_translation_table[byte];
@@ -713,7 +717,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		global_sizep3 = PM_Width[byte & 0x03];
 		break;
 	case _PRIOR:
-		if ((byte & 0x20) != (PRIOR & 0x20)) {	//multi-colour player
+		if ((byte & 0x20) != (PRIOR & 0x20)) {	/* multi-colour player */
 
 			if (byte & 0x20) {
 				new_pm_lookup[3] = L_PM01;
@@ -729,7 +733,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 			}
 		}
 		if (byte & 0x10)
-			p5_mask = 0xf0;		//missile=pf3 5th player
+			p5_mask = 0xf0;		/* missile=pf3 5th player */
 
 		else
 			p5_mask = 0x00;
@@ -742,8 +746,8 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		GRACTL = byte;
 		missile_gra_enabled = (byte & 0x01);
 		player_gra_enabled = (byte & 0x02);
-		player_flickering = ( (player_dma_enabled | player_gra_enabled) == 0x02);
-		missile_flickering = ( (missile_dma_enabled | missile_gra_enabled) == 0x01);
+		player_flickering = ((player_dma_enabled | player_gra_enabled) == 0x02);
+		missile_flickering = ((missile_dma_enabled | missile_gra_enabled) == 0x01);
 		break;
 	}
 

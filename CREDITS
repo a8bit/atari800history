@@ -95,8 +95,9 @@ Nathan Monson <nathan@polaristel.net>
   operations.
 
 Petr Stehlik <stehlik@cas3.zlin.vutbr.cz>
-- Added support for Atari Falcon
+- Added support for Atari Falcon (port itself, sound, kbd, joy)
 - Added sound, keyboard and joystick support for DOS version
+- "Project coordinator" since v0.8.2
 
 Karel Rous <Empty Head>
 - rewrote CPU.C to optimized MC68030 assembler
@@ -106,12 +107,15 @@ Radek Sterba <raster@infos.cz>
 - Implemented precise timing into Antic and CPU
 - Fixed PMG registers and implemented PMG flickering
 - Added full 256 opcodes support to dissasembler
+- Various DOS enhancements
+- Added emulation of 320 kB memory (Atari320XE)
 
 Perry McFarlane <ce596@freenet.toronto.on.ca>
 - Antic fix in vertical scroll
 - Complete Antic rewrite (DIRECT_VIDEO approach, but better)
 - GTIA enhancements (based on Thomas' code, but using DIRECT_VIDEO)
+- Allegro library in DOS port
 
 Thomas Richter <thor@math.tu-berlin.de>
 - GTIA collisions and third colour of players
-- worked on SIO debugging
+- new SIO code with formatting support

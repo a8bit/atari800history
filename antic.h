@@ -36,7 +36,7 @@ extern UBYTE VSCROL;
 
 extern int ypos;
 extern int wsync_halt;
-extern int antic23f;		/* true if in antic modes 2, 3 or f */
+extern int antic23f;			/* true if in antic modes 2, 3 or f */
 
 extern UBYTE *scrn_ptr;
 extern int xmin;

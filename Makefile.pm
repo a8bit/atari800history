@@ -1,6 +1,9 @@
-CC		= gcc
+        CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O2 -DGNU_C
+#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
+#CFLAGS2         = -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
+CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DUSE_DOSSOUND -DDELAYED_VGAINIT -DPOKEY_UPDATE -DPERRY_MODIFIED_POLY
+#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DDELAYED_VGAINIT
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
@@ -19,15 +22,15 @@ default :
 	@echo To install the Emulator, type:
 
 basic :
-	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o sound.o"
+	@make atari800.exe CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
 	@echo Finished.
 
 pdcurses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o sound.o"
+	@make atari800.exe CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o"
 	@echo Finished.
 
 vga :
-	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o"
+	@make atari800.exe CPPFLAGS="-DVGA" LDLIBS="-lm -lalleg" OBJ="atari_vga.o"
 	@echo Finished.
 
 #
@@ -52,11 +55,11 @@ INCLUDES        =       Makefile \
 			supercart.h \
 			platform.h
 
-config config.h	:	configure
-	configure
+config config.h	:	configure.exe
+	configure.exe
 
-configure	:	configure.o prompts.o
-	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
+configure.exe	:	configure.o prompts.o
+	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure.exe
 
 configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
@@ -74,10 +77,12 @@ OBJECTS =       atari.o \
                 prompts.o \
                 rt-config.o \
                 ui.o \
-                list.o
+                list.o \
+		dossound.o \
+		pokeysnd.o
 
-atari800        :       $(OBJECTS) $(OBJ)
-	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
+atari800.exe        :       $(OBJECTS) $(OBJ)
+	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(DJDIR)/lib/audiodjf.a $(LDLIBS) -o atari800.exe
 
 atari.o         :       atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
@@ -121,14 +126,8 @@ rt-config.o     :       rt-config.c $(INCLUDES)
 prompts.o       :       prompts.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
 
-sound.o		:       sound.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
-
-pokey11.o	:       pokey11.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
-
-sound_dos.o		:       sound_dos.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) sound_dos.c
+dossound.o	:       dossound.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) dossound.c
 
 pokeysnd.o	:       pokeysnd.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) pokeysnd.c
@@ -153,4 +152,5 @@ clean   :
 	del configure
 	del config.h
 	del core
+	del atari800
 	del *.o

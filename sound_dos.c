@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include "pokey23.h"
+#include "pokeysnd.h"
 #include "sbdrv.h"
 
 static char *rcsid = "$Id: sound_dos.c,v 1.2 1998/02/21 15:00:23 david Exp $";

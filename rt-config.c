@@ -30,6 +30,8 @@ int hold_option;
 int enable_c000_ram;
 int enable_sio_patch;
 
+extern int Ram256;
+
 static char *rtconfig_filename1 = "atari800.cfg";
 static char *rtconfig_filename2 = "/etc/atari800.cfg";
 
@@ -130,8 +132,16 @@ int RtConfigLoad(char *rtconfig_filename)
 						default_system = 3;
 					else if (strcmp(ptr, "Atari XE") == 0)
 						default_system = 4;
-					else if (strcmp(ptr, "Atari 5200") == 0)
+					else if (strcmp(ptr, "Atari 320XE (RAMBO)") == 0) {
 						default_system = 5;
+						Ram256 = 1;
+					}
+					else if (strcmp(ptr, "Atari 320XE (COMPY SHOP)") == 0) {
+						default_system = 5;
+						Ram256 = 2;
+					}
+					else if (strcmp(ptr, "Atari 5200") == 0)
+						default_system = 6;
 					else
 						printf("Invalid System: %s\n", ptr);
 				}
@@ -202,6 +212,12 @@ void RtConfigSave(void)
 		fprintf(fp, "XE\n");
 		break;
 	case 5:
+		if (Ram256 == 1)
+			fprintf(fp, "320XE (RAMBO)\n");
+		else if (Ram256 == 2)
+			fprintf(fp, "320XE (COMPY SHOP)\n");
+		break;
+	case 6:
 		fprintf(fp, "5200\n");
 		break;
 	}
@@ -246,12 +262,21 @@ void RtConfigUpdate(void)
 		refresh_rate = 60;
 
 	do {
-		GetNumber("Default System 1) OS/A, 2) OS/B, 3) XL, 4) XE, 5) 5200 [%d] ",
+		GetNumber("Default System 1=OS/A 2=OS/B 3=800XL 4=130XE 5=320XE 6=5200 [%d] ",
 				  &default_system);
-	} while ((default_system < 1) || (default_system > 5));
+	} while ((default_system < 1) || (default_system > 6));
+
+	if (default_system == 5) {
+		do {
+			if (!Ram256)
+				Ram256 = 2;
+			GetNumber("320XE memory bank control 1=RAMBO, 2=COMPY SHOP [%d] ",
+					  &Ram256);
+		} while ((Ram256 < 1) || (Ram256 > 2));
+	}
 
 	do {
-		GetNumber("Default TV mode 1) PAL, 2) NTSC [%d] ",
+		GetNumber("Default TV mode 1=PAL 2=NTSC [%d] ",
 				  &default_tv_mode);
 	} while ((default_tv_mode < 1) || (default_tv_mode > 2));
 

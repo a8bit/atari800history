@@ -73,13 +73,13 @@ static char filename[64];
 static DIR *dp = NULL;
 #endif
 
-char *strtoupper (char *str)
+char *strtoupper(char *str)
 {
-  char *ptr;
-  for (ptr=str;*ptr;ptr++)
-    *ptr = toupper(*ptr);
+	char *ptr;
+	for (ptr = str; *ptr; ptr++)
+		*ptr = toupper(*ptr);
 
-  return str;
+	return str;
 }
 
 void Device_Initialise(int *argc, char *argv[])

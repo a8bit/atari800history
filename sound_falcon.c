@@ -3,7 +3,7 @@
 
 #ifdef DMASOUND
 #include <osbind.h>
-#include "pokey23.h"
+#include "pokeysnd.h"
 
 static char *rcsid = "$Id: sound_falcon.c,v 1.2 1998/02/21 15:00:23 david Exp $";
 

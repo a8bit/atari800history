@@ -17,6 +17,9 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
 -xl     Enable Atari 800XL Emulation Mode
 -xe     Enable Atari 130XE Emulation Mode (but Antic accesses the bank that
         the CPU is using)
+-320xe  Enable Atari 130XE with 320 kB memory Emulation Mode. Default is
+        CompyShop mode, compatible with Q-meg.
+-rambo  Use Rambo mode of 320 kB memory.
 -5200   Enable Atari 5200 Games System Emulation Mode.
 
 -nopatch Normally the OS is patched giving very fast I/O. This option
@@ -25,8 +28,6 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
          probably never be needed since programs that access the
          serial hardware directly will work even if the OS has been
          patched.
--xcolpf1 Enables Extended Usage of COLPF1 as used by Antic Modes
-         2, 3 and f.
 
 -rom     Loads the following 8K ROM Cartridge
 -rom16   Loads the following 16K ROM Cartridge
@@ -236,15 +237,15 @@ F4	Start
 F5	Warm Reset
 Shft+F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
-F7	Break Key
+F7	Break Key (also mapped on End key)
 F8	Enter monitor
 F9	EXIT Emulator
 F10	HELP key (800XL/130XE)
 
 Control-C terminates the program; to type Control-c, type ALT-c instead.
-` is used as the Caps-Lock key, just like the SVGALIB version.
+` is used as the Atari-Invers key
 
-Control-arrows move screen. Control-F10 centers screen.
+Control-numeric pad (2,4,6,8) move screen. Control-5 centers screen.
 
 Joystick 0 is operated by the numeric keypad (make sure that the numeric
 keypad has been enabled).

@@ -6,10 +6,6 @@ o The obsolete variable "countdown_rate" is still in use within
   to do it without an Amiga to check it. I've left it defined in "atari.c"
   so that there are no linker errors on the Amiga.
 
-o Correct handling of 5200 controllers
-
 o POKEY timers
-
-o 5th sound channel (for keyclicks)
 
 o speed the emulator up

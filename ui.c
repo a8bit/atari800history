@@ -18,6 +18,9 @@ static char charset[8192];
 extern UBYTE atarixl_os[16384];
 extern unsigned char ascii_to_screen[128];
 
+extern int mach_xlxe;
+extern int Ram256;
+
 unsigned char key_to_ascii[256] =
 {
 	0x6C, 0x6A, 0x3B, 0x00, 0x00, 0x6B, 0x2B, 0x2A, 0x6F, 0x00, 0x70, 0x75, 0x9B, 0x69, 0x2D, 0x3D,
@@ -298,12 +301,14 @@ void SelectSystem(UBYTE * screen)
 	int system;
 	int ascii;
 
-	char *menu[5] =
+	char *menu[7] =
 	{
 		"Atari OS/A",
 		"Atari OS/B",
 		"Atari 800XL",
 		"Atari 130XE",
+		"Atari 320XE (RAMBO)",
+		"Atari 320XE (COMPY SHOP)",
 		"Atari 5200"
 	};
 
@@ -311,22 +316,35 @@ void SelectSystem(UBYTE * screen)
 	TitleScreen(screen, "Select System");
 	Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
 
-	system = Select(screen, 0, 5, menu, 5, 1, 1, 4, FALSE, &ascii);
+	system = Select(screen, 0, 7, menu, 7, 1, 1, 4, FALSE, &ascii);
 
 	switch (system) {
 	case 0:
+		Ram256 = 0;
 		Initialise_AtariOSA();
 		break;
 	case 1:
+		Ram256 = 0;
 		Initialise_AtariOSB();
 		break;
 	case 2:
+		Ram256 = 0;
 		Initialise_AtariXL();
 		break;
 	case 3:
+		Ram256 = 0;
 		Initialise_AtariXE();
 		break;
 	case 4:
+		Ram256 = 1;
+		Initialise_Atari320XE();
+		break;
+	case 5:
+		Ram256 = 2;
+		Initialise_Atari320XE();
+		break;
+	case 6:
+		Ram256 = 0;
 		Initialise_Atari5200();
 		break;
 	default:
@@ -737,7 +755,7 @@ void AboutEmulator(UBYTE * screen)
 	CenterPrint(screen, 0x9a, 0x94, "Copyright (c) 1995-1998 David Firth", 2);
 	CenterPrint(screen, 0x9a, 0x94, "E-Mail: david@signus.demon.co.uk", 3);
 	CenterPrint(screen, 0x9a, 0x94, "http://www.signus.demon.co.uk/", 4);
-	CenterPrint(screen, 0x9a, 0x94, "Atari PokeySound 2.3", 6);
+	CenterPrint(screen, 0x9a, 0x94, "Atari PokeySound 2.4", 6);
 	CenterPrint(screen, 0x9a, 0x94, "Copyright (c) 1996-1998 Ron Fries", 7);
 
 	Box(screen, 0x9a, 0x94, 0, 9, 39, 23);
@@ -772,7 +790,7 @@ void ui(UBYTE * screen)
 	};
 
 	if (!initialised) {
-		if (machine == AtariXL || machine == AtariXE)
+		if (mach_xlxe)
 			memcpy(charset, atarixl_os + 0x2000, 8192);
 		else
 			memcpy(charset, memory + 0xe000, 8192);

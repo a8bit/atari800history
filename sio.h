@@ -23,6 +23,7 @@ int SIO_SERIN(void);
 #define SIO_ReadFrame       (0x03)
 #define SIO_WriteFrame      (0x04)
 #define SIO_FinalStatus     (0x05)
+#define SIO_FormatFrame     (0x06)
 
 void SwitchCommandFrame(int onoff);
 void SIO_PutByte(int byte);

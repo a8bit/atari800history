@@ -21,8 +21,8 @@
 #define	UWORD unsigned short int
 #define	ULONG unsigned long int
 
-#ifndef O_BINARY		/* flag for binary files on MS-DOS */
-#define O_BINARY	0	/* this won't cause any trouble */
+#ifndef O_BINARY				/* flag for binary files on MS-DOS */
+#define O_BINARY	0			/* this won't cause any trouble */
 #endif
 
 typedef enum {
@@ -34,6 +34,7 @@ typedef enum {
 	Atari,
 	AtariXL,
 	AtariXE,
+	Atari320XE,
 	Atari5200
 } Machine;
 
@@ -43,7 +44,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.9"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.1"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -91,7 +92,6 @@ enum ESCAPE {
 	ESC_HHSTAT = 0xc4,
 	ESC_HHSPEC = 0xc5,
 	ESC_HHINIT = 0xc6,
-	ESC_BREAK = 0xff
 };
 
 /*
@@ -325,6 +325,7 @@ int Initialise_AtariOSA(void);
 int Initialise_AtariOSB(void);
 int Initialise_AtariXL(void);
 int Initialise_AtariXE(void);
+int Initialise_Atari320XE(void);
 int Initialise_Atari5200(void);
 int Atari800_Exit(int run_monitor);
 UBYTE Atari800_GetByte(UWORD addr);

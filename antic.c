@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#define LCHOP 3	/* do not build lefmost 0..3 characters in wide mode */
+#define RCHOP 3	/* do not build rightmost 0..3 characters in wide mode */
+
 #ifndef AMIGA
 #include "config.h"
 #endif
@@ -135,7 +138,7 @@ static UWORD p0addr_d;			/* Address of Player0 - Double Line Resolution */
 static UWORD p1addr_d;			/* Address of Player1 - Double Line Resolution */
 static UWORD p2addr_d;			/* Address of Player2 - Double Line Resolution */
 static UWORD p3addr_d;			/* Address of Player3 - Double Line Resolution */
-static UBYTE IR;				//made a global
+static UBYTE IR;				/* made a global */
 
 static int foobar;
 static int hscrol_flag;
@@ -162,7 +165,6 @@ extern UBYTE pf_colls[9];
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
-/* int XMTDONE_INTERVAL=4000; - Raster, what have you meant with this??? */
 
 static int normal_lastline;
 int wsync_halt = 0;
@@ -180,21 +182,25 @@ int new_pm_lookup[16] =
 	L_PMNONE,					/* 0000 - None */
 	L_PM0,						/* 0001 - Player 0 */
 	L_PM1,						/* 0010 - Player 1 */
-	L_PM0,						/* 0011 - Player 0 *///**0OR1   3
-	 L_PM2,						/* 0100 - Player 2 */
+	L_PM0,
+/* 0011 - Player 0 *//**0OR1   3 */
+	L_PM2,						/* 0100 - Player 2 */
 	L_PM0,						/* 0101 - Player 0 */
 	L_PM1,						/* 0110 - Player 1 */
-	L_PM0,						/* 0111 - Player 0 *///**0OR1   7
-	 L_PM3,						/* 1000 - Player 3 */
+	L_PM0,
+/* 0111 - Player 0 *//**0OR1   7 */
+	L_PM3,						/* 1000 - Player 3 */
 	L_PM0,						/* 1001 - Player 0 */
 	L_PM1,						/* 1010 - Player 1 */
-	L_PM0,						/* 1011 - Player 0 *///**0OR1   11
-	 L_PM2,						/* 1100 - Player 2 *///**2OR3   12
-	 L_PM0,						/* 1101 - Player 0 */
+	L_PM0,
+/* 1011 - Player 0 *//**0OR1   11 */
+	L_PM2,
+/* 1100 - Player 2 *//**2OR3   12 */
+	L_PM0,						/* 1101 - Player 0 */
 	L_PM1,						/* 1110 - Player 1 */
 	L_PM0,						/* 1111 - Player 0 */
 };
-static UBYTE playfield_lookup[256];		//what size should this be to be fastest?
+static UBYTE playfield_lookup[256];		/* what size should this be to be fastest? */
 
 /*
    =============================================================
@@ -238,23 +244,23 @@ void initialize_prior_table()
 	UBYTE player_colreg[] =
 	{0, 1, 9, 2, 3, 10, 0};
 	int i, j, k;
-	for (i = 0; i <= 15; i++) {	//prior setting
+	for (i = 0; i <= 15; i++) {	/* prior setting */
 
-		for (j = 0; j <= 6; j++) {	//player
+		for (j = 0; j <= 6; j++) {	/* player */
 
-			for (k = 0; k <= 4; k++) {	//playfield
+			for (k = 0; k <= 4; k++) {	/* playfield */
 
-				int c;			//colreg
+				int c;			/* colreg */
 
 				if (j == 6)
-					c = k + 4;	//no player
+					c = k + 4;	/* no player */
 
 				else if (k == 4)
 					c = player_colreg[j];
 				else {
-					if (k <= 1) {	//playfields 0 and 1
+					if (k <= 1) {	/* playfields 0 and 1 */
 
-						if (j <= 2) {	//players01 and 2=0+1
+						if (j <= 2) {	/* players01 and 2=0+1 */
 
 							switch (i) {
 							case 0:
@@ -290,7 +296,7 @@ void initialize_prior_table()
 								break;
 							}
 						}
-						else {	//pf01, players23 and 2OR3
+						else {	/* pf01, players23 and 2OR3 */
 
 							if ((i & 0x01) == 0) {
 								c = k + 4;
@@ -300,9 +306,9 @@ void initialize_prior_table()
 							}
 						}
 					}
-					else {		//playfields 2 and 3
+					else {		/* playfields 2 and 3 */
 
-						if (j <= 2) {	//players 01 and 0OR1
+						if (j <= 2) {	/* players 01 and 0OR1 */
 
 							if ((i <= 3) || (i >= 8 && i <= 11)) {
 								c = player_colreg[j];
@@ -311,7 +317,7 @@ void initialize_prior_table()
 								c = k + 4;
 							}
 						}
-						else {	//pf23, players23 and 2OR3
+						else {	/* pf23, players23 and 2OR3 */
 
 							switch (i) {
 							case 0:
@@ -405,7 +411,6 @@ static int invert_mask;
 static int blank_mask;
 
 static UWORD screenaddr;
-static UWORD memscanbase;
 static UWORD lookup1[256];
 static UWORD lookup2[256];
 static ULONG lookup_gtia[16];
@@ -424,8 +429,8 @@ void do_border(void)
 	int kk;
 	int temp_border_chars;
 	int pass;
-	UWORD *ptr = (UWORD *) & scrn_ptr[0];
-	ULONG *t_pm_scanline_ptr = (ULONG *) (&pm_scanline[0]);
+	UWORD *ptr = (UWORD *) & scrn_ptr[LCHOP * 8];
+	ULONG *t_pm_scanline_ptr = (ULONG *) (&pm_scanline[LCHOP*4]);
 	ULONG COL_8_LONG;
 
 	COL_8_LONG = cl_word[8] | (cl_word[8] << 16);
@@ -436,9 +441,9 @@ void do_border(void)
 			if (!(*t_pm_scanline_ptr)) {
 				ULONG *l_ptr = (ULONG *) ptr;
 
-				*l_ptr++ = COL_8_LONG;	//PF4_COLPF2;
+				*l_ptr++ = COL_8_LONG;	/* PF4_COLPF2; */
 
-				*l_ptr++ = COL_8_LONG;	//PF4_COLPF2;
+				*l_ptr++ = COL_8_LONG;	/* PF4_COLPF2; */
 
 				ptr = (UWORD *) l_ptr;
 			}
@@ -638,8 +643,8 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 			blank = 0x00;
 		else
 			blank = 0xff;
-//only need to change this line from antic_2 vvvvvvvvv
-		//    if((j&0x0e)==0x08 && (screendata&0x60)!=0x60)
+/* only need to change this line from antic_2 vvvvvvvvv */
+		/*     if((j&0x0e)==0x08 && (screendata&0x60)!=0x60) */
 		if ((((screendata & 0x60) == 0x60) && ((j & 0x0e) == 0x00)) || (((screendata & 0x60) != 0x60) && ((j & 0x0e) == 0x08)))
 			chdata = invert & blank;
 		else
@@ -1192,8 +1197,8 @@ void draw_antic_f_gtia10(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULO
 		colreg = cur_prior[new_pm_lookup[pm_pixel & 0x0f] + colreg];
 		*((UWORD *) t_ptr) = cl_word[colreg];
 	}
-//should prolly fix the border code instead..right border is still not right.
-	//needs to be moved over 1 colour clock
+/* should prolly fix the border code instead..right border is still not right. */
+	/* needs to be moved over 1 colour clock */
 	t_pm_scanline_ptr = (ULONG *) (((UBYTE *) t_pm_scanline_ptr) + 1);
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
@@ -1251,11 +1256,15 @@ void do_antic()
 		int temp_xmin = x_min[md];
 
 		j &= 0x0f;
-		//if(j==lastline) DO_DLI
-		////pokey_update();
+		/* if(j==lastline) DO_DLI */
+
+#ifdef POKEY_UPDATE
+		pokey_update();
+#endif
+/* Pokey stuff begin (should probably be moved into pokey_update() as well */
 		if (DELAYED_SERIN_IRQ > 0) {
 			if (--DELAYED_SERIN_IRQ == 0) {
-				//IRQST &= 0xdf;
+				/* IRQST &= 0xdf; */
 				if (IRQEN & 0x20) {
 #ifdef DEBUG2
 					printf("SERIO: SERIN Interrupt triggered\n");
@@ -1273,7 +1282,7 @@ void do_antic()
 
 		if (DELAYED_SEROUT_IRQ > 0) {
 			if (--DELAYED_SEROUT_IRQ == 0) {
-				//IRQST &= 0xef;
+				/* IRQST &= 0xef; */
 				if (IRQEN & 0x10) {
 #ifdef DEBUG2
 					printf("SERIO: SEROUT Interrupt triggered\n");
@@ -1283,7 +1292,7 @@ void do_antic()
 				}
 #ifdef DEBUG2
 				else {
-					//sigint_handler(1);
+					/* sigint_handler(1); */
 					printf("SERIO: SEROUT Interrupt missed\n");
 				}
 #endif
@@ -1294,7 +1303,7 @@ void do_antic()
 
 		if (DELAYED_XMTDONE_IRQ > 0) {
 			if (--DELAYED_XMTDONE_IRQ == 0) {
-				//IRQST &= 0xf7;
+				/* IRQST &= 0xf7; */
 				if (IRQEN & 0x08) {
 #ifdef DEBUG2
 					printf("SERIO: XMTDONE Interrupt triggered\n");
@@ -1309,25 +1318,26 @@ void do_antic()
 #endif
 			}
 		}
+/* Pokey stuff ends */
 
-		//if (!wsync_halt) GO(107);
+		/* if (!wsync_halt) GO(107); */
 		pmgdmac = pmg_dma();
 		begcyc = BEGL - pmgdmac - dldmac;
-		dldmac = 0;				//subsequent lines have none;
-		//PART 1
+		dldmac = 0;				/* subsequent lines have none; */
+		/* PART 1 */
 
 		unc = GO(begcyc + unc);	/* cycles for begin of each screen line */
 		allc = realcyc[anticm8 + first_line_flag + dmaw] - BEGL;
-		//^^^^^cycles for part 2; (realcyc is for parts 1+ 2. then -BEGL for 2
-		//^^^ first line flag is either -4 or 0. when added to dmaw
-		// is 0-3 or 4-7.  (first and subsequent lines)
+		/* ^^^^^cycles for part 2; (realcyc is for parts 1+ 2. then -BEGL for 2 */
+		/* ^^^ first line flag is either -4 or 0. when added to dmaw */
+		/*  is 0-3 or 4-7.  (first and subsequent lines) */
 		if (j == lastline && (IR & 0x80) && (NMIEN & 0x80)) {
 			allc -= 8;
 			NMIST |= 0x80;
 			NMI();
 		}
 		unc = GO(allc + unc);
-		//^^PART 2.(after the DLI)
+		/* ^^PART 2.(after the DLI) */
 		new_pm_scanline();
 		temp_left_border_chars = left_border_chars;
 		switch (IR & 0x0f) {
@@ -1345,7 +1355,7 @@ void do_antic()
 		case 7:
 			t_chbase = chbase_20 + ((j >> 1) ^ flip_mask);
 			break;
-			//default:
+			/* default: */
 			break;
 		}
 
@@ -1356,7 +1366,7 @@ void do_antic()
 		switch (IR & 0x0f) {
 		case 0:
 			temp_chars_read = 0;
-			left_border_chars = 48 - right_border_chars;
+			left_border_chars = (48 - LCHOP - RCHOP) - right_border_chars;
 			break;
 		case 2:
 			if ((PRIOR & 0x40) == 0x40)
@@ -1405,16 +1415,16 @@ void do_antic()
 		}
 		do_border();
 		left_border_chars = temp_left_border_chars;
-		memset(pm_scanline, 0, ATARI_WIDTH / 2);
-//part 3
+		/* memset(pm_scanline, 0, ATARI_WIDTH / 2); *//* Perry disabled 98/03/14 */
+/* part 3 */
 		allc = CPUL - WSYNC - realcyc[anticm8 + first_line_flag + dmaw] - thislinecycles;
 		unc = GO(allc + unc);
 		thislinecycles = nextlinecycles;
 		first_line_flag = 0;
-//^^^^ adjust for subsequent lines;
+/* ^^^^ adjust for subsequent lines; */
 		wsync_halt = 0;
 		unc = GO(WSYNC + unc);
-//^^^^ part 4.
+/* ^^^^ part 4. */
 
 		ypos++;
 /*if (wsync_halt)
@@ -1455,37 +1465,34 @@ int pmg_dma(void)
 {
 	int pmd;
 	pmd = 0;
-	if (missile_dma_enabled) 
-	{
-		if (singleline)
-		{
+	if (missile_dma_enabled) {
+		if (singleline) {
 			pmd = 1;
-			if (missile_gra_enabled) GRAFM = memory[maddr_s + ypos];
+			if (missile_gra_enabled)
+				GRAFM = memory[maddr_s + ypos];
 		}
-		else
-		{
-			if (!(ypos & 0x01)) pmd = 1;
-			if (missile_gra_enabled) GRAFM = memory[maddr_d + (ypos >> 1)];
+		else {
+			if (!(ypos & 0x01))
+				pmd = 1;
+			if (missile_gra_enabled)
+				GRAFM = memory[maddr_d + (ypos >> 1)];
 		}
 	}
 
 	if (player_dma_enabled) {
-		if (singleline) 
-		{
-			pmd = 5;	/* 4+1 ...no player DMA without missile DMA */
-			if (player_gra_enabled) 
-			{
+		if (singleline) {
+			pmd = 5;			/* 4+1 ...no player DMA without missile DMA */
+			if (player_gra_enabled) {
 				GRAFP0 = memory[p0addr_s + ypos];
 				GRAFP1 = memory[p1addr_s + ypos];
 				GRAFP2 = memory[p2addr_s + ypos];
 				GRAFP3 = memory[p3addr_s + ypos];
 			}
 		}
-		else 
-		{
-			if (!(ypos & 0x01)) pmd = 5;	/* 4+1 ...no player DMA without missile DMA */
-			if (player_gra_enabled) 
-			{
+		else {
+			if (!(ypos & 0x01))
+				pmd = 5;		/* 4+1 ...no player DMA without missile DMA */
+			if (player_gra_enabled) {
 				GRAFP0 = memory[p0addr_d + (ypos >> 1)];
 				GRAFP1 = memory[p1addr_d + (ypos >> 1)];
 				GRAFP2 = memory[p2addr_d + (ypos >> 1)];
@@ -1513,11 +1520,13 @@ void ANTIC_RunDisplayList(void)
 	 */
 
 	for (ypos = 0; ypos < 8; ypos++) {
-		////pokey_update();
+#ifdef POKEY_UPDATE
+		pokey_update();
+#endif
 		unc = GO(CPUL - DMAR - WSYNC + unc);
 		wsync_halt = 0;
 		unc = GO(WSYNC + unc);
-//    GO (114);
+		/* GO (114); */
 	}
 	NMIST = 0x00;				/* Reset VBLANK */
 
@@ -1537,13 +1546,11 @@ void ANTIC_RunDisplayList(void)
 		colpf1 = COLPF1;
 
 		/* PMG flickering :-) (Raster) */
-		if ( player_flickering )
-		{
+		if (player_flickering) {
 			GRAFP0 = GRAFP1 = GRAFP2 = GRAFP3 = rand();
 		}
-		if ( missile_flickering )
-		{
-			GRAFM =  rand();
+		if (missile_flickering) {
+			GRAFM = rand();
 		}
 
 
@@ -1556,7 +1563,7 @@ void ANTIC_RunDisplayList(void)
 			{
 				normal_lastline = ((IR >> 4) & 0x07);
 				dldmac = 1;
-				//IR=0; leave dli bit alone.
+				/* IR=0; leave dli bit alone. */
 				do_antic();
 				nlines = 0;
 			}
@@ -1569,8 +1576,8 @@ void ANTIC_RunDisplayList(void)
 			else {
 				dlist = (memory[dlist + 1] << 8) | memory[dlist];
 				normal_lastline = 0;
-				IR &= 0xf0;		//important:must preserve DLI bit.
-				//maybe should just add 0x01 as a case in antic code?
+				IR &= 0xf0;		/* important:must preserve DLI bit. */
+				/* maybe should just add 0x01 as a case in antic code? */
 
 				dldmac = 3;
 				do_antic();
@@ -1740,20 +1747,14 @@ void ANTIC_RunDisplayList(void)
 		NMI();
 	}
 
-	if (tv_mode == PAL)
-		for (ypos = 248; ypos < 312; ypos++) {
-			////pokey_update();
-			unc = GO(CPUL - WSYNC + unc - DMAR);
-			wsync_halt = 0;
-			unc = GO(WSYNC + unc);
-		}
-	else
-		for (ypos = 248; ypos < 262; ypos++) {
-			////pokey_update();
-			unc = GO(CPUL - WSYNC + unc - DMAR);
-			wsync_halt = 0;
-			unc = GO(WSYNC + unc);
-		}
+	for (ypos = 248; ypos < (tv_mode == PAL ? 312 : 262); ypos++) {
+#ifdef POKEY_UPDATE
+		pokey_update();
+#endif
+		unc = GO(CPUL - WSYNC + unc - DMAR);
+		wsync_halt = 0;
+		unc = GO(WSYNC + unc);
+	}
 }
 
 UBYTE ANTIC_GetByte(UWORD addr)
@@ -1791,7 +1792,7 @@ UBYTE ANTIC_GetByte(UWORD addr)
 		byte = NMIST;
 		break;
 	case _WSYNC:
-//      wsync_halt++;
+/*       wsync_halt++; */
 		byte = 0xff;			/* tested on real Atari !RS! */
 		break;
 	}
@@ -1906,8 +1907,8 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			base_scroll_char_offset = 0;
 			base_scroll_char_offset2 = 0;
 			base_scroll_char_offset3 = 0;
-			left_border_chars = 24;
-			right_border_chars = 24;
+			left_border_chars = 24 - LCHOP;
+			right_border_chars = 24 - RCHOP;
 			right_border_start = ATARI_WIDTH >> 1;
 			dmaw = 5;
 			break;
@@ -1934,9 +1935,9 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			base_scroll_char_offset = 4;
 			base_scroll_char_offset2 = 2;
 			base_scroll_char_offset3 = 1;
-			left_border_chars = 8;
-			right_border_chars = 8;
-			right_border_start = ATARI_WIDTH - 64 - 1;
+			left_border_chars = 8 - LCHOP;
+			right_border_chars = 8 - RCHOP;
+			right_border_start = ATARI_WIDTH - 64 /* - 1 */ ;	/* RS! */
 			dmaw = 4;
 			break;
 		case 0x02:
@@ -1962,9 +1963,9 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			base_scroll_char_offset = 4;
 			base_scroll_char_offset2 = 2;
 			base_scroll_char_offset3 = 1;
-			left_border_chars = 4;
-			right_border_chars = 4;
-			right_border_start = ATARI_WIDTH - 32 - 1;
+			left_border_chars = 4 - LCHOP;
+			right_border_chars = 4 - RCHOP;
+			right_border_start = ATARI_WIDTH - 32 /* - 1 */ ;	/* RS! */
 			dmaw = 5;
 			break;
 		case 0x03:
@@ -1988,9 +1989,9 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			base_scroll_char_offset = 3;
 			base_scroll_char_offset2 = 1;
 			base_scroll_char_offset3 = 0;
-			left_border_chars = 3;
-			right_border_chars = 1;
-			right_border_start = ATARI_WIDTH - 8 - 1;
+			left_border_chars = 3 - LCHOP;
+			right_border_chars = ((1 - LCHOP) < 0) ? (0) : (1 - LCHOP);
+			right_border_start = ATARI_WIDTH - 8 /* - 1 */ ;	/* RS! */
 			dmaw = 6;
 			break;
 		}
@@ -1998,10 +1999,10 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 		missile_dma_enabled = (DMACTL & 0x04);
 		player_dma_enabled = (DMACTL & 0x08);
 		singleline = (DMACTL & 0x10);
-		player_flickering = ( (player_dma_enabled | player_gra_enabled) == 0x02);
-		missile_flickering = ( (missile_dma_enabled | missile_gra_enabled) == 0x01);
+		player_flickering = ((player_dma_enabled | player_gra_enabled) == 0x02);
+		missile_flickering = ((missile_dma_enabled | missile_gra_enabled) == 0x01);
 
-		ANTIC_PutByte(_HSCROL, HSCROL);		//reset values in hscrol
+		ANTIC_PutByte(_HSCROL, HSCROL);		/* reset values in hscrol */
 
 		break;
 	case _HSCROL:
@@ -2011,7 +2012,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			int char_whole, char_remainder;
 			HSCROL = byte & 0x0f;
 
-			if ((DMACTL & 0x03) == 0x00) {	//no playfield
+			if ((DMACTL & 0x03) == 0x00) {	/* no playfield */
 
 				chars_displayed[SCROLL0] = 0;
 				chars_displayed[SCROLL1] = 0;
@@ -2035,7 +2036,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 				}
 				x_min[SCROLL0] = x_min[NORMAL0] + char_remainder;
 
-				if ((DMACTL & 0x03) == 0x03) {	//wide playfield
+				if ((DMACTL & 0x03) == 0x03) {	/* wide playfield */
 
 					if (HSCROL == 4 && HSCROL == 12)
 						chars_displayed[SCROLL1] = 22;
@@ -2068,7 +2069,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 					x_min[SCROLL1] = x_min[NORMAL0] + char_remainder;
 				}
 				ch_offset[SCROLL2] = base_scroll_char_offset3;
-				if ((DMACTL & 0x03) == 0x03) {	//wide playfield
+				if ((DMACTL & 0x03) == 0x03) {	/* wide playfield */
 
 					chars_displayed[SCROLL2] = chars_displayed[NORMAL2];
 					x_min[SCROLL2] = x_min[NORMAL2] + (HSCROL << 1);

@@ -430,20 +430,20 @@ int monitor(void)
 			}
 		}
 		else if (strcmp(t, "M") == 0) {
-			int addr1;
 			UWORD xaddr1;
 			int i;
 			int count;
-			if (get_hex(NULL, &xaddr1)) addr = xaddr1;
+			if (get_hex(NULL, &xaddr1))
+				addr = xaddr1;
 			count = 16;
 			while (count) {
 				printf("%04X : ", addr);
-				for (i = 0; i < 16; i++) printf("%02X ", memory[(UWORD)(addr+i)]);
+				for (i = 0; i < 16; i++)
+					printf("%02X ", memory[(UWORD) (addr + i)]);
 				printf("\t");
-				for (i = 0; i < 16; i++) 
-				{
-					if (isalnum(memory[(UWORD)(addr+i)])) {
-						printf("%c", memory[(UWORD)(addr+i)]);
+				for (i = 0; i < 16; i++) {
+					if (isalnum(memory[(UWORD) (addr + i)])) {
+						printf("%c", memory[(UWORD) (addr + i)]);
 					}
 					else {
 						printf(".");
@@ -498,7 +498,8 @@ int monitor(void)
 		else if (strcmp(t, "C") == 0) {
 			UWORD addr;
 			UWORD temp;
-			addr=0; temp = 0;
+			addr = 0;
+			temp = 0;
 
 			get_hex(NULL, &addr);
 
@@ -593,12 +594,12 @@ unsigned int disassemble(UWORD addr1)
 	addr = addr1;
 	count = 24;
 
-	while (count) 
-	{
+	while (count) {
 		printf("%04X\t", addr);
-		addr1 = show_instruction(addr,20);
+		addr1 = show_instruction(addr, 20);
 		printf("; %Xcyc ; ", cycles[memory[addr]]);
-		for(i=0; i<addr1; i++) printf("%02X ", memory[(UWORD)(addr+i)]);
+		for (i = 0; i < addr1; i++)
+			printf("%02X ", memory[(UWORD) (addr + i)]);
 		printf("\n");
 		addr += addr1;
 		count--;
@@ -606,58 +607,59 @@ unsigned int disassemble(UWORD addr1)
 	return addr;
 }
 
-static char* instr6502[256] = {
-"BRK", "ORA ($1,X)", "CIM", "ASO ($1,X)", "SKB", "ORA $1", "ASL $1", "ASO $1", 
-"PHP", "ORA #$1", "ASL", "ASO #$1", "SKW", "ORA $2", "ASL $2", "ASO $2",
+static char *instr6502[256] =
+{
+	"BRK", "ORA ($1,X)", "CIM", "ASO ($1,X)", "SKB", "ORA $1", "ASL $1", "ASO $1",
+ "PHP", "ORA #$1", "ASL", "ASO #$1", "SKW", "ORA $2", "ASL $2", "ASO $2",
 
-"BPL $0", "ORA ($1),Y", "CIM", "ASO ($1),Y", "SKB", "ORA $1,X", "ASL $1,X", "ASO $1,X",
-"CLC", "ORA $2,Y", "NOP", "ASO $2,Y", "SKW", "ORA $2,X", "ASL $2,X", "ASO $2,X",
+	"BPL $0", "ORA ($1),Y", "CIM", "ASO ($1),Y", "SKB", "ORA $1,X", "ASL $1,X", "ASO $1,X",
+	"CLC", "ORA $2,Y", "NOP", "ASO $2,Y", "SKW", "ORA $2,X", "ASL $2,X", "ASO $2,X",
 
-"JSR $2", "AND ($1,X)", "CIM", "RLA ($1,X)", "BIT $1", "AND $1", "ROL $1", "RLA $1",
-"PLP", "AND #$1", "ROL", "RLA #$1", "BIT $2", "AND $2", "ROL $2", "RLA $2",
+	"JSR $2", "AND ($1,X)", "CIM", "RLA ($1,X)", "BIT $1", "AND $1", "ROL $1", "RLA $1",
+	"PLP", "AND #$1", "ROL", "RLA #$1", "BIT $2", "AND $2", "ROL $2", "RLA $2",
 
-"BMI $0", "AND ($1),Y", "CIM", "RLA ($1),Y", "SKB", "AND $1,X", "ROL $1,X", "RLA $1,X",
-"SEC", "AND $2,Y", "NOP", "RLA $2,Y", "SKW", "AND $2,X", "ROL $2,X", "RLA $2,X",
-
-
-"RTI", "EOR ($1,X)", "CIM", "LSE ($1,X)", "SKB", "EOR $1", "LSR $1", "LSE $1",
-"PHA", "EOR #$1", "LSR", "ALR #$1", "JMP $2", "EOR $2", "LSR $2", "LSE $2",
-
-"BVC $0", "EOR ($1),Y", "CIM", "LSE ($1),Y", "SKB", "EOR $1,X", "LSR $1,X", "LSE $1,X",
-"CLI", "EOR $2,Y", "NOP", "LSE $2,Y", "SKW", "EOR $2,X", "LSR $2,X", "LSE $2,X",
-
-"RTS", "ADC ($1,X)", "CIM", "RRA ($1,X)", "SKB", "ADC $1", "ROR $1", "RRA $1",
-"PLA", "ADC #$1", "ROR", "ARR #$1", "JMP ($2)", "ADC $2", "ROR $2", "RRA $2",
-
-"BVS $0", "ADC ($1),Y", "CIM", "RRA ($1),Y", "SKB", "ADC $1,X", "ROR $1,X", "RRA $1,X",
-"SEI", "ADC $2,Y", "NOP", "RRA $2,Y", "SKW", "ADC $2,X", "ROR $2,X", "RRA $2,X",
+	"BMI $0", "AND ($1),Y", "CIM", "RLA ($1),Y", "SKB", "AND $1,X", "ROL $1,X", "RLA $1,X",
+	"SEC", "AND $2,Y", "NOP", "RLA $2,Y", "SKW", "AND $2,X", "ROL $2,X", "RLA $2,X",
 
 
-"SKB", "STA ($1,X)", "SKB", "AXS ($1,X)", "STY $1", "STA $1", "STX $1", "AXS $1", 
-"DEY", "SKB", "TXA", "XAA #$1", "STY $2", "STA $2", "STX $2", "AXS $2", 
+	"RTI", "EOR ($1,X)", "CIM", "LSE ($1,X)", "SKB", "EOR $1", "LSR $1", "LSE $1",
+	"PHA", "EOR #$1", "LSR", "ALR #$1", "JMP $2", "EOR $2", "LSR $2", "LSE $2",
 
-"BCC $0", "STA ($1),Y", "CIM", "AXS ($1),Y", "STY $1,X", "STA $1,X", "STX $1,Y", "AXS $1,Y",
-"TYA", "STA $2,Y", "TXS", "XAA $2,Y", "SKW", "STA $2,X", "MKX $2", "MKA $2",
+	"BVC $0", "EOR ($1),Y", "CIM", "LSE ($1),Y", "SKB", "EOR $1,X", "LSR $1,X", "LSE $1,X",
+	"CLI", "EOR $2,Y", "NOP", "LSE $2,Y", "SKW", "EOR $2,X", "LSR $2,X", "LSE $2,X",
 
-"LDY #$1", "LDA ($1,X)", "LDX #$1", "LAX ($1,X)", "LDY $1", "LDA $1", "LDX $1", "LAX $1",
-"TAY", "LDA #$1", "TAX", "OAL #$1", "LDY $2", "LDA $2", "LDX $2", "LAX $2",
+	"RTS", "ADC ($1,X)", "CIM", "RRA ($1,X)", "SKB", "ADC $1", "ROR $1", "RRA $1",
+	"PLA", "ADC #$1", "ROR", "ARR #$1", "JMP ($2)", "ADC $2", "ROR $2", "RRA $2",
 
-"BCS $0", "LDA ($1),Y", "CIM", "LAX ($1),Y", "LDY $1,X", "LDA $1,X", "LDX $1,Y", "LAX $1,X",
-"CLV", "LDA $2,Y", "TSX", "AXA $2,Y", "LDY $2,X", "LDA $2,X", "LDX $2,Y", "LAX $2,Y",
-
-
-"CPY #$1", "CMP ($1,X)", "SKB", "DCM ($1,X)", "CPY $1", "CMP $1", "DEC $1", "DCM $1",
-"INY", "CMP #$1", "DEX", "SAX #$1", "CPY $2", "CMP $2", "DEC $2", "DCM $2",
-
-"BNE $0", "CMP ($1),Y", "CIM      [ESCRTS]", "DCM ($1),Y", "SKB", "CMP $1,X", "DEC $1,X", "DCM $1,X",
-"CLD", "CMP $2,Y", "NOP", "DCM $2,Y", "SKW", "CMP $2,X", "DEC $2,X", "DCM $2,X",
+	"BVS $0", "ADC ($1),Y", "CIM", "RRA ($1),Y", "SKB", "ADC $1,X", "ROR $1,X", "RRA $1,X",
+	"SEI", "ADC $2,Y", "NOP", "RRA $2,Y", "SKW", "ADC $2,X", "ROR $2,X", "RRA $2,X",
 
 
-"CPX #$1", "SBC ($1,X)", "SKB", "INS ($1,X)", "CPX $1", "SBC $1", "INC $1", "INS $1",
-"INX", "SBC #$1", "NOP", "SBC #$1", "CPX $2", "SBC $2", "INC $2", "INS $2",
+	"SKB", "STA ($1,X)", "SKB", "AXS ($1,X)", "STY $1", "STA $1", "STX $1", "AXS $1",
+  "DEY", "SKB", "TXA", "XAA #$1", "STY $2", "STA $2", "STX $2", "AXS $2",
 
-"BEQ $0", "SBC ($1),Y", "CIM      [ESC]", "INS ($1),Y", "SKB", "SBC $1,X", "INC $1,X", "INS $1,X",
-"SED", "SBC $2,Y", "NOP", "INS $2,Y", "SKW", "SBC $2,X", "INC $2,X", "INS $2,X"
+	"BCC $0", "STA ($1),Y", "CIM", "AXS ($1),Y", "STY $1,X", "STA $1,X", "STX $1,Y", "AXS $1,Y",
+	"TYA", "STA $2,Y", "TXS", "XAA $2,Y", "SKW", "STA $2,X", "MKX $2", "MKA $2",
+
+	"LDY #$1", "LDA ($1,X)", "LDX #$1", "LAX ($1,X)", "LDY $1", "LDA $1", "LDX $1", "LAX $1",
+	"TAY", "LDA #$1", "TAX", "OAL #$1", "LDY $2", "LDA $2", "LDX $2", "LAX $2",
+
+	"BCS $0", "LDA ($1),Y", "CIM", "LAX ($1),Y", "LDY $1,X", "LDA $1,X", "LDX $1,Y", "LAX $1,X",
+	"CLV", "LDA $2,Y", "TSX", "AXA $2,Y", "LDY $2,X", "LDA $2,X", "LDX $2,Y", "LAX $2,Y",
+
+
+	"CPY #$1", "CMP ($1,X)", "SKB", "DCM ($1,X)", "CPY $1", "CMP $1", "DEC $1", "DCM $1",
+	"INY", "CMP #$1", "DEX", "SAX #$1", "CPY $2", "CMP $2", "DEC $2", "DCM $2",
+
+	"BNE $0", "CMP ($1),Y", "CIM      [ESCRTS]", "DCM ($1),Y", "SKB", "CMP $1,X", "DEC $1,X", "DCM $1,X",
+	"CLD", "CMP $2,Y", "NOP", "DCM $2,Y", "SKW", "CMP $2,X", "DEC $2,X", "DCM $2,X",
+
+
+	"CPX #$1", "SBC ($1,X)", "SKB", "INS ($1,X)", "CPX $1", "SBC $1", "INC $1", "INS $1",
+	"INX", "SBC #$1", "NOP", "SBC #$1", "CPX $2", "SBC $2", "INC $2", "INS $2",
+
+	"BEQ $0", "SBC ($1),Y", "CIM      [ESC]", "INS ($1),Y", "SKB", "SBC $1,X", "INC $1,X", "INS $1,X",
+	"SED", "SBC $2,Y", "NOP", "INS $2,Y", "SKW", "SBC $2,X", "INC $2,X", "INS $2,X"
 };
 
 UWORD show_instruction(UWORD inad, int wid)
@@ -670,40 +672,44 @@ UWORD show_instruction(UWORD inad, int wid)
 	instr = memory[inad];
 	strcpy(dissbf, instr6502[instr]);
 
-	for(i=0; dissbf[i]!=0; i++) 
-	{
-	 if (dissbf[i]=='$') 
-	 {
-	  wid-=i;
-	  dissbf[i]=0;
-	  printf(dissbf);
-	  switch (dissbf[i+1])
-	  {
-	   case '0': value = (UWORD) (inad + (char) memory[(UWORD)(inad+1)] + 2);
-			 inad=2; wid-=5;
-	 	  	 printf("$%04X", value);
-			 break;
-	   case '1': value = (UBYTE) memory[(UWORD)(inad+1)];
-			 inad=2; wid-=3;
-	 	  	 printf("$%02X", value);
-			 break;
-	   case '2': value = (UWORD) memory[(UWORD)(inad+1)] | (memory[(UWORD)(inad+2)]<<8);
-			 inad=3; wid-=5;
-	 	  	 printf("$%04X", value);
-			 break;
-	  }
-	  printf(dissbf+i+2);
-	  for(; dissbf[i+2]!=0; i++) wid--;
-	  i=0;
-	  break;
-	 }
+	for (i = 0; dissbf[i] != 0; i++) {
+		if (dissbf[i] == '$') {
+			wid -= i;
+			dissbf[i] = 0;
+			printf(dissbf);
+			switch (dissbf[i + 1]) {
+			case '0':
+				value = (UWORD) (inad + (char) memory[(UWORD) (inad + 1)] + 2);
+				inad = 2;
+				wid -= 5;
+				printf("$%04X", value);
+				break;
+			case '1':
+				value = (UBYTE) memory[(UWORD) (inad + 1)];
+				inad = 2;
+				wid -= 3;
+				printf("$%02X", value);
+				break;
+			case '2':
+				value = (UWORD) memory[(UWORD) (inad + 1)] | (memory[(UWORD) (inad + 2)] << 8);
+				inad = 3;
+				wid -= 5;
+				printf("$%04X", value);
+				break;
+			}
+			printf(dissbf + i + 2);
+			for (; dissbf[i + 2] != 0; i++)
+				wid--;
+			i = 0;
+			break;
+		}
 	}
-	if (dissbf[i]==0)
-	{
-	 printf(dissbf);
-	 wid-=i;
-	 inad=1;
+	if (dissbf[i] == 0) {
+		printf(dissbf);
+		wid -= i;
+		inad = 1;
 	}
-	for(i=wid; i>0; i--) printf(" ");
+	for (i = wid; i > 0; i--)
+		printf(" ");
 	return inad;
 }

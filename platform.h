@@ -6,6 +6,9 @@
  */
 
 void Atari_Initialise(int *argc, char *argv[]);
+#ifdef DELAYED_VGAINIT
+void SetupVgaEnvironment();
+#endif
 int Atari_Exit(int run_monitor);
 int Atari_Keyboard(void);
 void Atari_DisplayScreen(UBYTE * screen);
