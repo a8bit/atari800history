@@ -93,3 +93,6 @@ Ed Kaminski <ekamins@ibm.net>
 Nathan Monson <nathan@polaristel.net>
 - Supplied correction for handling of 6502 V flag during ADC and SBC
   operations.
+
+Petr Stehlik <stehlik@cas3.zlin.vutbr.cz>
+o Added support for Atari Falcon

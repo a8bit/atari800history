@@ -1,4 +1,6 @@
+#ifndef AMIGA
 #include "config.h"
+#endif
 
 #ifdef VOXWARE
 #include <fcntl.h>
@@ -7,7 +9,7 @@
 
 #include "pokey11.h"
 
-static char *rcsid = "$Id: sound.c,v 1.2 1997/04/18 22:23:38 david Exp $";
+static char *rcsid = "$Id: sound.c,v 1.3 1997/07/22 22:19:41 david Exp $";
 
 /* 0002 = 2 Fragments */
 /* 0007 = means each fragment is 2^2 or 128 bytes */

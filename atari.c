@@ -17,7 +17,7 @@
 #include "djgpp.h"
 #endif
 
-static char *rcsid = "$Id: atari.c,v 1.42 1997/04/13 10:02:15 david Exp $";
+static char *rcsid = "$Id: atari.c,v 1.46 1998/01/14 00:08:04 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
@@ -39,8 +39,11 @@ static char *rcsid = "$Id: atari.c,v 1.42 1997/04/13 10:02:15 david Exp $";
 TVmode tv_mode = PAL;
 Machine machine = Atari;
 int verbose = FALSE;
+double fps;
+int nframes;
 
 static int os = 2;
+static int pil_on = FALSE;
 
 extern UBYTE NMIEN;
 extern UBYTE NMIST;
@@ -117,7 +120,20 @@ int load_image (char *filename, int addr, int nbytes)
 
 void EnablePILL (void)
 {
-  SetROM (0x8000, 0xbfff);
+  if (os != 3) /* Disable PIL when running Montezumma's Revenge */
+    {
+      SetROM (0x8000, 0xbfff);
+      pil_on = TRUE;
+    }
+}
+
+void DisablePILL (void)
+{
+  if (os != 3) /* Disable PIL when running Montezumma's Revenge */
+    {
+      SetRAM (0x8000, 0xbfff);
+      pil_on = FALSE;
+    }
 }
 
 /*
@@ -491,8 +507,17 @@ void PatchOS (void)
     }
 }
 
+static int Reset_Disabled = FALSE;
+
 void Coldstart (void)
 {
+  if (os == 3)
+    {
+      os = 2; /* Fiddle OS to prevent infinite recursion */
+      Initialise_Monty ();
+      os = 3;
+    }
+
   NMIEN = 0x00;
   NMIST = 0x00;
   PORTA = 0xff;
@@ -506,6 +531,9 @@ void Coldstart (void)
 
 void Warmstart (void)
 {
+  if (os == 3)
+    Initialise_Monty ();
+
   NMIEN = 0x00;
   NMIST = 0x00;
   PORTA = 0xff;
@@ -633,6 +661,79 @@ int Initialise_Atari5200 (void)
       SetHARDWARE (0xeb00, 0xebff); /* 5200 POKEY Chip */
       Coldstart ();
     }
+
+  return status;
+}
+
+/*
+ * Initialise System with Montezuma's Revenge
+ * image. Standard Atari OS is not required.
+ */
+
+#include "emuos.h"
+
+#ifdef __BUILT_IN_MONTY__
+#include "monty.h"
+#endif
+
+int Initialise_Monty (void)
+{
+  int status;
+
+  status = load_image ("monty-emuos.img", 0x0000, 0x10000);
+#ifdef __BUILT_IN_MONTY__
+  if (!status)
+    {
+      memcpy (&memory[0x0000], monty_h, 0xc000);
+      memcpy (&memory[0xc000], emuos_h, 0x4000);
+      status = TRUE;
+    }
+#endif
+
+  if (status)
+    {
+      machine = Atari;
+//      PatchOS ();
+      SetRAM (0x0000, 0xbfff);
+      if (enable_c000_ram)
+	SetRAM (0xc000, 0xcfff);
+      else
+	SetROM (0xc000, 0xcfff);
+      SetROM (0xd800, 0xffff);
+      SetHARDWARE (0xd000, 0xd7ff);
+      Coldstart ();
+    }
+
+  return status;
+}
+
+/*
+ * Initialise System with an replacement OS. It has just
+ * enough functionality to run Defender and Star Raider.
+ */
+
+int Initialise_EmuOS (void)
+{
+  int status;
+
+  status = load_image ("emuos.img", 0xc000, 0x4000);
+  if (!status)
+    memcpy (&memory[0xc000], emuos_h, 0x4000);
+  else
+    printf ("EmuOS: Using external emulated OS\n");
+
+  machine = Atari;
+  PatchOS ();
+  SetRAM (0x0000, 0xbfff);
+  if (enable_c000_ram)
+    SetRAM (0xc000, 0xcfff);
+  else
+    SetROM (0xc000, 0xcfff);
+  SetROM (0xd800, 0xffff);
+  SetHARDWARE (0xd000, 0xd7ff);
+  Coldstart ();
+
+  status = TRUE;
 
   return status;
 }
@@ -807,6 +908,16 @@ int main (int argc, char **argv)
 	os = 1;
       else if (strcmp(argv[i],"-b") == 0)
 	os = 2;
+      else if (strcmp(argv[i],"-monty") == 0)
+        {
+          machine = Atari;
+	  os = 3;
+        }
+      else if (strcmp(argv[i],"-emuos") == 0)
+        {
+          machine = Atari;
+	  os = 4;
+        }
       else if (strcmp(argv[i],"-c") == 0)
 	enable_c000_ram = TRUE;
       else
@@ -891,8 +1002,12 @@ int main (int argc, char **argv)
     case Atari :
       if (os == 1)
 	status = Initialise_AtariOSA ();
-      else
+      else if (os == 2)
 	status = Initialise_AtariOSB ();
+      else if (os == 3)
+	status = Initialise_Monty ();
+      else
+	status = Initialise_EmuOS ();
       break;
     case AtariXL :
       status = Initialise_AtariXL ();
@@ -911,9 +1026,8 @@ int main (int argc, char **argv)
 
   if (!status)
     {
-      printf ("Operating System not available\n");
-      Atari800_Exit (FALSE);
-      exit (1);
+      printf ("Operating System not available - using Emulated OS\n");
+      status = Initialise_EmuOS ();
     }
 /*
  * ================================
@@ -1140,6 +1254,11 @@ void Escape (UBYTE esc_code)
 
 int Atari800_Exit (int run_monitor)
 {
+  if (verbose)
+    {
+      printf ("Current Frames per Secound = %f\n", fps);
+    }
+
   return Atari_Exit (run_monitor);
 }
 
@@ -1225,13 +1344,17 @@ int Atari800_PutByte (UWORD addr, UBYTE byte)
 
 void Atari800_Hardware (void)
 {
-  static int	pil_on = FALSE;
+  static struct timeval tp;
+  static struct timezone tzp;
+  static double lasttime;
+
+  nframes = 0;
+  gettimeofday (&tp, &tzp);
+  lasttime = tp.tv_sec + (tp.tv_usec / 1000000.0);
+  fps = 0.0;
 
   while (TRUE)
     {
-      static struct timeval tp;
-      static struct timezone tzp;
-      static double lasttime = -1.0;
       static int test_val = 0;
 
       int keycode;
@@ -1263,15 +1386,9 @@ void Atari800_Hardware (void)
           break;
 	case AKEY_PIL :
 	  if (pil_on)
-	    {
-	      SetRAM (0x8000, 0xbfff);
-	      pil_on = FALSE;
-	    }
+	    DisablePILL();
 	  else
-	    {
-	      SetROM (0x8000, 0xbfff);
-	      pil_on = TRUE;
-	    }
+	    EnablePILL();
 	  break;
 	case AKEY_NONE :
 	  break;
@@ -1308,26 +1425,21 @@ void Atari800_Hardware (void)
 	}
 #endif
 
+      nframes++;
+
 #ifndef DJGPP
       if (deltatime > 0.0)
 	{
-	  if (lasttime >= 0.0)
-	    {
-	      double curtime;
+          double curtime;
 
-	      do
-		{
-		  gettimeofday (&tp, &tzp);
-		  curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-		} while (curtime < (lasttime + deltatime));
-	  
-	      lasttime = curtime;
-	    }
-	  else
-	    {
-	      gettimeofday (&tp, &tzp);
-	      lasttime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-	    }
+          do
+            {
+              gettimeofday (&tp, &tzp);
+              curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
+            } while (curtime < (lasttime + deltatime));
+
+          fps = 1.0 / (curtime - lasttime);
+          lasttime = curtime;
 	}
 #else  // for dos, count ticks and use the ticks_per_second global variable
        // Use the high speed clock tick function uclock()

@@ -24,11 +24,9 @@ default :
 	@echo "  basic"
 	@echo "  freebsd-x11 freebsd-x11-shm"
 	@echo "  freebsd-xview freebsd-xview-shm"
-	@echo "  linux-svgalib linux-svgalib-nas"
-	@echo "  linux-x11-nas linux-x11-nas-shm"
-	@echo "  linux-xview-nas linux-xview-nas-shm"
-	@echo "  x11 x11-shm x11-nas x11-nas-shm"
-	@echo "  xview xview-shm xview-nas xview-nas-shm"
+	@echo "  linux-svgalib"
+	@echo "  x11 x11-shm"
+	@echo "  xview xview-shm"
 	@echo "  motif"
 	@echo "  hp9000-ansic-x11"
 	@echo "  curses sunos-curses linux-ncurses freebsd-ncurses"
@@ -51,35 +49,35 @@ linux-svgalib :
 		LDLIBS="-lvgagl -lvga -lm" \
 		OBJ="atari_svgalib.o"
 
-linux-svgalib-nas :
+linux-svgalib-nas-obsolete :
 	make atari800 \
 		OTHER="-DNAS" \
 		LDFLAGS="-L/usr/X11/lib" \
 		LDLIBS="-lvgagl -lvga -lm -laudio -lXau" \
 		OBJ="atari_svgalib.o nas.o"
 
-linux-x11-nas :
+linux-x11-nas-obsolete :
 	make atari800 \
 		CPPFLAGS="-I/usr/openwin/include -DNAS" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="-laudio -lXau -lX11 -lm" \
 		OBJ="atari_x11.o nas.o"
 
-linux-x11-nas-shm :
+linux-x11-nas-shm-obsolete :
 	make atari800 \
 		CPPFLAGS="-I/usr/openwin/include -DNAS -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="-laudio -lXau -lX11 -lXext -lm" \
 		OBJ="atari_x11.o nas.o"
 
-linux-xview-nas :
+linux-xview-nas-obsolete :
 	make atari800 \
 		OTHER="-I/usr/openwin/include -DXVIEW -DNAS" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lm" \
 		OBJ="atari_x11.o nas.o"
 
-linux-xview-nas-shm :
+linux-xview-nas-shm-obsolete :
 	make atari800 \
 		OTHER="-I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
@@ -100,7 +98,7 @@ x11-shm :
 		LDLIBS="-lX11 -lXext -lm" \
 		OBJ="atari_x11.o"
 
-x11-nas :
+x11-nas-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
@@ -110,7 +108,7 @@ x11-nas :
 		LDLIBS="-laudio -lXau -lX11 -lsocket -lnsl -lm" \
 		OBJ="atari_x11.o nas.o"
 
-x11-nas-shm :
+x11-nas-shm-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
@@ -144,7 +142,7 @@ xview-shm :
 		LDLIBS="-lxview -lolgx -lX11 -lXext -lm" \
 		OBJ="atari_x11.o"
 
-xview-nas :
+xview-nas-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
@@ -154,7 +152,7 @@ xview-nas :
 		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lsocket -lnsl -lm" \
 		OBJ="atari_x11.o nas.o"
 
-xview-nas-shm :
+xview-nas-shm-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"

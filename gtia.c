@@ -24,7 +24,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: gtia.c,v 1.17 1997/02/15 13:57:11 david Exp $";
+static char *rcsid = "$Id: gtia.c,v 1.18 1997/07/22 22:23:15 david Exp $";
 
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
@@ -95,11 +95,11 @@ static int global_hposm0;
 static int global_hposm1;
 static int global_hposm2;
 static int global_hposm3;
-static int global_sizep0;
-static int global_sizep1;
-static int global_sizep2;
-static int global_sizep3;
-static int global_sizem;
+static int global_sizep0 = 2;
+static int global_sizep1 = 2;
+static int global_sizep2 = 2;
+static int global_sizep3 = 2;
+static int global_sizem = 2;
 
 #ifdef DIRECT_VIDEO
 static UBYTE colour_to_pf[256];
@@ -657,7 +657,6 @@ void PM_ScanLine (void)
 	      which_missile = which_pm_lookup[(pm_pixel >> 4) & 0x0f];
 
 	      colreg = WhichColourReg (pf_pixel, which_player, which_missile);
-
 #ifdef DIRECT_VIDEO
 	      scrn_ptr[xpos] = colour_lookup[colreg];
 #else

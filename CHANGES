@@ -1,3 +1,21 @@
+Changes in 0.8.2
+----------------
+
+o New Monitor READ command to load file into memory.
+o New Monitor COLDSTART command to perform a coldstart.
+o New Monitor WARMSTART command to perform a warmstart.
+o New Monitor F command to fill memory range with a value.
+o Prevention of "config.h" being included during compilation for Amiga.
+o Improved MS-DOS keyboard handling. The most noticable difference is
+  that the keypad joystick emulation now returns to centre when the
+  key is released.
+o Re-instated replacement OS - Allows Defender and Star Raider to
+  run without the Atari OS Roms.
+o Added Atari Falcon Support - Thanks to Petr Stehlik.
+o NAS (Network Audio System) support is now obsolete. The entries have
+  been removed from the makefile and the intention is to remove the
+  obsolete code before the next release.
+
 Changes in 0.8.1
 ----------------
 

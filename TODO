@@ -6,8 +6,6 @@ o The obsolete variable "countdown_rate" is still in use within
   to do it without an Amiga to check it. I've left it defined in "atari.c"
   so that there are no linker errors on the Amiga.
 
-o Support for optional X11 private colormap
-
 o Joystick support for DOS version
 
 o Sound output for DOS version

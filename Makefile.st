@@ -1,9 +1,9 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O6 -DGNU_C
+CFLAGS		= -c -O2 -fno-strength-reduce -DGNU_C
 LD		= gcc
 LDFLAGS		=
-LDLIBS		= -lm
+LDLIBS		=
 
 default :
 	@echo To build the Atari 800 Emulator, type:
@@ -11,8 +11,8 @@ default :
 	@echo .
 	@echo where version is one of
 	@echo   basic
-	@echo   pdcurses
-	@echo   vga
+	@echo   curses
+	@echo   st
 	@echo . 
 	@echo To reconfigure options, type: make config
 	@echo To clean directory, type: make clean
@@ -22,12 +22,12 @@ basic :
 	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
 	@echo Finished.
 
-pdcurses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o"
+curses :
+	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurses -lm" OBJ="a_curses.o"
 	@echo Finished.
 
-vga :
-	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o"
+st :
+	@make atari800 OBJ="atari_st.o c2p.o videl.o"
 	@echo Finished.
 
 #
@@ -36,8 +36,7 @@ vga :
 # ======================================================
 #
 
-INCLUDES        =       Makefile \
-			config.h \
+INCLUDES        =       config.h \
 			rt-config.h \
 			cpu.h \
 			atari.h \
@@ -53,12 +52,12 @@ INCLUDES        =       Makefile \
 			platform.h
 
 config config.h	:	configure
-	configur
+	./configure
 
 configure	:	configure.o prompts.o
 	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
 
-configure.o	:	configur.c
+configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS =       atari.o \
@@ -70,9 +69,9 @@ OBJECTS =       atari.o \
 		gtia.o \
 		pokey.o \
 		pia.o \
-                supercart.o \
+                supercar.o \
                 prompts.o \
-                rt-config.o \
+                rtconfig.o \
                 ui.o \
                 list.o \
 		sound.o \
@@ -108,8 +107,8 @@ pokey.o         :       pokey.c $(INCLUDES)
 pia.o           :       pia.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) pia.c
 
-supercart.o     :       supercart.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
+supercar.o     :       supercart.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c -o supercar.o
 
 ui.o            :       ui.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
@@ -117,8 +116,8 @@ ui.o            :       ui.c $(INCLUDES)
 list.o          :       list.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) list.c
 
-rt-config.o     :       rt-config.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c
+rtconfig.o     :       rt-config.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c -o rtconfig.o
 
 prompts.o       :       prompts.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
@@ -126,16 +125,24 @@ prompts.o       :       prompts.c prompts.h
 sound.o		:       sound.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) sound.c
 
+c2p.o	:	c2p.s c2pmac.s
+	xgen -L1 c2p.o c2p.s
+	gst2gcc gcc c2p.o
+
+videl.o	:	videl.s
+	xgen -L1 videl.o videl.s
+	gst2gcc gcc videl.o
+
 pokey11.o	:       pokey11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) pokey11.c
 
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
 
-atari_svgalib.o :       atari_svgalib.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari_svgalib.c
+atari_st.o :       atari_st.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_st.c
 
-atari_curses.o  :       atari_curses.c $(INCLUDES)
+a_curses.o  :       atari_curses.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_curses.c
 
 atari_amiga.o   :       atari_amiga.c $(INCLUDES)
@@ -145,8 +152,7 @@ nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
 clean   :
-	del configur.exe
-	del configur
-	del config.h
-	del core
-	del *.o
+	rm -f configure
+	rm -f config.h
+	rm -f core
+	rm -f *.o

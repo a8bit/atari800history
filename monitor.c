@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #endif
 
-static char *rcsid = "$Id: monitor.c,v 1.12 1996/10/09 22:02:07 david Exp $";
+static char *rcsid = "$Id: monitor.c,v 1.13 1997/07/22 22:28:58 david Exp $";
 
 #include "atari.h"
 #include "cpu.h"
@@ -101,15 +101,15 @@ int monitor (void)
 	  strcpy(s, "CONT");
 	}
 
-      for (p=0;s[p]!=0;p++)
-	if (islower(s[p]))
-	  s[p] = toupper(s[p]);
-
       t = get_token(s);
       if (t == NULL)
         {
 	  continue;
         }
+
+      for (p=0;t[p]!=0;p++)
+	if (islower(t[p]))
+	  s[p] = toupper(t[p]);
 
       if (strcmp(t,"BREAK") == 0)
 	{
@@ -386,6 +386,52 @@ int monitor (void)
 	      printf ("*** Memory Unchanged (Missing Parameter) ***\n");
 	    }
 	}
+      else if (strcmp(t,"COLDSTART") == 0)
+        {
+          Coldstart ();
+        }
+      else if (strcmp(t,"WARMSTART") == 0)
+        {
+          Warmstart ();
+        }
+      else if (strcmp(t,"READ") == 0)
+        {
+          char *filename;
+          UWORD addr;
+          UWORD nbytes;
+          int status;
+
+          filename = get_token(NULL);
+          if (filename)
+            {
+              status = get_hex(NULL, &addr);
+              if (status)
+                {
+                  status = get_hex(NULL, &nbytes);
+                  if (status)
+                    {
+                      int fd;
+
+                      fd = open (filename, O_RDONLY, 0777);
+                      if (fd == -1)
+                        {
+                          perror (filename);
+                          Atari800_Exit (FALSE);
+                          exit (1);
+                        }
+
+                      if (read (fd, &memory[addr], nbytes) == -1)
+                        {
+                          perror ("read");
+                          Atari800_Exit (FALSE);
+                          exit (1);
+                        }
+
+                      close (fd);
+                    }
+                }
+            }
+        }
       else if (strcmp(t,"WRITE") == 0)
 	{
 	  UWORD	addr1;
@@ -453,7 +499,7 @@ int monitor (void)
 	  if (addr2 == 0) addr2 = addr1 + 255;
 	  
 	  addr = addr2 + 1;
-	  
+printf ("addr1 = %x, addr2 = %x\n", addr1, addr2);
 	  while (addr1 <= addr2)
 	    {
 	      temp = addr1;
@@ -490,6 +536,25 @@ int monitor (void)
 	      addr1 += 16;
 	    }
 	}
+      else if (strcmp(t,"F") == 0)
+        {
+          int   addr;
+	  int	addr1;
+	  int	addr2;
+	  UWORD	xaddr1;
+	  UWORD	xaddr2;
+	  UWORD	hexval;
+
+	  get_hex (NULL, &xaddr1);
+	  get_hex (NULL, &xaddr2);
+	  get_hex (NULL, &hexval);
+	  
+	  addr1 = xaddr1;
+	  addr2 = xaddr2;
+
+          for (addr=addr1;addr<=addr2;addr++)
+            memory[addr] = (UBYTE)(hexval & 0x00ff);
+        }
       else if (strcmp(t,"M") == 0)
 	{
 	  UWORD	addr;
@@ -549,6 +614,7 @@ int monitor (void)
 	  printf ("SET{PC,A,S,X,Y} hexval    - Set Register Value\n");
 	  printf ("SET{N,V,B,D,I,Z,C} hexval - Set Flag Value\n");
 	  printf ("D [startaddr] [endaddr]   - Display Memory\n");
+	  printf ("F [startaddr] [endaddr] hexval - Fill Memory\n");
 	  printf ("M [startaddr] [hexval...] - Modify Memory\n");
 	  printf ("Y [startaddr] [endaddr]   - Disassemble Memory\n");
 	  printf ("ROM addr1 addr2           - Convert Memory Block into ROM\n");
@@ -556,6 +622,7 @@ int monitor (void)
 	  printf ("HARDWARE addr1 addr2      - Convert Memory Block into HARDWARE\n");
 	  printf ("CONT                      - Continue\n");
 	  printf ("SHOW                      - Show Registers\n");
+	  printf ("READ filename addr nbytes - Read file into memory\n");
 	  printf ("WRITE startaddr endaddr   - Write specified area of memory to memdump.dat\n");
 	  printf ("SUM [startaddr] [endaddr] - SUM of specified memory range\n");
 #ifdef TRACE
@@ -566,6 +633,8 @@ int monitor (void)
           printf ("GTIA                      - Display GTIA registers\n");
           printf ("DLIST                     - Display current display list\n");
           printf ("PROFILE                   - Display profiling statistics\n");
+          printf ("COLDSTART                 - Perform system coldstart\n");
+          printf ("WARMSTART                 - Perform system warmstart\n");
 	  printf ("QUIT                      - Quit Emulation\n");
 	  printf ("HELP or ?                 - This Text\n");
 	}

@@ -14,7 +14,7 @@
  *       scanline_ptr.
  */
 
-static char *rcsid = "$Id: atari_x11.c,v 1.42 1997/06/22 17:52:35 david Exp $";
+static char *rcsid = "$Id: atari_x11.c,v 1.43 1997/07/22 23:08:57 david Exp $";
 
 #ifdef XVIEW
 #include <xview/xview.h>
@@ -69,9 +69,6 @@ static int motif_rom_sel = 1;
 
 static struct timeval tp;
 static struct timezone tzp;
-
-static double basetime;
-static int nframes = 0;
 
 #ifdef SHM
 #include <sys/ipc.h>
@@ -202,6 +199,8 @@ static int screen_dump = 0;
 
 extern int refresh_rate;
 extern double deltatime;
+extern double fps;
+extern int nframes;
 
 int GetKeyCode (XEvent *event)
 {
@@ -1479,9 +1478,6 @@ void Atari_Initialise (int *argc, char *argv[])
 				NULL);
 #endif
 
-  gettimeofday (&tp, &tzp);
-  basetime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-
   for (i=j=1;i<*argc;i++)
     {
       if (strcmp(argv[i],"-small") == 0)
@@ -2635,29 +2631,15 @@ void Atari_DisplayScreen (UBYTE *screen)
 	}
       break;
     case MONITOR_FPS :
-      {
-	double curtime;
-
-	gettimeofday (&tp, &tzp);
-	curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-
-	nframes++;
-
-	if ((curtime - basetime) >= 2.0)
-	  {
+      if ((nframes % 50) == 0)
+        {
 #ifdef XVIEW
-	    sprintf (status_line, "%.2f FPS",
-		     (double)nframes / (curtime - basetime));
+          sprintf (status_line, "%.2f FPS", fps);
 #else
-	    sprintf (status_line, " %s - %.2f FPS",
-		     ATARI_TITLE, (double)nframes / (curtime - basetime));
+          sprintf (status_line, " %s - %.2f FPS", ATARI_TITLE, fps);
 #endif
-
-	    nframes = 0;
-	    basetime = curtime;
-	  }
-      }
-      update_status_line = TRUE;
+          update_status_line = TRUE;
+        }
       break;
     default :
       update_status_line = FALSE;

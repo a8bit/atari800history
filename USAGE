@@ -105,11 +105,12 @@ Note: The function keys will eventually be changed to a more logical
 X11 Keyboard + Joystick & Paddle Controllers
 ============================================
 
-F1	Warm Reset (This doesn't work under Open Windows)
+F1	Built in User Interface
 F2	Option
 F3	Select
 F4	Start
-F5	Cold Reset
+F5	Warm Reset
+Shft+F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
 F7	Break Key
 F8	---
@@ -128,11 +129,12 @@ Paddle 0 is operated by moving the mouse pointer across the window.
 SVGALIB Keyboard + Joystick & Paddle Controllers
 ================================================
 
-F1	Warm Reset (This doesn't work under Open Windows)
+F1	Built in User Interface
 F2	Option
 F3	Select
 F4	Start
-F5	Cold Reset
+F5	Warm Reset
+Shft+F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
 F7	Break Key
 F8	---
@@ -216,11 +218,12 @@ No Joystick or Paddle support in this version.
 DOS VGA Keyboard + Joystick & Paddle Controllers
 ================================================
 
-F1	Warm Reset
+F1	Built in User Interface
 F2	Option
 F3	Select
 F4	Start
-F5	Cold Reset
+F5	Warm Reset
+Shft+F5	Cold Reset
 F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
 F7	Break Key
 F8	---
