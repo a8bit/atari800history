@@ -54,8 +54,8 @@ void POKEY_Scanline(void);
 #define CHAN4       3
 #define SAMPLE      4
 
-extern UBYTE AUDF[4];    /* AUDFx (D200, D202, D204, D206) */
-extern UBYTE AUDC[4];    /* AUDCx (D201, D203, D205, D207) */
+extern UBYTE AUDF[8];    /* AUDFx (D200, D202, D204, D206) */
+extern UBYTE AUDC[8];    /* AUDCx (D201, D203, D205, D207) */
 extern UBYTE AUDCTL;     /* AUDCTL (D208) */      
 extern unsigned int /* ULONG */ DivNIRQ[4],DivNMax[4];
 

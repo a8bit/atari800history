@@ -192,9 +192,14 @@ Marek Zelem <marek@fornax.elf.stuba.sk>
 - disk drive sound emulation
 - various fixes
 
-Marcin Zukowski <eru@ibb.waw.pl>
+ERU (Marcin Zukowski) <eru@ibb.waw.pl>
 - fix in ANTIC, GTIA
 - slight monitor improvement
 
 Christian Groessler <cpg@aladdin.de>
 - SVGAlib patch for joystick
+- BRKHERE command
+
+Piotr Fusik <P.Fusik@elka.pw.edu.pl>
+- many bugfixes in all parts of emulator
+

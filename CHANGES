@@ -1,3 +1,84 @@
+Changes in 0.9.9g
+-----------------
+
+o STEREO sound support (2 POKEYs) added <Marek>
+
+o if STEREO sound is compiled in you can switch between mono/stereo
+  output in the F1 menu.
+
+o new binary loader improved again <Marek>
+
+o curses mode improved (now enables the F1 menu, warm start moved to F8)
+  Christian Groessler <cpg@aladdin.de>
+
+o a new BRKHERE command for the monitor - if enabled (BRKHERE on) then
+  the emulator invokes the monitor when it encounters a BRK instruction.
+  Useful only if you use the BRK insn for debugging your own programs.
+  Christian Groessler <cpg@aladdin.de>
+
+o new Amiga updates from Sebastian Bauer <sebauer@t-online.de>
+    DEFAULT_CFG_PATH
+    To alter the default config path
+    (if not defined the orginal path is used)
+
+    SUPPORTS_ATARI_CONFIGINIT
+    The port provides a function Atari_ConfigInit() which
+    inits the configuration to default values.
+
+    SUPPORTS_ATARI_CONFIGSAVE
+    The port provides a function Atari_ConfigSave() to save port
+    specific configuration lines in the config file.
+
+    SUPPORTS_ATARI_CONFIGURE
+    The port provides a function Atari_Configure() for the lines
+    not recognized by RtConfigLoad()
+
+    DONT_USE_RTCONFIGUPDATE
+    RtConfigUpdate() is not used and compiled (e.g. the Amiga Port
+    provides an own GUI for configuration and so this is not needed
+    here)
+
+  A list of bugfixes from Piotr Fusik < pfusik@elka.pw.edu.pl >
+  -----------------------------------
+
+* NMIST fixed - antic.c
+
+* invalid color of all multicolor players in same place fixed - antic.c
+
+* blank characters can be inverted - antic.c
+
+* PMG DMA in every scanline - antic.c
+
+* DL can not cross 1k boundary - antic.c
+
+* PENV set to $FF - antic.c
+
+* B flag set on BRK and PHP, reset on NMI and IRQ, can not be changed,
+  BRK doesn't care about I flag - cpu.c, monitor.c
+
+* TRIG2=1 on XL/XE, PAL=1 on PAL machine - gtia.c
+
+* typos in symtable fixed - monitor.c
+
+* 'q' to quit displaying display list - monitor.c
+
+* flags in "SHOW" displayed in a readable way - monitor.c
+
+* new "STACK" command in monitor - monitor.c
+
+* all printable ASCII characters displayed in "M" - monitor.c
+
+* "ANTIC" registers display fixed - monitor.c
+
+* better "HELP" in monitor - monitor.c
+
+* write protection checked in ATR header and returned in drive status
+  - atari.h, sio.c
+
+* CRITIC flag reset and C flag set when returning from emulated SIO - sio.c
+
+
+
 Changes in 0.9.9f
 -----------------
 
@@ -13,11 +94,11 @@ o new binary loader fixed (some binary files contain additional $FF,$FF
 o X11 keyboard autorepeat turned off during emulation <Marek>
 
 o Antic: border color in GTIA 0x80 modes should be taken from $d012 not $d01a
-  <Marcin>
+  <ERU>
 
-o GTIA: return 0x0f for all write-only registers <Marcin>
+o GTIA: return 0x0f for all write-only registers <ERU>
 
-o monitor: added filename to write (memory dump) <Marcin>
+o monitor: added filename to write (memory dump) <ERU>
 
 o svgalib: don't abort if joystick cannot be opened. Also allow cursorpad
            keys/ctrl key for joystick emulation (enable it by defining
@@ -44,6 +125,9 @@ List of changes for programmers:
 
 o keyboard in X11 didn't generate KEYPRESSED - fixed. Also second joystick
   emulation was fixed. AKEY_HELP added. <Marek>
+
+o X11 color support: if more than 256 colors then use full 256 colors in the
+  emulator (in 8bpp only 128 colors are used) <Marek>
 
 o support for REALTIME process under Linux added. This is disabled by default
   since it might hog the whole operating system. On slower systems this might

@@ -74,6 +74,15 @@ void Voxware_Initialise(int *argc, char *argv[])
 			sound_enabled = 0;
 			return;
 		}
+#ifdef STEREO
+		i = 1;
+		if (ioctl(dsp_fd, SNDCTL_DSP_STEREO, &i)) {
+			fprintf(stderr, "%s: cannot set stereo\n", dspname);
+			close(dsp_fd);
+			sound_enabled = 0;
+			return;
+		}
+#endif
 
 		fragstofill = ((dsprate * snddelay / 1000) >> FRAGSIZE) + 1;
 		if (fragstofill > 100)
@@ -102,7 +111,11 @@ void Voxware_Initialise(int *argc, char *argv[])
 			   abi.fragsize,
 			   abi.bytes);
 
+#ifdef STEREO
+		Pokey_sound_init(FREQ_17_EXACT, dsprate, 2);
+#else
 		Pokey_sound_init(FREQ_17_EXACT, dsprate, 1);
+#endif
 	}
 }
 
@@ -127,7 +140,11 @@ void Voxware_UpdateSound(void)
 	i = abi.fragstotal - abi.fragments;
 
 	/* we need fragstofill fragments to be filled */
+#ifdef STEREO
+	for (; i < fragstofill*2; i++) {
+#else
 	for (; i < fragstofill; i++) {
+#endif
 		Pokey_process(dsp_buffer, sizeof(dsp_buffer));
 		write(dsp_fd, dsp_buffer, sizeof(dsp_buffer));
 		if( sound_record>=0 )

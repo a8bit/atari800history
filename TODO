@@ -19,9 +19,6 @@ o rewrite joycfg to use curses so it will be usable on all platforms.
 o simplify and correct synchronization code in main emulator loop - some
   people still complain that the emulator is slower than the original Atari.
 
-o The obsolete variable "countdown_rate" is still in use within
-  "atari_amiga.c" this should be a trivial change, however I'm reluctant
-  to do it without an Amiga to check it. I've left it defined in "atari.c"
-  so that there are no linker errors on the Amiga.
+o update the m68k assembler version of cpu.c
 
 o fix all known bugs (see BUGS file)

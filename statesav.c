@@ -61,7 +61,7 @@ extern FARPROC	pgzread, pgzopen, pgzclose, pgzwrite, pgzerror;
 #define GZCLOSE( X )		fclose( X )
 #define GZREAD( X, Y, Z )	fread( Y, Z, 1, X )
 #define GZWRITE( X, Y, Z )	fwrite( Y, Z, 1, X )
-#undef GZERROR( X, Y )
+#undef GZERROR
 #endif	/* ZLIB_CAPABLE */
 
 #ifndef ZLIB_CAPABLE

@@ -1,6 +1,6 @@
 /* CPU.C
  *    Original Author     :   David Firth          *
- *    Last changes        :   26th April 1998, RASTER */
+ *    Last changes        :   3rd March 2000, Piotr Fusik */
 /*
    Ideas for Speed Improvements
    ============================
@@ -126,7 +126,9 @@ UWORD remember_JMP[REMEMBER_JMP_STEPS];
 extern UBYTE break_step;
 extern UBYTE break_ret;
 extern UBYTE break_cim;
+extern UBYTE break_here;
 extern int ret_nesting;
+extern int brkhere;
 #endif
 
 /*
@@ -193,19 +195,22 @@ void CPU_PutStatus(void)
 #define LDY(data) Z = N = Y = data;
 #define ORA(t_data) data = t_data; Z = N = A |= data
 
-#define PHP data =  (N & 0x80); \
+#define PHP(x) data =  (N & 0x80); \
             data |= V ? 0x40 : 0; \
-            data |= (regP & 0x3c); \
+            data |= (regP & x); \
 	    data |= (Z == 0) ? 0x02 : 0; \
 	    data |= C; \
 	    PH(data);
+
+#define PHPB0 PHP(0x2c)
+#define PHPB1 PHP(0x3c)
 
 #define PLP data = PL; \
 	    N = (data & 0x80); \
 	    V = (data & 0x40) ? 1 : 0; \
 	    Z = (data & 0x02) ? 0 : 1; \
 	    C = (data & 0x01); \
-            regP = (data & 0x3c) | 0x20;
+            regP = (data & 0x3c) | 0x30;
 
 void NMI(void)
 {
@@ -213,7 +218,7 @@ void NMI(void)
 	UBYTE data;
 
 	PHW(regPC);
-	PHP;
+	PHPB0;
 	SetI;
 	regPC = dGetWord(0xfffa);
 	regS = S;
@@ -229,7 +234,7 @@ void NMI(void)
 	if (IRQ) {							\
 		if (!(regP & I_FLAG)) {					\
 			PHW(PC);					\
-			PHP;						\
+			PHPB0;						\
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
 			IRQ = 0;					\
@@ -243,7 +248,7 @@ void NMI(void)
 	if (IRQ) {							\
 		if (!(regP & I_FLAG)) {					\
 			PHW(PC);					\
-			PHP;						\
+			PHPB0;						\
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
 			IRQ = 0;					\
@@ -1016,11 +1021,22 @@ int GO(int ncycles)
 #endif
 
 	  opcode_00:				/* BRK */
-		if (!(regP & I_FLAG)) {
-			UWORD retadr = PC + 1;
-			PHW(retadr);
-			SetB;
-			PHP;
+#ifdef MONITOR_BREAK
+                if (brkhere) {
+                        break_here = 1;
+			data = ESC_BREAK;
+			UPDATE_GLOBAL_REGS;
+			CPU_GetStatus();
+			AtariEscape(data);
+			CPU_PutStatus();
+			UPDATE_LOCAL_REGS;
+                }
+                else
+#endif
+		{
+			PC++;
+			PHW(PC);
+			PHPB1;
 			SetI;
 			PC = dGetWord(0xfffe);
 #ifdef MONITOR_BREAK
@@ -1052,7 +1068,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_08:				/* PHP */
-		PHP;
+		PHPB1;
 		goto next;
 
 	  opcode_09:				/* ORA #ab */
@@ -2852,7 +2868,7 @@ void CPU_Reset(void)
 
 	IRQ = 0;
 
-	regP = 0x20;				/* The unused bit is always 1 */
+	regP = 0x30;				/* The unused bit is always 1 */
 	regS = 0xff;
 	regPC = (GetByte(0xfffd) << 8) | GetByte(0xfffc);
 }

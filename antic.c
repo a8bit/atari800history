@@ -9,7 +9,6 @@
 #include <windows.h>
 #include "winatari.h"
 #else
-#include <unistd.h>				/* for rand() */
 #include "config.h"
 #endif
 
@@ -26,7 +25,6 @@
 
 #define FALSE 0
 #define TRUE 1
-#define DO_DLI if ((IR & 0x80) && (NMIEN & 0x80)) {NMIST |=0x80;NMI();}
 
 UBYTE CHACTL;
 UBYTE CHBASE;
@@ -105,9 +103,6 @@ static int an_nline[16] =
 {1, 1, 8, 10, 8, 16, 8, 16,
  8, 4, 4, 2, 1, 2, 1, 1};
 */
-
-/* DLI on first screenline */
-#define DLI_FIRSTLINE	if (dlisc==0) { allc -= 8; NMIST |= 0x80; NMI(); } unc = GO(allc + unc);
 
 int dmaw;						/* DMA width = 4,5,6 */
 
@@ -211,7 +206,8 @@ int old_new_pm_lookup[16] =
 /* 1100 - Player 2 */ /**2OR3   12 */
 	L_PM0,						/* 1101 - Player 0 */
 	L_PM1,						/* 1110 - Player 1 */
-	L_PM0,						/* 1111 - Player 0 */
+	L_PM0,
+/* 1111 - Player 0 */ /**0OR1   15 */
 };
 
 signed char *new_pm_lookup;
@@ -411,13 +407,13 @@ void init_pm_lookup(){
 		pm=( (i&0x0f)|(i>>4) );
 		t=old_new_pm_lookup[pm];
 		pm_lookup_normal[i]=t;
-		if(pm==3 || pm==7 || pm==11 ) t=L_PM01;
+		if(pm==3 || pm==7 || pm==11 || pm==15) t=L_PM01;
 		if(pm==12) t=L_PM23;
 		pm_lookup_multi[i]=t;
 		pm=(i&0x0f);
 		t=old_new_pm_lookup[pm];
 		pm_lookup_5p[i]=t;
-		if(pm==3 || pm==7 || pm==11 ) t=L_PM01;
+		if(pm==3 || pm==7 || pm==11 || pm==15) t=L_PM01;
 		if(pm==12) t=L_PM23;
 		pm_lookup_multi_5p[i]=t;
 		if(i>15) { /* 5th player adds 6*5 */
@@ -869,9 +865,9 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 		else
 			blank = 0xff;
 		if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
-			chdata = invert & blank;
+			chdata = invert;
 		else
-			chdata = (dGetByte(chaddr) ^ invert) & blank;
+			chdata = (dGetByte(chaddr) & blank) ^ invert;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
 				*ptr++ = (char) lookup1[chdata & 0x80];
@@ -955,9 +951,9 @@ void draw_antic_2_artif(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG 
 	else
 		blank = 0xff;
 	if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
-		chdata = invert & blank;
+		chdata = invert;
 	else
-		chdata = (dGetByte(chaddr) ^ invert) & blank;
+		chdata = (dGetByte(chaddr) & blank) ^ invert;
 	screendata_tally=chdata;
         setup_art_colours();
 	for (i = 0; i < nchars; i++) {
@@ -977,9 +973,9 @@ void draw_antic_2_artif(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG 
 		else
 			blank = 0xff;
 		if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
-			chdata = invert & blank;
+			chdata = invert;
 		else
-			chdata = (dGetByte(chaddr) ^ invert) & blank;
+			chdata = (dGetByte(chaddr) & blank) ^ invert;
 		screendata_tally<<=8;
 		screendata_tally|=chdata;
 		if (!(*t_pm_scanline_ptr)) {
@@ -1047,9 +1043,9 @@ void draw_antic_2_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, U
 		else
 			blank = 0xff;
 		if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
-			chdata = invert & blank;
+			chdata = invert;
 		else
-			chdata = (dGetByte(chaddr) ^ invert) & blank;
+			chdata = (dGetByte(chaddr) & blank) ^ invert;
 		*ptr++ = lookup_gtia[chdata >> 4];
 		*ptr++ = lookup_gtia[chdata & 0x0f];
 		if ((*t_pm_scanline_ptr)) {
@@ -1096,9 +1092,9 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 /* only need to change this line from antic_2 vvvvvvvvv */
 		/*     if((j&0x0e)==0x08 && (screendata&0x60)!=0x60) */
 		if ((((screendata & 0x60) == 0x60) && ((j & 0x0e) == 0x00)) || (((screendata & 0x60) != 0x60) && ((j & 0x0e) == 0x08)))
-			chdata = invert & blank;
+			chdata = invert;
 		else
-			chdata = (dGetByte(chaddr) ^ invert) & blank;
+			chdata = (dGetByte(chaddr) & blank) ^ invert;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
 				*ptr++ = (char) lookup1[chdata & 0x80];
@@ -1760,7 +1756,6 @@ void do_antic()
 		int temp_xmin = x_min[md];
 
 		j &= 0x0f;
-		/* if(j==lastline) DO_DLI */
 
 		POKEY_Scanline();		/* check and generate IRQ */
 
@@ -1776,10 +1771,12 @@ void do_antic()
 		/* ^^^^^cycles for part 2; (realcyc is for parts 1+ 2. then -BEGL for 2 */
 		/* ^^^ first line flag is either -4 or 0. when added to dmaw */
 		/*  is 0-3 or 4-7.  (first and subsequent lines) */
-		if (j == lastline && (IR & 0x80) && (NMIEN & 0x80)) {
-			allc -= 8;
-			NMIST |= 0x80;
-			NMI();
+		if ((IR & 0x80) && j == lastline) {
+			NMIST = 0x9f;
+			if( NMIEN & 0x80 ) {
+				allc -= 8;
+				NMI();
+			}
 		}
 		/* cpu_clock+=58-BEGL-allc; */		/* mmm */
 		unc = GO(allc + unc);
@@ -1918,44 +1915,48 @@ after_scanline:
 
 int pmg_dma(void)
 {
-	int pmd;
-	pmd = 0;
-	if (missile_dma_enabled) {
-		if (singleline) {
-			pmd = 1;
-			if (missile_gra_enabled)
-				GRAFM = dGetByte(maddr_s + ypos);
-		}
-		else {
-			if (!(ypos & 0x01))
-				pmd = 1;
-			if (missile_gra_enabled)
-				GRAFM = dGetByte(maddr_d + (ypos >> 1));
-		}
-	}
-
 	if (player_dma_enabled) {
-		if (singleline) {
-			pmd = 5;			/* 4+1 ...no player DMA without missile DMA */
-			if (player_gra_enabled) {
+		if (player_gra_enabled) {
+			if (singleline) {
 				GRAFP0 = dGetByte(p0addr_s + ypos);
 				GRAFP1 = dGetByte(p1addr_s + ypos);
 				GRAFP2 = dGetByte(p2addr_s + ypos);
 				GRAFP3 = dGetByte(p3addr_s + ypos);
 			}
-		}
-		else {
-			if (!(ypos & 0x01))
-				pmd = 5;		/* 4+1 ...no player DMA without missile DMA */
-			if (player_gra_enabled) {
+			else {
 				GRAFP0 = dGetByte(p0addr_d + (ypos >> 1));
 				GRAFP1 = dGetByte(p1addr_d + (ypos >> 1));
 				GRAFP2 = dGetByte(p2addr_d + (ypos >> 1));
 				GRAFP3 = dGetByte(p3addr_d + (ypos >> 1));
 			}
 		}
+		if (missile_gra_enabled)
+			GRAFM = dGetByte( singleline
+					? maddr_s + ypos
+					: maddr_d + (ypos >> 1)
+			);
+		return 5;
 	}
-	return pmd;
+	if (missile_dma_enabled) {
+		if (missile_gra_enabled)
+			GRAFM = dGetByte( singleline
+					? maddr_s + ypos
+					: maddr_d + (ypos >> 1)
+			);
+		return 1;
+	}
+	return 0;
+}
+
+UBYTE get_DL_byte(void)
+{
+	UBYTE result;
+
+	result=dGetByte(dlist);
+	dlist++;
+	if( (dlist & 0x3FF) == 0 )
+		dlist -= 0x400;
+	return result;
 }
 
 void ANTIC_RunDisplayList(void)
@@ -1965,6 +1966,7 @@ void ANTIC_RunDisplayList(void)
 	int vscrol_flag;
 	int nlines;
 	int i;
+	UBYTE lsb;
 
 	wsync_halt = 0;
 	unc = 0;
@@ -1985,7 +1987,6 @@ void ANTIC_RunDisplayList(void)
 		unc = GO(WSYNC - VCOUNTDELAY + unc);
 		/* GO (114); */
 	}
-	NMIST = 0x00;				/* Reset VBLANK */
 
 	scrn_ptr = (UBYTE *) atari_screen;
 
@@ -2001,7 +2002,7 @@ void ANTIC_RunDisplayList(void)
 
 		antic23f = FALSE;
 
-		IR = dGetByte(dlist); dlist = increment_Antic_counter(dlist, 1);
+		IR = get_DL_byte();
 
 		colpf1 = COLPF1;
 
@@ -2040,7 +2041,8 @@ void ANTIC_RunDisplayList(void)
 			break;
 		case 0x01:
 			vscrol_flag = FALSE;
-			dlist = (dGetByte(increment_Antic_counter(dlist, 1)) << 8) | dGetByte(dlist);
+			lsb = get_DL_byte();
+			dlist = (get_DL_byte() << 8) | lsb;
 			if (IR & 0x40) {
 				nlines = 0;
 				JVB = TRUE;
@@ -2058,7 +2060,8 @@ void ANTIC_RunDisplayList(void)
 			break;
 		default:
 			if (IR & 0x40) {
-				screenaddr = (dGetByte(increment_Antic_counter(dlist, 1)) << 8) | dGetByte(dlist); dlist = increment_Antic_counter(dlist, 2);
+				lsb = get_DL_byte();
+				screenaddr = (get_DL_byte() << 8) | lsb;
 
 				dldmac = 3;
 			}
@@ -2215,7 +2218,7 @@ void ANTIC_RunDisplayList(void)
 		do_antic();
 	}
 	nlines = 0;
-	NMIST = 0x40;				/* Set VBLANK */
+	NMIST = 0x5f;				/* Set VBLANK */
 	if (NMIEN & 0x40) {
 		GO(1);					/* Needed for programs that monitor NMIST (Spy's Demise) */
 		NMI();
@@ -2236,56 +2239,16 @@ void ANTIC_RunDisplayList(void)
 
 UBYTE ANTIC_GetByte(UWORD addr)
 {
-	UBYTE byte = 0xff;
-
-	addr &= 0x0f;
-	switch (addr) {
-		/*case _CHBASE:
-		   byte = CHBASE;
-		   break;
-		   case _CHACTL:
-		   byte = CHACTL;
-		   break;
-		   neither of these reabable either
-		 */
-		/*case _DLISTL:
-		   byte = (dlist&0xff);
-		   break;
-		   case _DLISTH:
-		   byte = (dlist>>8);
-		   break;
-		   neither of these are readable
-		 */
-		/*case _DMACTL:
-		   byte = DMACTL;
-		   break;
-		   DMACTL is not readable */
-	case _PENH:
-	case _PENV:
-		byte = 0x00;
-		break;
+	switch (addr&0xf) {
 	case _VCOUNT:
-		byte = ypos >> 1;
-		break;
-/*
-   I have been told NMIEN was not readable on real Atari800
-   case _NMIEN:
-   byte = NMIEN;
-   break;
- */
+		return ypos >> 1;
+	case _PENH:
+		return 0x00;
 	case _NMIST:
-		byte = NMIST;
-		break;
-/*  case _WSYNC:  */
-/*       wsync_halt++; */
-		/*      byte = 0xff; */ /* tested on real Atari !RS! */
-/*      break;
-   I eliminate this case as well since it is now redundant as 0xff is the
-   default return value for unreadable registers !PM!
- */
+		return NMIST;
+	default:
+		return 0xff;
 	}
-
-	return byte;
 }
 
 int ANTIC_PutByte(UWORD addr, UBYTE byte)
@@ -2580,7 +2543,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 		NMIEN = byte;
 		break;
 	case _NMIRES:
-		NMIST = 0x00;
+		NMIST = 0x1f;
 		break;
 	case _PMBASE:
 		{

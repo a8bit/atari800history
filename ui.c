@@ -22,8 +22,9 @@
 #include "log.h"
 #include "statesav.h"
 
-#define FALSE 0
-#define TRUE 1
+#ifdef USE_NEW_BINLOAD
+#include "binload.h"
+#endif
 
 #define FILENAME_SIZE	32
 
@@ -40,9 +41,7 @@
 
 int ui_is_active = FALSE;
 
-#ifdef USE_NEW_BINLOAD
-int BIN_loader( char *filename );
-#else
+#ifndef USE_NEW_BINLOAD
 int ReadAtariExe( char *filename );
 #endif
 
@@ -61,6 +60,10 @@ extern void SafeShowScreen(void);
 extern HWND MainhWnd;
 unsigned long hThread = 0L;
 #endif	/* WIN32 */
+
+#ifdef STEREO
+extern int stereo_enabled;
+#endif
 
 unsigned char key_to_ascii[256] =
 {
@@ -153,6 +156,7 @@ int GetKeyPress(UBYTE * screen)
 
 void Plot(UBYTE * screen, int fg, int bg, int ch, int x, int y)
 {
+#ifndef CURSES
 	int offset = ascii_to_screen[(ch & 0x07f)] * 8;
 	int i;
 	int j;
@@ -179,6 +183,28 @@ void Plot(UBYTE * screen, int fg, int bg, int ch, int x, int y)
 			data = data << 1;
 		}
 	}
+#else
+	UWORD screenaddr;
+      	screenaddr = (memory[89] << 8) | memory[88];
+
+        /* handle line drawiong chars */
+        switch (ch) {
+        case 18:  ch='-'; break;
+        case 17:
+        case 3:   ch='/'; break;
+        case 26:
+        case 5:   ch='\\'; break;
+        case 124: ch='|';
+        no32:
+          memory[screenaddr + y * 40 + x] = (ch ) + (fg == 0x94 ? 0x80 : 0);
+          return;
+          break;
+        }
+
+        if (ch >= 'a' && ch <='z') goto no32;
+
+        memory[screenaddr + y * 40 + x] = (ch - 32) + (fg == 0x94 ? 0x80 : 0);
+#endif
 }
 
 void Print(UBYTE * screen, int fg, int bg, char *string, int x, int y)
@@ -1185,6 +1211,7 @@ void ui(UBYTE *screen)
 		"Select System",
 		"Disk Management",
 		"Cartridge Management",
+		"Sound Mono/Stereo",
 		"Run single BIN file directly",
 		"Save State",
 		"Load State",
@@ -1194,6 +1221,10 @@ void ui(UBYTE *screen)
 		"Exit Emulator"
 	};
 	const int nitems = sizeof(menu) / sizeof(menu[0]);
+#ifdef CURSES
+        char *screenbackup = malloc(40*24);
+        if (screenbackup) memcpy(screenbackup,&memory[(memory[89] << 8) | memory[88]],40*24);  /* backup of textmode screen */
+#endif
 
 	ui_is_active = TRUE;
 #ifdef WIN32
@@ -1232,27 +1263,43 @@ void ui(UBYTE *screen)
 			CartManagement(screen);
 			break;
 		case 4:
+			{
+				char *msg;
+#ifdef STEREO
+				stereo_enabled = !stereo_enabled;
+				if (stereo_enabled)
+					msg = "Stereo sound output";
+				else
+					msg = " Mono sound output ";
+#else
+				msg = "Stereo sound was not compiled in";
+#endif
+				CenterPrint(screen, 0x94, 0x9a, msg, 22);
+				GetKeyPress(screen);
+			}
+			break;
+		case 5:
 			if (RunExe(screen))
 				done = TRUE;	/* reboot immediately */
 			break;
-		case 5:
+		case 6:
 			SaveState(screen);
 			break;
-		case 6:
+		case 7:
 			LoadState(screen);
 			break;
-		case 7:
+		case 8:
 			done = TRUE;	/* back to emulator */
 			break;
-		case 8:
+		case 9:
 			Warmstart();
 			done = TRUE;	/* reboot immediately */
 			break;
-		case 9:
+		case 10:
 			Coldstart();
 			done = TRUE;	/* reboot immediately */
 			break;
-		case 10:
+		case 11:
 #ifdef WIN32
 			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
 			hThread = 0L;
@@ -1264,6 +1311,12 @@ void ui(UBYTE *screen)
 #endif
 		}
 	}
+#ifdef CURSES
+        if (screenbackup) {
+          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
+          free(screenbackup);
+        }
+#endif
 	/* Sound_Active(TRUE); */
 	ui_is_active = FALSE;
 	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */

@@ -8,6 +8,7 @@
 #include "config.h"
 #include "cpu.h"
 #include "monitor.h"
+#include "memory.h"
 
 #define CURSES_LEFT 0
 #define CURSES_CENTRAL 1
@@ -149,7 +150,7 @@ int Atari_Keyboard(void)
 	/* for debugging */
 	if (keycode > 0) {
 		Atari800_Exit(FALSE);
-		printf("%o\n", keycode);
+		printf("%o (%x, %d)\n", keycode,keycode,keycode);
 		exit(1);
 	}
 #endif
@@ -521,7 +522,7 @@ int Atari_Keyboard(void)
 		keycode = AKEY_ESCAPE;
 		break;
 	case KEY_F0 + 1:
-		keycode = AKEY_WARMSTART;
+                keycode = AKEY_UI;
 		break;
 	case KEY_F0 + 2:
 		consol &= 0x03;
@@ -545,7 +546,7 @@ int Atari_Keyboard(void)
 		keycode = AKEY_BREAK;
 		break;
 	case KEY_F0 + 8:
-		keycode = AKEY_NONE;
+		keycode = AKEY_WARMSTART;
 		break;
 	case KEY_F0 + 9:
 		keycode = AKEY_EXIT;

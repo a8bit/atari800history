@@ -212,6 +212,11 @@ static uint32 Base_mult[MAXPOKEYS];		/* selects either 64Khz or 15Khz clock mult
 extern int atari_speaker;
 
 static uint16 last_val = 0;		/* last output value */
+#ifdef STEREO
+static uint16 last_val2 = 0;		/* last output value */
+extern int pokey_select;
+extern int stereo_enabled;
+#endif
 
 /* Volume only emulations declarations */
 #ifndef	NO_VOL_ONLY
@@ -227,6 +232,15 @@ int	sampbuf_lastval = 0;		/* last volume */
 int	sampout;			/* last out volume */
 uint16	samp_freq;
 int	samp_consol_val=0;		/* actual value of console sound */
+#ifdef STEREO
+int	sampbuf_val2[SAMPBUF_MAX];	/* volume values */
+int	sampbuf_cnt2[SAMPBUF_MAX];	/* relative start time */
+int	sampbuf_ptr2 = 0;		/* pointer to sampbuf */
+int	sampbuf_rptr2 = 0;		/* pointer to read from sampbuf */
+int	sampbuf_last2 = 0;		/* last absolute time */
+int	sampbuf_lastval2 = 0;		/* last volume */
+int	sampout2;			/* last out volume */
+#endif
 #endif	/* NO_VOL_ONLY */
 
 /*****************************************************************************/
@@ -353,6 +367,9 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 	/*    _disable(); */ /* RSF - removed for portability 31-MAR-97 */
 
 	/* calculate the chip_offs for the channel arrays */
+#ifdef STEREO
+	chip=pokey_select;
+#endif
 	chip_offs = chip << 2;
 
 	/* determine which address was changed */
@@ -520,6 +537,29 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 #ifndef	NO_VOL_ONLY
 			if( (AUDC[chan + chip_offs] & VOL_ONLY) )
 			{
+#ifdef STEREO
+				if( chip&0x01 )
+				{
+				sampbuf_lastval2+=AUDV[chan + chip_offs]-7*gain
+					-sampbuf_AUDV[chan + chip_offs];
+
+				sampbuf_val2[sampbuf_ptr2]=sampbuf_lastval2;
+				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs]-7*gain;
+				sampbuf_cnt2[sampbuf_ptr2]=
+					(cpu_clock-sampbuf_last2)*128*samp_freq/178979;
+				sampbuf_last2=cpu_clock;
+				sampbuf_ptr2++;
+				if( sampbuf_ptr2>=SAMPBUF_MAX )
+					sampbuf_ptr2=0;
+				if( sampbuf_ptr2==sampbuf_rptr2 )
+				{	sampbuf_rptr2++;
+					if( sampbuf_rptr2>=SAMPBUF_MAX )
+						sampbuf_rptr2=0;
+				}
+				}
+				else
+				{
+#endif
 				sampbuf_lastval+=AUDV[chan + chip_offs]-7*gain
 					-sampbuf_AUDV[chan + chip_offs];
 
@@ -536,6 +576,9 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 					if( sampbuf_rptr>=SAMPBUF_MAX )
 						sampbuf_rptr=0;
 				}
+#ifdef STEREO
+				}
+#endif
 			}
 #endif	/* NO_VOL_ONLY */
 			/* I've disabled any frequencies that exceed the sampling
@@ -595,8 +638,14 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 	register uint8 next_event;
 #ifdef CLIP						/* if clipping is selected */
 	register int16 cur_val;		/* then we have to count as 16-bit signed */
+#ifdef STEREO
+	register int16 cur_val2;
+#endif
 #else
 	register uint8 cur_val;		/* otherwise we'll simplify as 8-bit unsigned */
+#ifdef STEREO
+	register int8 cur_val2;
+#endif
 #endif
 	register uint8 *out_ptr;
 	register uint8 audc;
@@ -619,6 +668,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 	/* output change for increased performance (less over-all math). */
 	/* add the output values of all 4 channels */
 	cur_val = SAMP_MID;
+#ifdef STEREO
+	cur_val2 = SAMP_MID;
+#endif
 
 	count = Num_pokeys;
 	do {
@@ -641,12 +693,36 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		if (*out_ptr++)
 			cur_val += *vol_ptr;
 		vol_ptr++;
+#ifdef STEREO
+		count--;
+		if( count )
+		{	cur_val2 -= *vol_ptr / 2;
+			if (*out_ptr++)
+				cur_val2 += *vol_ptr;
+			vol_ptr++;
 
+			cur_val2 -= *vol_ptr / 2;
+			if (*out_ptr++)
+				cur_val2 += *vol_ptr;
+			vol_ptr++;
+
+			cur_val2 -= *vol_ptr / 2;
+			if (*out_ptr++)
+				cur_val2 += *vol_ptr;
+			vol_ptr++;
+
+			cur_val2 -= *vol_ptr / 2;
+			if (*out_ptr++)
+				cur_val2 += *vol_ptr;
+			vol_ptr++;
+		}
+		else	break;
+#endif
 		count--;
 	} while (count);
-#if defined (USE_DOSSOUND) || (WIN32)
-	cur_val += 32 * atari_speaker;
-#endif
+//#if defined (USE_DOSSOUND) || (WIN32)
+//	cur_val += 32 * atari_speaker;
+//#endif
 
 	/* loop until the buffer is filled */
 	while (n) {
@@ -778,8 +854,12 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 					if (Outvol[next_event & 0xfd]) {
 						/* if on, turn it off */
 						Outvol[next_event & 0xfd] = 0;
-
-						cur_val -= AUDV[next_event & 0xfd];
+#ifdef STEREO
+						if( (next_event & 0x04) )
+							cur_val2 -= AUDV[next_event & 0xfd];
+						else
+#endif
+							cur_val -= AUDV[next_event & 0xfd];
 					}
 				}
 			}
@@ -792,8 +872,12 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 					if (Outvol[next_event & 0xfd]) {
 						/* if on, turn it off */
 						Outvol[next_event & 0xfd] = 0;
-
-						cur_val -= AUDV[next_event & 0xfd];
+#ifdef STEREO
+						if( (next_event & 0x04) )
+							cur_val2 -= AUDV[next_event & 0xfd];
+						else
+#endif
+							cur_val -= AUDV[next_event & 0xfd];
 					}
 				}
 			}
@@ -802,7 +886,12 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			if (toggle) {
 				if (*out_ptr) {
 					/* remove this channel from the signal */
-					cur_val -= AUDV[next_event];
+#ifdef STEREO
+					if( (next_event & 0x04) )
+						cur_val2 -= AUDV[next_event];
+					else
+#endif
+						cur_val -= AUDV[next_event];
 
 					/* and turn the output off */
 					*out_ptr = 0;
@@ -812,7 +901,12 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 					*out_ptr = 1;
 
 					/* and add it to the output signal */
-					cur_val += AUDV[next_event];
+#ifdef STEREO
+					if( (next_event & 0x04) )
+						cur_val2 += AUDV[next_event];
+					else
+#endif
+						cur_val += AUDV[next_event];
 				}
 			}
 		}
@@ -821,6 +915,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			   which includes an 8 bit fraction for accuracy */
 
 			int iout;
+#ifdef STEREO
+			int iout2;
+#endif
 #ifndef NOSNDINTER
 			if (cur_val != last_val) {
 				if (*Samp_n_cnt < Samp_n_max) {		/* need interpolation */
@@ -834,9 +931,26 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			}
 			else
 				iout = cur_val;
-#else
+#ifdef STEREO
+			if (cur_val2 != last_val2) {
+				if (*Samp_n_cnt < Samp_n_max) {		/* need interpolation */
+					iout2 = (cur_val2 * (*Samp_n_cnt) +
+							last_val2 * (Samp_n_max - *Samp_n_cnt))
+						/ Samp_n_max;
+				}
+				else
+					iout2 = cur_val2;
+				last_val2 = cur_val2;
+			}
+			else
+				iout2 = cur_val2;
+#endif  /* STEREO */
+#else	/* NOSNDINTER */
 			iout = cur_val;
-#endif
+#ifdef STEREO
+			iout2 = cur_val2;
+#endif	/* STEREO */
+#endif	/* NOSNDINTER */
 
 #ifndef	NO_VOL_ONLY
 			if( sampbuf_rptr!=sampbuf_ptr )
@@ -856,6 +970,25 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 				}
 			}
 			iout+=sampout;
+#ifdef STEREO
+			if( sampbuf_rptr2!=sampbuf_ptr2 )
+			{ int l;
+				if( sampbuf_cnt2[sampbuf_rptr2]>0 )
+					sampbuf_cnt2[sampbuf_rptr2]-=1280;
+				while(  (l=sampbuf_cnt2[sampbuf_rptr2])<=0 )
+				{	sampout2=sampbuf_val2[sampbuf_rptr2];
+					sampbuf_rptr2++;
+					if( sampbuf_rptr2>=SAMPBUF_MAX )
+						sampbuf_rptr2=0;
+					if( sampbuf_rptr2!=sampbuf_ptr2 )
+					{   
+					    sampbuf_cnt2[sampbuf_rptr2]+=l;
+					}
+					else	break;
+				}
+			}
+			iout2+=sampout2;
+#endif	/* STEREO */
 #endif	/* NO_VOL_ONLY */
 
 #ifdef CLIP						/* if clipping is selected */
@@ -868,9 +1001,23 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			else {				/* otherwise use raw value */
 				*buffer++ = (uint8) iout;
 			}
-#else
+#ifdef STEREO
+			if (stereo_enabled ? iout2 : iout > SAMP_MAX) {	/* then check high limit */
+				*buffer++ = (uint8) SAMP_MAX;	/* and limit if greater */
+			}
+			else if (stereo_enabled ? iout2 : iout < SAMP_MIN) {		/* else check low limit */
+				*buffer++ = (uint8) SAMP_MIN;	/* and limit if less */
+			}
+			else {				/* otherwise use raw value */
+				*buffer++ = (uint8) stereo_enabled ? iout2 : iout;
+			}
+#endif /* STEREO */
+#else /* CLIP */
 			*buffer++ = (uint8) iout;	/* clipping not selected, use value */
-#endif
+#ifdef STEREO
+			*buffer++ = (uint8) stereo_enabled ? iout2 : iout;
+#endif /* STEREO */
+#endif /* CLIP */
 
 #ifdef POKEYSND_BIG_ENDIAN
 			*(Samp_n_cnt + 1) += Samp_n_max;
@@ -879,11 +1026,18 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 #endif
 			/* and indicate one less byte in the buffer */
 			n--;
+#ifdef STEREO
+			n--;
+#endif
 		}
 	}
 #ifndef	NO_VOL_ONLY
 	if( sampbuf_rptr==sampbuf_ptr )
 		sampbuf_last=cpu_clock;
+#ifdef STEREO
+	if( sampbuf_rptr2==sampbuf_ptr2 )
+		sampbuf_last2=cpu_clock;
+#endif
 #endif	/* NO_VOL_ONLY */
 }
 

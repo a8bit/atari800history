@@ -9,10 +9,20 @@
 #include "prompts.h"
 #include "rt-config.h"
 
-#ifdef VGA
-  /*This procedure processes lines not recognized by RtConfigLoad.
-    Currently only DOS port support it.*/
-  extern int Atari_Configure(char* option,char *parameters);
+#if defined(VGA) || defined(SUPPORTS_ATARI_CONFIGURE)
+	/* This procedure processes lines not recognized by RtConfigLoad. */
+	extern int Atari_Configure(char* option,char *parameters);
+#endif
+
+#ifdef SUPPORTS_ATARI_CONFIGSAVE
+	/* This function saves additional config lines */
+	extern void Atari_ConfigSave( FILE *fp);
+#endif
+
+#ifdef SUPPORTS_ATARI_CONFIGINIT
+	/* This function set the configuration parameters to
+     default values */
+	extern void Atari_ConfigInit(void);
 #endif
 
 char atari_osa_filename[MAX_FILENAME_LEN];
@@ -40,7 +50,14 @@ int disk_directories;
 
 extern int Ram256;
 
+/* If another default path config path is defined use it
+   otherwise use the default one */
+#ifdef DEFAULT_CFG_PATH
+static char *rtconfig_filename1 = DEFAULT_CFG_PATH;
+#else
 static char *rtconfig_filename1 = "atari800.cfg";
+#endif
+
 static char *rtconfig_filename2 = "/etc/atari800.cfg";
 
 int RtConfigLoad(char *rtconfig_filename)
@@ -70,6 +87,11 @@ int RtConfigLoad(char *rtconfig_filename)
 	atari_h4_dir[0] = '\0';
 	atari_exe_dir[0] = '\0';
 	atari_state_dir[0] = '\0';
+
+#ifdef SUPPORTS_ATARI_CONFIGINIT
+  Atari_ConfigInit();
+#endif
+
 	strcpy(print_command, "lpr %s");
 	refresh_rate = 1;
 	default_system = 3;
@@ -183,7 +205,7 @@ int RtConfigLoad(char *rtconfig_filename)
 						printf("Invalid TV Mode: %s\n", ptr);
 				}
 				else
-#ifdef VGA
+#if defined(VGA) || defined(SUPPORTS_ATARI_CONFIGURE)
                                 if (!Atari_Configure(string,ptr))
 					printf("Unrecognized variable or bad parameters: %s=%s\n", string,ptr);
 #else
@@ -271,9 +293,15 @@ void RtConfigSave(void)
 	fprintf(fp, "ENABLE_ROM_PATCH=%d\n", enable_rom_patches);
 	fprintf(fp, "ENABLE_SIO_PATCH=%d\n", enable_rom_patches ? enable_sio_patch : 0);
 
+#ifdef SUPPORTS_ATARI_CONFIGSAVE
+	Atari_ConfigSave(fp);
+#endif
+
 	fclose(fp);
 #endif /* Win32 */
 }
+
+#ifndef DONT_USE_RTCONFIGUPDATE
 
 void RtConfigUpdate(void)
 {
@@ -357,3 +385,5 @@ void RtConfigUpdate(void)
 #endif
 #endif /* Win32 */
 }
+
+#endif /* DONT_USE_RTCONFIGUPDATE */

@@ -61,7 +61,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define TRUE	1
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9f"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9g"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -135,7 +135,8 @@ struct ATR_Header {
 	unsigned char secsizehi;
 	unsigned char hiseccountlo;
 	unsigned char hiseccounthi;
-	unsigned char gash[8];
+	unsigned char gash[7];
+	unsigned char writeprotect;
 };
 
 /*

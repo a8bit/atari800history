@@ -15,8 +15,35 @@ static UBYTE orig_regS;
 int start_binloading=0;
 
 static UBYTE addrL_init;
+static UBYTE my2,my3,my9,my10,my11,my12,my13,orig_dos_l,orig_dos_h;
 
 extern int tron;
+
+void set_vect( UBYTE dos_l, UBYTE dos_h )
+{
+	if( my2==dGetByte(2) && my3==dGetByte(3) )
+	{	my2=dGetByte(736);
+		my3=dGetByte(737);
+		dPutByte(2,my2);
+		dPutByte(3,my3);
+	}
+	if( my12==dGetByte(12) && my13==dGetByte(13) )
+	{	my12=dGetByte(736);
+		my13=dGetByte(737);
+		dPutByte(12,my12);
+		dPutByte(13,my13);
+	}
+	if( my10==dGetByte(10) && my11==dGetByte(11) )
+	{	my10=dos_l;
+		my11=dos_h;
+		dPutByte(10,my10);
+		dPutByte(11,my11);
+	}
+	if( my9==dGetByte(9) )
+	{	my9=1;
+		dPutByte(9,my9);
+	}
+}
 
 static void BIN_load( void )
 { UBYTE buf[65536];
@@ -27,11 +54,12 @@ static void BIN_load( void )
 	{	close(bin_fd); bin_fd=-1;
 		regS=orig_regS;
 		if( i==0 || i==2 )	/* Ok all loaded */
-		{	regPC=(dGetByte(736)|dGetByte(737)<<8);
+		{	set_vect( orig_dos_l, orig_dos_h );
+			regPC=(dGetByte(736)|dGetByte(737)<<8);
 		}
 		else
 		{	/* error */
-printf("Boot Error\n");
+			Aprint("Boot Error\n");
 		}
 		return;
 	}
@@ -39,7 +67,9 @@ printf("Boot Error\n");
 	{	buf[0]=buf[2];
 		buf[1]=buf[3];
 		if( (i=read(bin_fd,buf+2,2))!=2 )
-		{	printf("Boot Error\n");
+		{	close(bin_fd); bin_fd=-1;
+			regS=orig_regS;
+			Aprint("Boot Error\n");
 			return;
 		}
 	}
@@ -73,6 +103,7 @@ printf("Boot Error\n");
 	low=regS;
 	dPutByte((0x0100 + regS--), 0x01 );	/* high */
 	dPutByte((0x0100 + regS--), low );	/* low */
+	set_vect( low+1, 0x01 );
 	regPC=(dGetByte(738)|dGetByte(739)<<8);
 	return;
 }
@@ -124,6 +155,16 @@ void BIN_loader_cont( void )
 		dPutByte( 739 , 0x01 );		/* init high */
 		dPutByte( 736 , addrL_init );	/* only for default start */
 		dPutByte( 737 , 0x01 );	
+
+		my2= dGetByte( 2 );
+		my3= dGetByte( 3 );
+		my9= dGetByte( 9 );
+		orig_dos_l=my10= dGetByte( 10 );
+		orig_dos_h=my11= dGetByte( 11 );
+		my12= dGetByte( 12 );
+		my13= dGetByte( 13 );
+		dPutByte(580,0);
+
 		BIN_load();
 		start_binloading=0;
 	}

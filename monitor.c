@@ -1,8 +1,9 @@
 #include <stdio.h>
+#include <string.h>
 #include <ctype.h>
-#ifndef WIN32
 #include <unistd.h>
-#else
+
+#ifdef WIN32
 #include "windows.h"
 #endif
 
@@ -21,9 +22,6 @@
 #include "pia.h"
 #include "gtia.h"
 #include "prompts.h"
-
-#define FALSE   0
-#define TRUE    1
 
 #ifdef PROFILE
 extern int instruction_count[256];
@@ -176,8 +174,8 @@ UWORD assembler(UWORD addr);
     {"TIMER1"  ,0x030C}, {"TIMER1+1",0x030D}, {"ADDCOR"  ,0x030E}, {"CASFLG"  ,0x030F},
     {"TIMER2"  ,0x0310}, {"TIMER2+1",0x0311}, {"TEMP1"   ,0x0312}, {"TEMP1+1", 0x0313},
     {"TEMP2"   ,0x0314}, {"TEMP3"   ,0x0315}, {"SAVIO"   ,0x0316}, {"TIMFLG",  0x0317},
-    {"STACKP",  0x0318}, {"TSTAT"   ,0x3019},
-    {"HATABS",  0x301a},  /*HATABS 1-34*/
+    {"STACKP",  0x0318}, {"TSTAT"   ,0x0319},
+    {"HATABS",  0x031a},  /*HATABS 1-34*/
     {"PUTBT1",  0x033d}, {"PUTBT2",  0x033e}, {"PUTBT3",  0x033f},
     {"B0-ICHID",0x0340}, {"B0-ICDNO",0x0341}, {"B0-ICCOM",0x0342}, {"B0-ICSTA",0x0343},
     {"B0-ICBAL",0x0344}, {"B0-ICBAH",0x0345}, {"B0-ICPTL",0x0346}, {"B0-ICPTH",0x0347},
@@ -353,9 +351,11 @@ int get_hex(char *string, UWORD * hexval)
 UWORD break_addr;
 UBYTE break_step=0;
 UBYTE break_cim=0;
+UBYTE break_here=0;
 UBYTE show_inst=0;
 UBYTE break_ret=0;
 int ret_nesting=0;
+int brkhere=0;
 
 int monitor(void)
 {
@@ -372,6 +372,10 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
         if (show_inst && !break_step)
         {  /*break was caused by "O" command */
           break_addr=0;
+        }
+        if (break_here) {
+                printf("(Break due to BRK opcode)\n");
+                show_inst=1;
         }
 	if (show_inst)  /*this part will disassemble actual instruction & show some hints */
 	{
@@ -476,8 +480,9 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				   regP);
 	} else /*if show_inst was not set */
 	    if (break_addr==regPC) printf("(breakpoint at %X)\n",(int)break_addr);
-	      else if (break_cim) printf("(CIM encountered)\n");
+	    else if (break_cim) printf("(CIM encountered)\n");
 	break_cim=0;
+        break_here=0;
 	break_step=0;
 	break_ret=0;
 #endif	
@@ -522,6 +527,24 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			return 1;
 		}
 #ifdef MONITOR_BREAK
+		else if (strcmp(t, "BRKHERE") == 0) {
+			char *brkarg;
+			brkarg = get_token(NULL);
+			if (brkarg) {
+                                if (strcmp(brkarg, "on") == 0) {
+                                        brkhere = 1;
+                                }
+                                else if (strcmp(brkarg, "off") == 0) {
+                                        brkhere = 0;
+                                }
+                                else {
+                                        printf("invalid argument: usage BRKHERE on|off\n");
+                                }
+                        }
+                        else {
+                                printf("BRKHERE is %s\n",brkhere ? "on" : "off");
+                        }
+		}
 		else if (strcmp(t, "BREAK") == 0) {
 			get_hex(NULL, &break_addr);
 		}
@@ -589,8 +612,10 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				nlines++;
 
 				if (nlines == 15) {
+					char buf[100];
 					printf("Press return to continue: ");
-					getchar();
+					fgets(buf, sizeof(buf), stdin);
+					done = buf[0]=='q'||buf[0]=='Q';
 					nlines = 0;
 				}
 			}
@@ -629,13 +654,6 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				SetV;
 			else
 				ClrV;
-		}
-		else if (strcmp(t, "SETB") == 0) {
-			get_hex(NULL, &addr);
-			if (addr)
-				SetB;
-			else
-				ClrB;
 		}
 		else if (strcmp(t, "SETD") == 0) {
 			get_hex(NULL, &addr);
@@ -702,13 +720,29 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 		}
 #endif
 		else if (strcmp(t, "SHOW") == 0) {
-			printf("PC=%04x, A=%02x, S=%02x, X=%02x, Y=%02x, P=%02x\n",
-				   regPC,
-				   regA,
-				   regS,
-				   regX,
-				   regY,
-				   regP);
+			int i;
+			printf("PC=%04x, A=%02x, S=%02x, X=%02x, Y=%02x, P=",
+				regPC,regA,regS,regX,regY);
+			for(i=0;i<8;i++)
+				putchar(regP&(0x80>>i)?"NV*BDIZC"[i]:'-');
+			putchar('\n');
+		}
+		else if (strcmp(t, "STACK") == 0) {
+			UWORD ts,ta;
+			for( ts = 0x101+regS; ts<0x200; ) {
+				if( ts<0x1ff ) {
+					ta = dGetByte(ts) | ( dGetByte(ts+1) << 8 );
+					if( dGetByte(ta-2)==0x20 ) {
+						printf("%04X : %02X %02X\t%04X : JSR %04X\n",
+						ts, dGetByte(ts), dGetByte(ts+1), ta-2,
+						dGetByte(ta-1) | ( dGetByte(ta) << 8 ) );
+						ts+=2;
+						continue;
+					}
+				}
+				printf("%04X : %02X\n", ts, dGetByte(ts) );
+				ts++;
+			}
 		}
 #ifndef PAGED_MEM
 		else if (strcmp(t, "ROM") == 0) {
@@ -861,13 +895,10 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				for (i = 0; i < 16; i++)
 					printf("%02X ", dGetByte((UWORD) (addr + i)));
 				printf("\t");
-				for (i = 0; i < 16; i++) {
-					if (isalnum(dGetByte((UWORD) (addr + i)))) {
-						printf("%c", dGetByte((UWORD) (addr + i)));
-					}
-					else {
-						printf(".");
-					}
+				for(i=0;i<16;i++) {
+					char c;
+					c=dGetByte((UWORD)(addr+i));
+					putchar(c>=' '&&c<='z'&&c!='\x60'?c:'.');
 				}
 				printf("\n");
 				addr += 16;
@@ -974,10 +1005,9 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			printf("DMACTL=%02x    CHACTL=%02x    DLISTL=%02x    "
 				   "DLISTH=%02x    HSCROL=%02x    VSCROL=%02x\n",
 				   DMACTL, CHACTL, (UBYTE)(dlist&0xff), (UBYTE)(dlist>>8), HSCROL, VSCROL);
-			printf("PMBASE=%02x    CHBASE=%02x    WSYNC= xx    "
-				   "VCOUNT=%02x    ypos=%3d\n",
-				   PMBASE, CHBASE, (ypos + 8) >> 1, ypos);
-			printf("NMIEN= %02x    NMIRES=xx\n", NMIEN);
+			printf("PMBASE=%02x    CHBASE=%02x    VCOUNT=%02x    "
+				"NMIEN= %02x    ypos= %3d\n",
+				PMBASE, CHBASE, ypos >> 1, NMIEN, ypos);
 		}
 		else if (strcmp(t, "PIA") == 0) {
 			printf("PACTL=%02x      PBCTL=%02x     PORTA=%02x     "
@@ -1010,48 +1040,51 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
                 }
 #endif		
 		else if (strcmp(t, "HELP") == 0 || strcmp(t, "?") == 0) {
-			printf("SET{PC,A,S,X,Y} hexval    - Set Register Value\n");
-			printf("SET{N,V,B,D,I,Z,C} hexval - Set Flag Value\n");
-			printf("C [startaddr] [hexval...] - Change memory\n");
-			printf("D [startaddr]             - Disassemble memory\n");
+			printf("CONT                           - Continue emulation\n");
+			printf("SHOW                           - Show registers\n");
+			printf("STACK                          - Show stack\n");
+			printf("SET{PC,A,S,X,Y} hexval         - Set register value\n");
+			printf("SET{N,V,D,I,Z,C} hexval        - Set flag value\n");
+			printf("C [startaddr] [hexval...]      - Change memory\n");
+			printf("D [startaddr]                  - Disassemble memory\n");
 			printf("F [startaddr] [endaddr] hexval - Fill memory\n");
-			printf("M [startaddr]             - Memory list\n");
+			printf("M [startaddr]                  - Memory list\n");
 			printf("S [startaddr] [endaddr] hexval - Search memory\n");
-			printf("ROM addr1 addr2           - Convert Memory Block into ROM\n");
-			printf("RAM addr1 addr2           - Convert Memory Block into RAM\n");
-			printf("HARDWARE addr1 addr2      - Convert Memory Block into HARDWARE\n");
-			printf("CONT                      - Continue\n");
-			printf("SHOW                      - Show Registers\n");
-			printf("READ filename addr nbytes - Read file into memory\n");
-			printf("WRITE start end [file]    - Write specified area of memory to a file (memdump.dat)\n");
-			printf("SUM [startaddr] [endaddr] - SUM of specified memory range\n");
+			printf("ROM startaddr endaddr          - Convert memory block into ROM\n");
+			printf("RAM startaddr endaddr          - Convert memory block into RAM\n");
+			printf("HARDWARE startaddr endaddr     - Convert memory block into HARDWARE\n");
+			printf("READ filename addr nbytes      - Read file into memory\n");
+			printf("WRITE startaddr endaddr [file] - Write memory block to a file (memdump.dat)\n");
+			printf("SUM [startaddr] [endaddr]      - SUM of specified memory range\n");
 #ifdef TRACE
-			printf("TRON                      - Trace On\n");
-			printf("TROFF                     - Trace Off\n");
+			printf("TRON                           - Trace on\n");
+			printf("TROFF                          - Trace off\n");
 #endif
 #ifdef MONITOR_BREAK
-			printf("BREAK [addr]              - Set breakpoint at address\n");
-			printf("HISTORY                   - List last %i PC addresses\n",(int)REMEMBER_PC_STEPS);
+			printf("BREAK [addr]                   - Set breakpoint at address\n");
+ 			printf("BRKHERE on|off                 - Set BRK opcode behaviour\n");
+			printf("HISTORY                        - List last %i PC addresses\n",(int)REMEMBER_PC_STEPS);
 
                         printf("Press return to continue: ");
                         getchar();
 
-			printf("JUMPS			  - List last %i locations of JMP/JSR\n",(int)REMEMBER_JMP_STEPS);
-			printf("G			  - execute 1 instruction\n");
-			printf("O			  - step over the instruction\n");
-			printf("R			  - execute until return\n");
+			printf("JUMPS                          - List last %i locations of JMP/JSR\n",(int)REMEMBER_JMP_STEPS);
+			printf("G                              - Execute 1 instruction\n");
+			printf("O                              - Step over the instruction\n");
+			printf("R                              - Execute until return\n");
 #endif			
 #ifdef MONITOR_ASSEMBLER
-                        printf("A [startaddr]             - start simple assembler\n");
+                        printf("A [startaddr]                  - Start simple assembler\n");
 #endif
-			printf("ANTIC                     - Display ANTIC registers\n");
-			printf("GTIA                      - Display GTIA registers\n");
-			printf("DLIST                     - Display current display list\n");
-			printf("PROFILE                   - Display profiling statistics\n");
-			printf("COLDSTART                 - Perform system coldstart\n");
-			printf("WARMSTART                 - Perform system warmstart\n");
-			printf("QUIT                      - Quit Emulation\n");
-			printf("HELP or ?                 - This Text\n");
+			printf("ANTIC, GTIA, PIA               - Display hardware registers\n");
+			printf("DLIST                          - Display current display list\n");
+#ifdef PROFILE
+			printf("PROFILE                        - Display profiling statistics\n");
+#endif
+			printf("COLDSTART                      - Perform system coldstart\n");
+			printf("WARMSTART                      - Perform system warmstart\n");
+			printf("QUIT                           - Quit emulator\n");
+			printf("HELP or ?                      - This text\n");
 		}
 		else if (strcmp(t, "QUIT") == 0) {
 			return 0;

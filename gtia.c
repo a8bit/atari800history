@@ -511,7 +511,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 		break;
 	case _PAL:
 		if (tv_mode == TV_PAL)
-			byte = 0x00;
+			byte = 0x01;
 		else
 			byte = 0x0f;
 		break;
@@ -525,7 +525,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 		if (!mach_xlxe)
 			byte = Atari_TRIG(2);
 		else
-			byte = 0;
+			byte = 1;
 		break;
 	case _TRIG3:
 		if (!mach_xlxe)

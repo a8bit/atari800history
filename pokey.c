@@ -48,11 +48,16 @@ int DELAYED_SEROUT_IRQ;
 int DELAYED_XMTDONE_IRQ;
 
 /* structures to hold the 9 pokey control bytes */ 
-UBYTE AUDF[4];    /* AUDFx (D200, D202, D204, D206) */
-UBYTE AUDC[4];    /* AUDCx (D201, D203, D205, D207) */
+UBYTE AUDF[8];    /* AUDFx (D200, D202, D204, D206) */
+UBYTE AUDC[8];    /* AUDCx (D201, D203, D205, D207) */
 UBYTE AUDCTL;     /* AUDCTL (D208) */   
 unsigned int /* ULONG */ DivNIRQ[4], DivNMax[4];
 unsigned int /* ULONG */ TimeBase = DIV_64;
+
+#ifdef STEREO
+int pokey_select;
+int stereo_enabled = TRUE;
+#endif
 
 UBYTE POKEY_GetByte(UWORD addr)
 {
@@ -140,25 +145,44 @@ int POKEY_siocheck(void)
 
 int POKEY_PutByte(UWORD addr, UBYTE byte)
 {
+#ifdef STEREO
+	pokey_select= ((addr>>4))&0x01;
+
+#endif
 	addr &= 0x0f;
 	switch (addr) {
 	case _AUDC1:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDC[CHAN1] = byte;
 		Atari_AUDC(1, byte);
 		break;
 	case _AUDC2:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDC[CHAN2] = byte;
 		Atari_AUDC(2, byte);
 		break;
 	case _AUDC3:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDC[CHAN3] = byte;
 		Atari_AUDC(3, byte);
 		break;
 	case _AUDC4:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDC[CHAN4] = byte;
 		Atari_AUDC(4, byte);
 		break;
 	case _AUDCTL:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDCTL = byte;
 
 		/* determine the base multiplier for the 'div by n' calculations */
@@ -171,21 +195,33 @@ int POKEY_PutByte(UWORD addr, UBYTE byte)
 		Atari_AUDCTL(byte);
 		break;
 	case _AUDF1:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDF[CHAN1] = byte;
 		Update_Counter((AUDCTL & CH1_CH2) ? ((1 << CHAN2) | (1 << CHAN1)) : (1 << CHAN1));
 		Atari_AUDF(1, byte);
 		break;
 	case _AUDF2:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDF[CHAN2] = byte;
 		Update_Counter(1 << CHAN2);
 		Atari_AUDF(2, byte);
 		break;
 	case _AUDF3:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDF[CHAN3] = byte;
 		Update_Counter((AUDCTL & CH3_CH4) ? ((1 << CHAN4) | (1 << CHAN3)) : (1 << CHAN3));
 		Atari_AUDF(3, byte);
 		break;
 	case _AUDF4:
+#ifdef STEREO
+		if( pokey_select==0 )
+#endif
 		AUDF[CHAN4] = byte;
 		Update_Counter(1 << CHAN4);
 		Atari_AUDF(4, byte);
@@ -476,9 +512,9 @@ void POKEYStateSave( void )
 	SaveUBYTE( &AUDC[0], 4 );
 	SaveUBYTE( &AUDCTL, 1 );
 
-	SaveINT( &DivNIRQ[0], 4);
-	SaveINT( &DivNMax[0], 4);
-	SaveINT( &TimeBase, 1 );
+	SaveINT((int *)&DivNIRQ[0], 4);
+	SaveINT((int *)&DivNMax[0], 4);
+	SaveINT((int *)&TimeBase, 1 );
 }
 
 void POKEYStateRead( void )
@@ -498,7 +534,7 @@ void POKEYStateRead( void )
 	ReadUBYTE( &AUDC[0], 4 );
 	ReadUBYTE( &AUDCTL, 1 );
 
-	ReadINT( &DivNIRQ[0], 4);
-	ReadINT( &DivNMax[0], 4);
-	ReadINT( &TimeBase, 1 );
+	ReadINT((int *)&DivNIRQ[0], 4);
+	ReadINT((int *) &DivNMax[0], 4);
+	ReadINT((int *) &TimeBase, 1 );
 }

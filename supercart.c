@@ -1,12 +1,11 @@
+#include <stdlib.h>
+#include <time.h>
+
 #include "atari.h"
 #include "config.h"
 #include "cpu.h"
 #include "memory.h"
 #include "log.h"
-#include <time.h>
-
-#define FALSE 0
-#define TRUE 1
 
 extern UBYTE *cart_image;
 extern int cart_type;

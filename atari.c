@@ -52,6 +52,37 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "log.h"
 #include "statesav.h"
 
+#ifdef USE_NEW_BINLOAD
+#include "binload.h"
+#endif
+
+/*** New by S.B. ***/
+
+#ifdef AMIGA
+#ifdef __MAXON__
+
+struct timeval
+{
+	ULONG tv_secs;
+	ULONG tv_micro;
+};
+
+#endif
+
+struct timezone
+{
+	int tz;
+};
+
+void gettimeofday( struct timeval *tv, void *null );
+
+#define tv_sec tv_secs
+#define tv_usec tv_micro
+
+#endif
+
+/*** End new by S.B. ***/
+
 TVmode tv_mode = TV_PAL;
 Machine machine = Atari;
 int mach_xlxe = FALSE;
@@ -79,10 +110,7 @@ int pil_on = FALSE;
 int pil_on = FALSE;
 #endif
 
-#ifdef USE_NEW_BINLOAD
-int BIN_loader( char *filename );
-void BIN_loader_cont( void );
-#else
+#ifndef USE_NEW_BINLOAD
 int ReadAtariExe( char *filename );
 #endif
 
@@ -102,7 +130,6 @@ extern int rom_inserted;
 UBYTE *cart_image = NULL;		/* For cartridge memory */
 int cart_type = NO_CART;
 
-int countdown_rate = 4000;
 double deltatime;
 int draw_display=1;		/* Draw actualy generated screen */
 
@@ -239,10 +266,16 @@ int main(int argc, char **argv)
 		config = TRUE;
 
 	if (config) {
+
+#ifndef DONT_USE_RTCONFIGUPDATE
 		RtConfigUpdate();
+#endif /* !DONT_USE_RTCONFIGUPDATE */
+
 		RtConfigSave();
 	}
-#endif
+
+#endif /* !Win32 */
+
 	switch (default_system) {
 	case 1:
 		machine = Atari;
@@ -417,11 +450,12 @@ int main(int argc, char **argv)
 	}
 
 	Device_Initialise(&argc, argv);
-    if (hold_option)
-	    next_console_value = 0x03; /* Hold Option During Reboot */
-
 	SIO_Initialise (&argc, argv);
 	Atari_Initialise(&argc, argv);	/* Platform Specific Initialisation */
+
+	if(hold_option)
+		next_console_value = 0x03; /* Hold Option During Reboot */
+
 
 	if (!atari_screen) {
 #ifdef WIN32
@@ -980,7 +1014,7 @@ void atari_sleep_ms(ULONG miliseconds)
 	t.tv_nsec = miliseconds * 1E6UL;
 	nanosleep(&t, NULL);	/* POSIX  */
 #else
-	usleep(miliseconds * 1E3);
+	usleep(miliseconds * 1000);
 #endif
 }
 

@@ -26,6 +26,7 @@ by configure's build-in test.
 ?(!NO_VOL_ONLY)SERIO_SOUND	Enable serial in/out sound
 ?!NOSNDINTER		Enable Sound Interpolation
 ?()CLIP			Enable Sound Clipping
+?()STEREO		Enable Stereo Sound
 ?MONITOR_BREAK		Enable BREAK command in monitor (slows CPU a little bit)
 ?MONITOR_HINTS		Enable hints in disassembler (addresses get human readable labels)
 ?MONITOR_ASSEMBLER	Enable assembler in monitor (you can enter ASM insns directly)

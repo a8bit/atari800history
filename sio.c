@@ -198,6 +198,9 @@ int SIO_Mount(int diskno, char *filename)
 		if ((header.magic1 == MAGIC1) && (header.magic2 == MAGIC2)) {
 			format[diskno - 1] = ATR;
 
+			if (header.writeprotect)
+				drive_status[diskno - 1] = ReadOnly;
+
 			sectorcount[diskno - 1] = header.hiseccounthi << 24 |
 				header.hiseccountlo << 16 |
 				header.seccounthi << 8 |
@@ -317,7 +320,7 @@ int SeekSector(int unit, int sector)
 	int size;
 
 	sprintf(sio_status, "%d: %d", unit + 1, sector);
-	SizeOfSector((UBYTE)unit, sector, &size, &offset);
+	SizeOfSector((UBYTE)unit, sector, &size, (ULONG*)&offset);
 	/* printf("Sector %x,Offset: %x\n",sector,offset); */
 	if (offset < 0 || offset > lseek(disk[unit], 0L, SEEK_END)) {
 #ifdef DEBUG
@@ -598,7 +601,7 @@ int DriveStatus(int unit, UBYTE * buffer)
 			buffer[1] = (disk[unit] != -1) ? (255) : (0);	/* for StripPoker */
 		}
 		else {
-			buffer[0] = (sectorsize[unit] == 256) ? (32) : (0);
+			buffer[0] = (sectorsize[unit] == 256) ? (32 + 8) : (8);
 			buffer[1] = (disk[unit] != -1) ? (192) : (64);
 		}
 		if (sectorcount[unit] == 1040)
@@ -727,7 +730,8 @@ void SIO(void)
 	}
 	regA = 0;	/* MMM */
 	Poke(0x0303, regY);
-
+	Poke(0x42,0);
+	SetC;
 #ifdef SET_LED
 	Atari_Set_LED(0);
 #endif
