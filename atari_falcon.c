@@ -70,13 +70,14 @@ int screensaver(int on)
 
 static int screensaverval;		/* original value */
 
+static int NOVA = FALSE;
+
 /* -------------------------------------------------------------------------- */
 
 #ifdef BACKUP_MSG
 extern char backup_msg_buf[300];
 #endif
 
-#define nodebug 1
 static int consol;
 static int trig0;
 static int stick0;
@@ -157,54 +158,55 @@ void SetupFalconEnvironment(void)
 	/* vypni kurzor */
 	Cursconf(0, 0);
 
-	/* switch to new graphics mode 384x240x256 */
+	NOVA = get_cookie('NOVA', &a);
+
+	if (! NOVA) {
+		/* switch to new graphics mode 384x240x256 */
 #define DELKA_VIDEORAM	(384UL*256UL)
-	nova_vram = (UBYTE *) Mxalloc((DELKA_VIDEORAM), 0);
-	if (nova_vram == NULL) {
-		printf("Error allocating video memory\n");
-		exit(-1);
-	}
+		nova_vram = (UBYTE *) Mxalloc((DELKA_VIDEORAM), 0);
+		if (nova_vram == NULL) {
+			printf("Error allocating video memory\n");
+			exit(-1);
+		}
+		memset(nova_vram, 0, DELKA_VIDEORAM);
+		Setscreen(nova_vram, nova_vram, -1);
 
-#if nodebug
-	memset(nova_vram, 0, DELKA_VIDEORAM);
-	Setscreen(nova_vram, nova_vram, -1);
-
-	/* check current resolution - if it is one of supported, do not touch VIDEL */
-	linea0();
-	if (VPLANES == 8 && V_Y_MAX == 240 && (
+		/* Check current resolution - if it is one of supported, do not touch VIDEL */
+		linea0();
+		if (VPLANES == 8 && V_Y_MAX == 240 && (
 								   (resolution == 2 && V_X_MAX == 384) ||
 								   (resolution == 1 && V_X_MAX == 352) ||
 								   (resolution == 0 && V_X_MAX == 320)));	/* the current resolution is OK */
-	else {
-		switch (resolution) {
-		case 2:
-			p_str_p = (ULONG *) nova_graf_384;
-			break;
-		case 1:
-			p_str_p = (ULONG *) nova_graf_352;
-			break;
-		case 0:
-		default:
-			p_str_p = (ULONG *) nova_graf_320;
+		else {
+			switch (resolution) {
+			case 2:
+				p_str_p = (ULONG *) nova_graf_384;
+				break;
+			case 1:
+				p_str_p = (ULONG *) nova_graf_352;
+				break;
+			case 0:
+			default:
+				p_str_p = (ULONG *) nova_graf_320;
+			}
+			Supexec(load_r);		/* set new video resolution by direct VIDEL programming */
 		}
-		Supexec(load_r);		/* set new video resolution by direct VIDEL programming */
-	}
 
-	/* nastav nove barvy */
-	for (a = 0; a < 256; a++) {
-		r = (colortable[a] >> 18) & 0x3f;
-		g = (colortable[a] >> 10) & 0x3f;
-		b = (colortable[a] >> 2) & 0x3f;
-		f030coltable[a] = (r << 26) | (g << 18) | (b << 2);
+		/* nastav nove barvy */
+		for (a = 0; a < 256; a++) {
+			r = (colortable[a] >> 18) & 0x3f;
+			g = (colortable[a] >> 10) & 0x3f;
+			b = (colortable[a] >> 2) & 0x3f;
+			f030coltable[a] = (r << 26) | (g << 18) | (b << 2);
+		}
+		col_table = f030coltable;
+		Supexec(set_colors_on_f030);
 	}
-	col_table = f030coltable;
-	Supexec(set_colors_on_f030);
 
 	Supexec(init_kb);
 
 	/* joystick init */
 	Bconout(4, 0x14);
-#endif
 }
 
 void Atari_Initialise(int *argc, char *argv[])
@@ -248,7 +250,6 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	screensaverval = screensaver(0);	/* turn off screen saver */
 
-#if nodebug
 	/* uschovat stare barvy */
 	col_table = f030coltable_zaloha;
 	Supexec(get_colors_on_f030);
@@ -256,7 +257,6 @@ void Atari_Initialise(int *argc, char *argv[])
 	/* uschovej starou grafiku */
 	p_str_p = (ULONG *) stara_graf;
 	Supexec(save_r);
-#endif
 
 	Log_base = Logbase();
 	Phys_base = Physbase();
@@ -274,23 +274,22 @@ void Atari_Initialise(int *argc, char *argv[])
 
 int Atari_Exit(int run_monitor)
 {
+	if (! NOVA) {
+		/* vratit puvodni graficky mod */
+		p_str_p = (ULONG *) stara_graf;
+		Supexec(load_r);
+		Setscreen(Log_base, Phys_base, -1);
 
-#if nodebug
-	/* vratit puvodni graficky mod */
-	p_str_p = (ULONG *) stara_graf;
-	Supexec(load_r);
-	Setscreen(Log_base, Phys_base, -1);
-
-	/* obnovit stare barvy */
-	col_table = f030coltable_zaloha;
-	Supexec(set_colors_on_f030);
+		/* obnovit stare barvy */
+		col_table = f030coltable_zaloha;
+		Supexec(set_colors_on_f030);
+	}
 
 	Supexec(rem_kb);
 
 	/* joystick disable */
 	Bconout(4, 8);
 
-#endif
 	/* zapni kurzor */
 	Cursconf(1, 0);
 
@@ -328,16 +327,23 @@ void Atari_DisplayScreen(UBYTE * screen)
 	if (i >= jen_nekdy) {
 		odkud = screen;
 		kam = Logbase();
-		switch (resolution) {
-		case 2:
-			rplanes();
-			break;
-		case 1:
-			rplanes_352();
-			break;
-		case 0:
-		default:
-			rplanes_320();
+		if (NOVA) {
+			int j;
+			for(j=0; j<240; j++)
+				memcpy(kam + j*896, screen + j*384 + 24, 336);
+		}
+		else {
+			switch (resolution) {
+			case 2:
+				rplanes();
+				break;
+			case 1:
+				rplanes_352();
+				break;
+			case 0:
+			default:
+				rplanes_320();
+			}
 		}
 		i = 0;
 	}

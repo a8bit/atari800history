@@ -300,6 +300,7 @@ void SelectSystem(UBYTE * screen)
 {
 	int system;
 	int ascii;
+	int status;
 
 	char *menu[7] =
 	{
@@ -321,34 +322,38 @@ void SelectSystem(UBYTE * screen)
 	switch (system) {
 	case 0:
 		Ram256 = 0;
-		Initialise_AtariOSA();
+		status = Initialise_AtariOSA();
 		break;
 	case 1:
 		Ram256 = 0;
-		Initialise_AtariOSB();
+		status = Initialise_AtariOSB();
 		break;
 	case 2:
 		Ram256 = 0;
-		Initialise_AtariXL();
+		status = Initialise_AtariXL();
 		break;
 	case 3:
 		Ram256 = 0;
-		Initialise_AtariXE();
+		status = Initialise_AtariXE();
 		break;
 	case 4:
 		Ram256 = 1;
-		Initialise_Atari320XE();
+		status = Initialise_Atari320XE();
 		break;
 	case 5:
 		Ram256 = 2;
-		Initialise_Atari320XE();
+		status = Initialise_Atari320XE();
 		break;
 	case 6:
 		Ram256 = 0;
-		Initialise_Atari5200();
+		status = Initialise_Atari5200();
 		break;
 	default:
 		break;
+	}
+	if (!status) {
+		/* printf("Operating System not available - using Emulated OS\n"); */
+		status = Initialise_EmuOS();
 	}
 }
 

@@ -17,6 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef WIN32
+#include <windows.h>
+#include <fcntl.h>
+extern char	memory_log[];
+extern char	scratch[];
+extern unsigned int	memory_log_index;
+#define ADDLOG( x ) { memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
+#define ADDLOGTEXT( x ) { memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
+#else
 #ifdef VMS
 #include <unixio.h>
 #include <file.h>
@@ -24,6 +33,7 @@
 #include <fcntl.h>
 #ifndef AMIGA
 #include <unistd.h>
+#endif
 #endif
 #endif
 
@@ -203,8 +213,14 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 		offset = (sector - 1) * size + 16;
 		break;
 	default:
+#ifdef WIN32
+		ADDLOGTEXT( "Fatal error in atari_sio.c" );
+		Atari800_Exit(FALSE);
+		return;
+#else
 		printf("Fatal Error in atari_sio.c\n");
 		Atari800_Exit(FALSE);
+#endif
 	}
 
 	if (sz)
@@ -584,9 +600,16 @@ void Command_Frame(void)
 	sector = CommandFrame[2] | (((UWORD) (CommandFrame[3])) << 8);
 	unit = CommandFrame[0] - '1';
 	if (unit > 8) {				/* UBYTE - range ! */
+#ifdef WIN32
+		sprintf( scratch, "Unknown command frame: %02x %02x %02x %02x %02x\n",
+			   CommandFrame[0], CommandFrame[1], CommandFrame[2],
+			   CommandFrame[3], CommandFrame[4]);
+		ADDLOG( scratch );
+#else
 		printf("Unknown command frame: %02x %02x %02x %02x %02x\n",
 			   CommandFrame[0], CommandFrame[1], CommandFrame[2],
 			   CommandFrame[3], CommandFrame[4]);
+#endif
 		result = 0;
 	}
 	else
@@ -648,9 +671,16 @@ void Command_Frame(void)
 			result = 'A';		/* Not yet supported... to be done later... */
 			break;
 		default:
+#ifdef WIN32
+			sprintf( scratch, "Command frame: %02x %02x %02x %02x %02x\n",
+				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
+				   CommandFrame[3], CommandFrame[4]);
+			ADDLOG( scratch );
+#else
 			printf("Command frame: %02x %02x %02x %02x %02x\n",
 				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
 				   CommandFrame[3], CommandFrame[4]);
+#endif
 			break;
 			result = 0;
 		}
@@ -666,7 +696,12 @@ void SwitchCommandFrame(int onoff)
 
 	if (onoff) {				/* Enabled */
 		if (TransferStatus != SIO_NoFrame)
+#ifdef WIN32
+			sprintf( scratch, "Unexpected command frame %x.\n", TransferStatus);
+			ADDLOG( scratch );
+#else
 			printf("Unexpected command frame %x.\n", TransferStatus);
+#endif
 		CommandIndex = 0;
 		DataIndex = 0;
 		ExpectedBytes = 5;
@@ -680,7 +715,12 @@ void SwitchCommandFrame(int onoff)
 		if (TransferStatus != SIO_StatusRead && TransferStatus != SIO_NoFrame &&
 			TransferStatus != SIO_ReadFrame) {
 			if (!(TransferStatus == SIO_CommandFrame && CommandIndex == 0))
+#ifdef WIN32
+				sprintf( scratch, "Command frame %02x unfinished.\n", TransferStatus);
+				ADDLOG( scratch );
+#else
 				printf("Command frame %02x unfinished.\n", TransferStatus);
+#endif
 			TransferStatus = SIO_NoFrame;
 		}
 		CommandIndex = 0;
@@ -735,7 +775,11 @@ void SIO_PutByte(int byte)
 			}
 		}
 		else {
+#ifdef WIN32
+			ADDLOGTEXT( "Invalid command frame!" );
+#else
 			printf("Invalid command frame!\n");
+#endif
 			TransferStatus = SIO_NoFrame;
 		}
 		break;
@@ -768,11 +812,20 @@ void SIO_PutByte(int byte)
 			}
 		}
 		else {
+#ifdef WIN32
+			ADDLOGTEXT( "Invalid data frame!" );
+#else
 			printf("Invalid data frame!\n");
+#endif
 		}
 		break;
 	default:
+#ifdef WIN32
+		sprintf( scratch, "Unexpected data output :%x\n", byte);
+		ADDLOG( scratch );
+#else
 		printf("Unexpected data output :%x\n", byte);
+#endif
 	}
 	DELAYED_SEROUT_IRQ += SEROUT_INTERVAL;
 
@@ -808,7 +861,11 @@ int SIO_GetByte(void)
 			}
 		}
 		else {
+#ifdef WIN32
+			ADDLOG("Invalid read frame!");
+#else
 			printf("Invalid read frame!\n");
+#endif
 			TransferStatus = SIO_NoFrame;
 		}
 		break;
@@ -830,7 +887,11 @@ int SIO_GetByte(void)
 			}
 		}
 		else {
+#ifdef WIN32
+			ADDLOG("Invalid read frame!");
+#else
 			printf("Invalid read frame!\n");
+#endif
 #ifdef MOTIF
 			Atari_Set_LED(0);
 #endif
@@ -838,7 +899,11 @@ int SIO_GetByte(void)
 		}
 		break;
 	default:
+#ifdef WIN32
+		ADDLOG("Unexpected data reading!\n");
+#else
 		printf("Unexpected data reading!\n");
+#endif
 		break;
 	}
 

@@ -1,6 +1,7 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O2 -m68020-40 -fno-strength-reduce -fomit-frame-pointer -Wall -DGNU_C
+CFLAGS		= -pipe -c -O2 -m68020-40 -fomit-frame-pointer -Wall -DGNU_C
+#CFLAGS		= -c -O2 -m68020-40 -fno-strength-reduce -fomit-frame-pointer -Wall -DGNU_C
 #CFLAGS		= -c -g -m68020-40 -Wall -DGNU_C
 LD		= gcc
 LDFLAGS		=
@@ -35,7 +36,7 @@ videl :
 	@echo Finished.
 
 vidsnd :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o pokeysnd.o sound_dma.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o sound_dma.o"
 	@echo Finished.
 
 asm :
@@ -43,7 +44,7 @@ asm :
 	@echo Finished.
 
 super :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o pokeysnd.o sound_dma.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o sound_dma.o"
 	@echo Finished.
 
 #
@@ -88,6 +89,7 @@ OBJECTS =       atari.o \
                 rtconfig.o \
                 ui.o \
                 list.o \
+                pokeysnd.o \
 		sound_falcon.o
 
 atari800        :       $(OBJECTS) $(OBJ)

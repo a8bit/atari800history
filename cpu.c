@@ -467,7 +467,7 @@ int GO(int ncycles)
 			data = ESC_BREAK;
 			UPDATE_GLOBAL_REGS;
 			CPU_GetStatus();
-			Escape(data);
+			AtariEscape(data);
 			CPU_PutStatus();
 			UPDATE_LOCAL_REGS;
 		}
@@ -1502,7 +1502,7 @@ int GO(int ncycles)
 
 	  opcode_6c:				/* JMP (abcd) */
 		addr = (memory[PC + 1] << 8) | memory[PC];
-#ifdef 65C02
+#ifdef CPU65C02
 		PC = (memory[addr + 1] << 8) | memory[addr];
 #else							/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
 		if ((addr & 0xff) == 0xff)
@@ -2102,7 +2102,7 @@ int GO(int ncycles)
 		data = memory[PC++];
 		UPDATE_GLOBAL_REGS;
 		CPU_GetStatus();
-		Escape(data);
+		AtariEscape(data);
 		CPU_PutStatus();
 		UPDATE_LOCAL_REGS;
 		data = memory[0x0100 + ++S];
@@ -2114,7 +2114,7 @@ int GO(int ncycles)
 		data = memory[PC++];
 		UPDATE_GLOBAL_REGS;
 		CPU_GetStatus();
-		Escape(data);
+		AtariEscape(data);
 		CPU_PutStatus();
 		UPDATE_LOCAL_REGS;
 		goto next;

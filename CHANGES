@@ -1,3 +1,26 @@
+Changes in 0.9.2
+----------------
+
+o LPTjoy implemented. Now you can connect up to three old style
+  CX-40 (Atari, Amiga digital joysticks) to the printer ports
+  of your PC (via a very simple interface). Then you just specify
+  "-LPTjoy1" on command line for joystick on LPT1 etc.
+  LPTjoy idea came from Petr Sumbera.
+
+o m68k assembler CPU emulation was updated to reflect recent
+  changes in CPU module <Empty Head>.
+
+o preliminary support for NOVA graphics on Falcon
+
+o Allegro joystick routines slightly improved (now you can
+  play even without real joystick)
+
+o Atari800Win changes were put in the main source tree <Rich>
+
+o after selecting another OS from UI emulator doesn't hang if
+  there is no ROM file.
+
+
 Changes in 0.9.1
 ----------------
 

@@ -9,9 +9,16 @@ static char *rcsid = "$Id: cpu_asm.c,v 1.2 1998/02/21 15:02:46 david Exp $";
 
 #include	"atari.h"
 #include	"cpu_asm.h"
+#include	"pia.h"
+#include	"gtia.h"
+#include	"sio.h"
+#include	"pokey.h"
+#include	"antic.h"
+
 
 long CEKEJ;
 extern UBYTE IRQ;
+extern int wsync_halt;
 
 extern UWORD break_addr;
 
@@ -34,6 +41,7 @@ extern void tisk(void);
 UBYTE memory[65536];
 
 UBYTE attrib[65536];
+
 
 /*
    ===============================================================
@@ -177,6 +185,8 @@ int PUTBYTE(UWORD addr, UBYTE byte)
 		break;
 	case 0xd400:				/* ANTIC */
 		abort = ANTIC_PutByte(addr - 0xd400, byte);
+		if (wsync_halt)
+			abort = TRUE;
 		break;
 	case 0xd500:				/* Super Cartridges */
 		abort = SuperCart_PutByte(addr, byte);

@@ -9,3 +9,16 @@ o The obsolete variable "countdown_rate" is still in use within
 o POKEY timers
 
 o speed the emulator up
+
+Special TODO for 0.9.2:
+-----------------------
+
+o enable artifacting in all architectures (not only Win32). Use -artifact
+  or similar command line switch.
+
+o ADDLOG should become the standard for reporting errors (all printf() should
+  be removed and replaced with ADDLOG). Then define ADDLOG for every
+  architecture (for Unices it might still use just printf, but Falcon and DOS
+  will list the error report after switching back to text mode).
+  My BACKUP_MSG kludge should be replaced with ADDLOG as well. Perhaps also
+  delayed_vga_init() from Perry could be removed (it's on Perry).

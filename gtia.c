@@ -9,8 +9,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef WIN32
+#include "windows.h"
+#else
 #ifndef AMIGA
 #include "config.h"
+#endif
 #endif
 
 #include "atari.h"

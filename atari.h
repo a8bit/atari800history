@@ -19,7 +19,9 @@
 
 #define	UBYTE unsigned char
 #define	UWORD unsigned short int
+#ifndef WIN32
 #define	ULONG unsigned long int
+#endif
 
 #ifndef O_BINARY				/* flag for binary files on MS-DOS */
 #define O_BINARY	0			/* this won't cause any trouble */
@@ -44,7 +46,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.1"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.2"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -330,6 +332,6 @@ int Initialise_Atari5200(void);
 int Atari800_Exit(int run_monitor);
 UBYTE Atari800_GetByte(UWORD addr);
 int Atari800_PutByte(UWORD addr, UBYTE byte);
-void Escape(UBYTE esc_code);
+void AtariEscape(UBYTE esc_code);
 
 #endif

@@ -32,6 +32,8 @@ static int trig0;
 static int stick0;
 static int trig1;
 static int stick1;
+static int LPTjoy_addr[3] = {0,0,0};
+static int LPTjoy_num = 0;
 static int joyswap = FALSE;
 
 static int first_lno = 24;
@@ -116,6 +118,50 @@ void read_joystick(int centre_x, int centre_y)
 		stick0 &= 0xfd;
 }
 #endif	/* AT_USE_ALLEGRO_JOY */
+
+int test_LPTjoy(int portno)
+{
+	int addr;
+
+	if (portno < 1 || portno > 3)
+		return FALSE;
+	addr = _farpeekw(_dos_ds,(portno-1)*2+0x408);
+	if (addr == 0)
+		return FALSE;
+
+	if (LPTjoy_num >= 3)
+		return FALSE;
+	LPTjoy_addr[LPTjoy_num++] = addr;
+
+	return TRUE;
+}
+
+void read_LPTjoy(int LPTidx, int joyport)
+{
+	int state = STICK_CENTRE, trigger = 1, val;
+
+	val = inportb(LPTjoy_addr[LPTidx]+1);
+	if (!(val&(1<<4)))
+		state &= STICK_FORWARD;
+	else if (!(val&(1<<5)))
+		state &= STICK_BACK;
+	if (!(val&(1<<6)))
+		state &= STICK_RIGHT;
+	else if ((val&(1<<7)))
+		state &= STICK_LEFT;
+
+	if (!(val&(1<<3)))
+		trigger = 0;
+
+	if (joyport == 0) {
+		stick0 = state;
+		trig0 = trigger;
+	}
+	else if (joyport == 1) {
+		stick1 = state;
+		trig1 = trigger;
+	}
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -266,7 +312,6 @@ void SetupVgaEnvironment()
 {
 	int a, r, g, b;
 	union REGS rg;
-	vga_started = 1;
 
 #ifdef AT_USE_ALLEGRO
 	set_gfx_mode(GFX_VGA, 320, 200, 0, 0);
@@ -274,6 +319,7 @@ void SetupVgaEnvironment()
 	rg.x.ax = 0x0013;
 	int86(0x10, &rg, &rg);
 #endif
+	vga_started = 1;
 
 	for (a = 0; a < 256; a++) {
 		r = (colortable[a] >> 18) & 0x3f;
@@ -295,61 +341,72 @@ void Atari_Initialise(int *argc, char *argv[])
 	int i;
 	int j;
 
-#ifdef AT_USE_ALLEGRO
-	allegro_init();
-#endif
-#ifdef AT_USE_ALLEGRO_JOY
-	if (initialise_joystick())
-		exit(1);
-#endif
-#ifdef USE_DOSSOUND
-	if (dossound_Initialise(argc, argv))
-		exit(1);
-#endif
-
 	for (i = j = 1; i < *argc; i++) {
 		if (strcmp(argv[i], "-interlace") == 0) {
 			ypos_inc = 2;
 			vga_ptr_inc = 320 + 320;
 			scr_ptr_inc = ATARI_WIDTH + ATARI_WIDTH;
 		}
+		else if (strcmp(argv[i], "-LPTjoy1") == 0)
+			test_LPTjoy(1);
+		else if (strcmp(argv[i], "-LPTjoy2") == 0)
+			test_LPTjoy(2);
+		else if (strcmp(argv[i], "-LPTjoy3") == 0)
+			test_LPTjoy(3);
+
 		else if (strcmp(argv[i], "-joyswap") == 0)
 			joyswap = TRUE;
 		else {
-			if (strcmp(argv[i], "-help") == 0)
+			if (strcmp(argv[i], "-help") == 0) {
 				printf("\t-interlace    Generate screen with interlace\n");
+				printf("\t-LPTjoy1      Read joystick connected to LPT1\n");
+				printf("\t-LPTjoy2      Read joystick connected to LPT2\n");
+				printf("\t-LPTjoy3      Read joystick connected to LPT3\n");
+				printf("\t-joyswap      Swap joysticks\n");
+				printf("\nPress Return/Enter to continue...");
+				getchar();
+				printf("\r                                 \n");
+			}
 			argv[j++] = argv[i];
 		}
 	}
 
 	*argc = j;
 
-#ifndef AT_USE_ALLEGRO_JOY
+#ifdef AT_USE_ALLEGRO
+	allegro_init();
+#endif
+
+	/* initialise sound routines */
+#ifndef USE_DOSSOUND
+	Sound_Initialise(argc, argv);
+#else
+	if (dossound_Initialise(argc, argv))
+		exit(1);
+#endif
+
 	/* check if joystick is connected */
-	printf("Checking for joystick...");
+	printf("Joystick is checked...");
 	fflush(stdout);
+#ifndef AT_USE_ALLEGRO_JOY
 	outportb(0x201, 0xff);
 	usleep(100000UL);
 	joy_in = (inportb(0x201) == 0xfc);
 	if (joy_in)
+		joystick0(&js0_centre_x, &js0_centre_y);
+#else
+	joy_in = ( initialise_joystick() == 0 ? TRUE : FALSE );
+#endif
+	if (joy_in)
 		printf(" found!\n");
 	else
-		printf(" sorry, I see no joystick. Use numeric pad\n");
-#endif
-
-#ifndef USE_DOSSOUND
-	Sound_Initialise(argc, argv);
-#endif
+		printf("\n\nSorry, I see no joystick. Use numeric pad\n");
 
 #ifndef DELAYED_VGAINIT
 	SetupVgaEnvironment();
 #endif
 
 	/* setup joystick */
-#ifndef AT_USE_ALLEGRO_JOY
-	if (joy_in)
-		joystick0(&js0_centre_x, &js0_centre_y);
-#endif
 	stick0 = stick1 = STICK_CENTRE;
 	trig0 = trig1 = 1;
 
@@ -473,21 +530,30 @@ int Atari_Keyboard(void)
 		raw_key = 0;			/* do not evaluate the pressed key */
 
 	/* if joy_in then keyboard emulates stick1 instead of standard stick0 */
-#ifndef AT_USE_ALLEGRO_JOY
 	if (joy_in) {
 		stick1 = stick0;
 		trig1 = trig0;
+#ifndef AT_USE_ALLEGRO_JOY
 		read_joystick(js0_centre_x, js0_centre_y);	/* read real PC joystick */
-	}
 #else
-	poll_joystick();
-	stick1 = stick0;
-	trig1 = trig0;
-	stick0 &= ((joy_right << 3) | (joy_left << 2) | (joy_down << 1) | joy_up) ^ 0x0f;
-	trig0 &= !joy_b1;
+		poll_joystick();
+		stick0 = ((joy_right << 3) | (joy_left << 2) | (joy_down << 1) | joy_up) ^ 0x0f;
+		trig0 = !joy_b1;
 #endif
+	}
 
-	/* if joyswap then joy0 and joy1 are exchanged */
+	/* read LPT joysticks */
+	if (LPTjoy_num) {
+		if (joy_in)
+			read_LPTjoy(0, 1);
+		else {
+			read_LPTjoy(0, 0);
+			if (LPTjoy_num >= 2)
+				read_LPTjoy(1, 1);
+		}
+	}
+
+	/* if '-joyswap' then joy0 and joy1 are exchanged */
 	if (joyswap) {
 		int stick = stick1;
 		int trig = trig1;

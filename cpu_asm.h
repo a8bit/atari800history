@@ -18,7 +18,7 @@ void SetRAM(int addr1, int addr2);
 void SetROM(int addr1, int addr2);
 void SetHARDWARE(int addr1, int addr2);
 extern void NMI(void);
-extern void GO(int cycles);
+extern int GO(int cycles);
 extern void CPU_INIT(void);
 
 extern UWORD regPC;

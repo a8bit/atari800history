@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <ctype.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#include "windows.h"
+#endif
 
 #ifdef VMS
 #include <unixio.h>

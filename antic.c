@@ -4,8 +4,13 @@
 #define LCHOP 3	/* do not build lefmost 0..3 characters in wide mode */
 #define RCHOP 3	/* do not build rightmost 0..3 characters in wide mode */
 
+#ifdef WIN32
+#include <windows.h>
+#include "../winatari.h"
+#else
 #ifndef AMIGA
 #include "config.h"
+#endif
 #endif
 
 #include "atari.h"
@@ -33,6 +38,11 @@ UBYTE NMIST;
 UBYTE PMBASE;
 UBYTE VSCROL;
 
+#ifdef WIN32
+extern unsigned long	unMiscStates;
+extern unsigned char	chAnticColor1;
+extern unsigned char	chAnticColor2;
+#endif
 /*
  * These are defined for Word (2 Byte) memory accesses. I have not
  * defined Longword (4 Byte) values since the Sparc architecture
@@ -362,9 +372,6 @@ void initialize_prior_table()
 }
 void ANTIC_Initialise(int *argc, char *argv[])
 {
-	int i;
-	int j;
-
 	playfield_lookup[0x00] = 8;
 	playfield_lookup[0x40] = 4;
 	playfield_lookup[0x80] = 5;
@@ -450,7 +457,6 @@ void do_border(void)
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 1; k <= 4; k++) {
@@ -499,14 +505,14 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 			chdata = (memory[chaddr] ^ invert) & blank;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
-				*ptr++ = lookup1[chdata & 0x80];
-				*ptr++ = lookup1[chdata & 0x40];
-				*ptr++ = lookup1[chdata & 0x20];
-				*ptr++ = lookup1[chdata & 0x10];
-				*ptr++ = lookup1[chdata & 0x08];
-				*ptr++ = lookup1[chdata & 0x04];
-				*ptr++ = lookup1[chdata & 0x02];
-				*ptr++ = lookup1[chdata & 0x01];
+				*ptr++ = (char)lookup1[chdata & 0x80];
+				*ptr++ = (char)lookup1[chdata & 0x40];
+				*ptr++ = (char)lookup1[chdata & 0x20];
+				*ptr++ = (char)lookup1[chdata & 0x10];
+				*ptr++ = (char)lookup1[chdata & 0x08];
+				*ptr++ = (char)lookup1[chdata & 0x04];
+				*ptr++ = (char)lookup1[chdata & 0x02];
+				*ptr++ = (char)lookup1[chdata & 0x01];
 			}
 			else {
 #ifdef UNALIGNED_LONG_OK
@@ -531,7 +537,6 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 		else {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			for (k = 1; k <= 4; k++) {
@@ -596,7 +601,6 @@ void draw_antic_2_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, U
 		if ((*t_pm_scanline_ptr)) {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			UWORD *w_ptr = (UWORD *) (ptr - 2);
@@ -651,14 +655,14 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 			chdata = (memory[chaddr] ^ invert) & blank;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
-				*ptr++ = lookup1[chdata & 0x80];
-				*ptr++ = lookup1[chdata & 0x40];
-				*ptr++ = lookup1[chdata & 0x20];
-				*ptr++ = lookup1[chdata & 0x10];
-				*ptr++ = lookup1[chdata & 0x08];
-				*ptr++ = lookup1[chdata & 0x04];
-				*ptr++ = lookup1[chdata & 0x02];
-				*ptr++ = lookup1[chdata & 0x01];
+				*ptr++ = (char)lookup1[chdata & 0x80];
+				*ptr++ = (char)lookup1[chdata & 0x40];
+				*ptr++ = (char)lookup1[chdata & 0x20];
+				*ptr++ = (char)lookup1[chdata & 0x10];
+				*ptr++ = (char)lookup1[chdata & 0x08];
+				*ptr++ = (char)lookup1[chdata & 0x04];
+				*ptr++ = (char)lookup1[chdata & 0x02];
+				*ptr++ = (char)lookup1[chdata & 0x01];
 			}
 			else {
 #ifdef UNALIGNED_LONG_OK
@@ -683,7 +687,6 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 		else {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			for (k = 1; k <= 4; k++) {
@@ -762,7 +765,6 @@ void draw_antic_4(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 		else {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			for (k = 1; k <= 4; k++) {
@@ -789,7 +791,7 @@ void draw_antic_6(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 		UWORD chaddr;
 		UBYTE chdata;
 		UWORD colour;
-		int k, kk;
+		int kk;
 		chaddr = t_chbase + ((UWORD) (screendata & 0x3f) << 3);
 		switch (screendata & 0xc0) {
 		case 0x00:
@@ -837,7 +839,6 @@ void draw_antic_6(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 1; k <= 4; k++) {
@@ -861,7 +862,7 @@ void draw_antic_8(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 	LOOKUP1_4COL
 		for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
-		int k, kk;
+		int kk;
 		for (kk = 0; kk < 4; kk++) {
 			if (!(*t_pm_scanline_ptr)) {
 				*ptr++ = lookup1[screendata & 0xC0];
@@ -873,7 +874,6 @@ void draw_antic_8(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 0; k <= 3; k++) {
@@ -896,7 +896,7 @@ void draw_antic_9(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] = lookup1[0x10] = cl_word[4];
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
-		int k, kk;
+		int kk;
 		for (kk = 0; kk < 4; kk++) {
 			if (!(*t_pm_scanline_ptr)) {
 				*ptr++ = lookup1[screendata & 0x80];
@@ -908,7 +908,6 @@ void draw_antic_9(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 0; k <= 3; k++) {
@@ -933,7 +932,7 @@ void draw_antic_a(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 	LOOKUP1_4COL
 		for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
-		int k, kk;
+		int kk;
 		for (kk = 0; kk < 2; kk++) {
 			if (!(*t_pm_scanline_ptr)) {
 				*ptr++ = lookup1[screendata & 0xC0];
@@ -945,7 +944,6 @@ void draw_antic_a(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 0; k <= 3; k++) {
@@ -970,7 +968,7 @@ void draw_antic_c(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] = lookup1[0x10] = cl_word[4];
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
-		int k, kk;
+		int kk;
 		for (kk = 0; kk < 2; kk++) {
 			if (!(*t_pm_scanline_ptr)) {
 				*ptr++ = lookup1[screendata & 0x80];
@@ -982,7 +980,6 @@ void draw_antic_c(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 			else {
 				UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 				UBYTE pm_pixel;
-				int which_player, which_missile;
 				UBYTE colreg;
 				int k;
 				for (k = 1; k <= 4; k++) {
@@ -1038,7 +1035,6 @@ void draw_antic_e(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 		else {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			for (k = 1; k <= 4; k++) {
@@ -1055,6 +1051,7 @@ void draw_antic_e(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 }
 void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
+	char *ptr2;
 	ULONG COL_6_LONG;
 	int i;
 	lookup1[0x00] = colour_lookup[6];
@@ -1065,6 +1062,87 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
 		if (!(*t_pm_scanline_ptr)) {
+			/* This is pretty bad - I'm just checking to see whether the odd or even pixel in a 
+			   pair has been set, and if only one of those, then I set both to a solid color.
+			   Actually I think only the odd or even pixel should be set to the color, but the
+			   effect looks better this way most of the time - maybe it should be configurable */
+#ifdef WIN32
+			if (screendata) {
+				if( unMiscStates & ATARI_ANTICF_ARTIFACT )
+				{
+					ptr2 = ptr;
+					*ptr++ = (char)lookup1[screendata & 0x80];
+					*ptr = (char)lookup1[screendata & 0x40];
+					if( !*ptr && *ptr2 )
+					{
+						*ptr = chAnticColor1;
+						*ptr2 = chAnticColor1;
+					}
+					else if( *ptr && !*ptr2 )
+					{
+						*ptr = chAnticColor2;
+						*ptr2 = chAnticColor2;
+					}
+					ptr++;
+					ptr2 = ptr;
+
+					*ptr++ = (char)lookup1[screendata & 0x20];
+					*ptr = (char)lookup1[screendata & 0x10];
+					if( !*ptr && *ptr2 )
+					{
+						*ptr = chAnticColor1;
+						*ptr2 = chAnticColor1;
+					}
+					else if( *ptr && !*ptr2 )
+					{
+						*ptr = chAnticColor2;
+						*ptr2 = chAnticColor2;
+					}
+					ptr++;
+					ptr2 = ptr;
+
+					*ptr++ = (char)lookup1[screendata & 0x08];
+					*ptr = (char)lookup1[screendata & 0x04];
+					if( !*ptr && *ptr2 )
+					{
+						*ptr = chAnticColor1;
+						*ptr2 = chAnticColor1;
+					}
+					else if( *ptr && !*ptr2 )
+					{
+						*ptr = chAnticColor2;
+						*ptr2 = chAnticColor2;
+					}
+					ptr++;
+					ptr2 = ptr;
+
+					*ptr++ = (char)lookup1[screendata & 0x02];
+					*ptr = (char)lookup1[screendata & 0x01];
+					if( !*ptr && *ptr2 )
+					{
+						*ptr = chAnticColor1;
+						*ptr2 = chAnticColor1;
+					}
+					else if( *ptr && !*ptr2 )
+					{
+						*ptr = chAnticColor2;
+						*ptr2 = chAnticColor2;
+					}
+					ptr++;
+				}
+				else
+				{
+					*ptr++ = (char)lookup1[screendata & 0x80];
+					*ptr++ = (char)lookup1[screendata & 0x40];
+					*ptr++ = (char)lookup1[screendata & 0x20];
+					*ptr++ = (char)lookup1[screendata & 0x10];
+					*ptr++ = (char)lookup1[screendata & 0x08];
+					*ptr++ = (char)lookup1[screendata & 0x04];
+					*ptr++ = (char)lookup1[screendata & 0x02];
+					*ptr++ = (char)lookup1[screendata & 0x01];
+				}
+			}
+#else
 			if (screendata) {
 				*ptr++ = lookup1[screendata & 0x80];
 				*ptr++ = lookup1[screendata & 0x40];
@@ -1075,6 +1153,7 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 				*ptr++ = lookup1[screendata & 0x02];
 				*ptr++ = lookup1[screendata & 0x01];
 			}
+#endif
 			else {
 #ifdef UNALIGNED_LONG_OK
 				ULONG *l_ptr = (ULONG *) ptr;
@@ -1098,7 +1177,6 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 		else {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			for (k = 1; k <= 4; k++) {
@@ -1144,7 +1222,6 @@ void draw_antic_f_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, U
 		if ((*t_pm_scanline_ptr)) {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			UWORD *w_ptr = (UWORD *) (ptr - 2);
@@ -1207,7 +1284,6 @@ void draw_antic_f_gtia10(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULO
 		if ((*t_pm_scanline_ptr)) {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			int which_player, which_missile;
 			UBYTE colreg;
 			int k;
 			UWORD *w_ptr = (UWORD *) (ptr - 2);

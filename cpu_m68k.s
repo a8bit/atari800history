@@ -1,12 +1,9 @@
 ;This code is copyrighted by Empty Head (c)1997, but
 ;you can use it without any charge in your own programs
 ;use it on your own risk ;)
-
-
 ;DEBUG ;if it is active it is possible to trace through 6502 memory
-;SERVER ;if conrol server is active
 ;C_BUGGING ;debug in C - logical, isn't it ? :)
-
+P65C02 ;we emulate this version of processor (6502 has a bug in jump code, you can emulate this bug as well if you want, just remove this line :)
 	ifd DEBUG
 	bra START
 	endc
@@ -15,9 +12,13 @@
 	ifnd DEBUG
 	xref _GETBYTE ;procedures for A800 bytes
 	xref _PUTBYTE
-	xref _Escape
+	xref _AtariEscape
+	xdef _PRERUSENI
 	xref _break_addr
 	xref _tisk
+	xref _wsync_halt ;CPU is stopped
+	xdef _SKOK
+	xdef _ZASTAV
 	xdef _regPC
 	xdef _regA
 	xdef _regP ;/* Processor Status Byte (Partial) */
@@ -32,7 +33,8 @@
 	xdef _GO
 	xdef _CPUGET
 	xdef _CPU_INIT
-	xdef _OPMODE_TABLE
+	xdef _cycles ;temporarily needed outside :)
+	xdef _OPMODE_TABLE ;need for debugging (maybe, I can't remember)
 	ifd C_BUGGING
 	xref _CEKEJ
 	xdef _ADRESA
@@ -41,18 +43,29 @@
 	endc
 
 regA
+	ds.b 1
 _regA	ds.b 1   ;d0 -A
+
 regX
+	ds.b 1
 _regX	ds.b 1   ;d1 -X
-regY
+
+regY		
+	ds.b 1
 _regY	ds.b 1   ;d2 -Y
-regS
-_regS	ds.b 1   ;stack
+
+	
 regPC
-_regPC	ds.w 1   ;a4 PC
-regP
+_regPC	ds.w 1   ;a2 PC
+
+regS
+	ds.b 1
+_regS	ds.b 1   ;a4 stack
+
+regP	ds.b 1
 VBDIFLAG	         ;same as regP
 _regP	ds.b 1   ;   -CCR
+
 IRQ	         ;I have to reserve it there because other it is 32-bit number (in GCC)
 _IRQ	ds.b 1
 
@@ -64,8 +77,8 @@ CD	equr a6 ;cycles counter down
 _pointer equr a1
 memory_pointer equr a5
 attrib_pointer equr a3
-stack_pointer equr a2
-PC6502	equr a4
+stack_pointer equr a4
+PC6502	equr a2
 
 
 ZFLAG	equr d5 ;we used it straight in shifting, because it is faster than move again
@@ -74,13 +87,13 @@ NFLAG	equr d3 ;
 CCR6502	equr d4 ;only carry is usable (Extended on 68000)
 A	equr d0
 X	equr d1
-Y	equr d2  ;$206 ;d2
+Y	equr d2
 
-;d6	contains usually adress where we are working
-;d7	contains is a working register
+;d6	contains usually adress where we are working or temporary value
+;d7	contains is a working register or adress
 
 
-LoHi  macro		;change order of lo and hi byte in d6
+LoHi  macro		;change order of lo and hi byte in d7 (adress)
       ror.w #8,d7
       endm
 
@@ -95,30 +108,16 @@ UPDATE_GLOBAL_REGS	macro
 	sub.l memory_pointer,PC6502
 	sub.l memory_pointer,stack_pointer
 	lea -$101(stack_pointer),stack_pointer
-	move.w stack_pointer,d6
-	lea _regP(pc),a1
-	move.w PC6502,-(a1) ;_PC6502
-	move.b d6,-(a1) ;regS
-	move.b Y,-(a1) ;regY
-	move.b X,-(a1) ;regX
-	move.b A,-(a1) ;regA
+	movem.w d0-d2/a2/a4,regA ;d0-d2 (A,X,Y) a2-a4 (regPC and regS)
 	endm
 
 ;#define UPDATE_LOCAL_REGS PC=regPC;S=regS;A=regA;X=regX;Y=regY
 UPDATE_LOCAL_REGS macro
-	lea _regA(pc),a1
-	clr.w A
-	move.b (a1)+,A ;A register
-	clr.w X
-	move.b (a1)+,X ;X
-	clr.w Y
-	move.b (a1)+,Y ;Y
-	clr.l d7
-	move.b (a1)+,d7 ;stack regS
+	movem.w regA,d0-d2/d6/d7 ;d0-d2 (A,X,Y) d6-d7 (regPC and regS)
 	lea $101(memory_pointer),stack_pointer
-	add.l d7,stack_pointer
-	move.w (a1)+,d7
+	add.w d7,stack_pointer
 	move.l memory_pointer,PC6502
+	move.w d6,d7 ;we are sure that higher half of d7 is zero, because stack pointer on A800 was just one byte
 	add.l d7,PC6502
 	endm
 
@@ -179,11 +178,6 @@ AAA:	dc.l 50
 _CPU_INIT:
 	movem.l a2/a3/d2,-(a7)  ;copy opcyc table
 	lea OPMODE_TABLE,a1
-	;move.l a1,d2 ;we need to start on a word adress
-	;add.l #4,d2
-	;and.l #$fffffc,d2
-	;move.l d2,a1
-	;lea OPCODE_TABLE,a1 ;3rd case of jump (mode, get, then this command)
 	lea MODE_TABLE2,a0 ;1st case of jump (mode)
 	lea MODE_TABLE1,a3 ;2nd case of jump (jump after mode (in put case it is instruction, if get then we will call get byte routine)
 	move.w #255,d0
@@ -217,18 +211,16 @@ COPY
 	beq.s WRITE_WRITE
 	cmp.l #opcode_9d,d2
 	beq.s WRITE_WRITE
-	;sub.l #JUMP_CODE+2,d2
 	move.l d2,(a1)+ ;write jump down
-	;addq.l #2,a1
 	bra.s NEXT
 WRITE_WRITE:
-	;sub.l #JUMP_CODE+2,d2
 	bset #31,d2
 	move.l d2,(a1)+ ;write jump down
-	;addq.l #2,a1
 
 NEXT:	dbf d0,COPY
 	movem.l (a7)+,a2/a3/d2
+	lea OPMODE_TABLE,a0
+	
 	rts
 
 
@@ -369,7 +361,12 @@ ConvertSTATUS_RegP macro
 	tst.b ZFLAG
 	beq.s .SETZ\@   ;is there beware! reverse compare is ok
 	bclr #Z_FLAGB,d6
-.SETZ\@
+.SETZ\@	bclr #V_FLAGB,d6
+	swap ZFLAG
+	tst.b ZFLAG
+	beq.s .UNSETV\@
+	bset #V_FLAGB,d6
+.UNSETV\@	
 	endm
 
 ConvertRegP_STATUS macro
@@ -379,6 +376,11 @@ ConvertRegP_STATUS macro
 	bne.s .SETC\@
 	clr.w CCR6502
 .SETC\@	clr.b ZFLAG
+	btst #V_FLAGB,d6
+	beq.s .SETV\@
+	not.b ZFLAG
+.SETV\@	swap ZFLAG
+	clr.b ZFLAG
 	btst #Z_FLAGB,d6
 	bne.s .SETZ\@ ;reverse is ok
 	not.b ZFLAG
@@ -447,7 +449,7 @@ _CPUGET:
 
 NMI:
 _NMI:
-	movem.l d0-d7/a0-a6,-(a7)
+	movem.l d2-d7/a2-a6,-(a7)
 	lea _memory,memory_pointer
 	move.w _regPC,d6 ;we will put adress on stack of 6502
 	ror.w #8,d6
@@ -468,10 +470,7 @@ _NMI:
 	move.l stack_pointer,d7 ;put stack
 	sub.l memory_pointer,d7
 	move.b d7,_regS
-	movem.l (a7)+,d0-d7/a0-a6
-	ifd SERVER
-	move.w #1,WAIT
-	endc
+	movem.l (a7)+,d2-d7/a2-a6
 	rts
 
   	;UBYTE S = regS;
@@ -497,7 +496,7 @@ _NMI:
 ;*/
 
 	section data
-CYCLES:
+_cycles:
 	dc.w 7, 2, 0, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6
   	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
   	dc.w 6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6
@@ -654,8 +653,8 @@ MODE_TABLE1:
       	dc.l opcode_a4, opcode_a5, opcode_a6, opcode_a7
 	;     ldy        lda        ldx         lax
 
-      	dc.l opcode_a8, opcode_a9,     opcode_aa, opcode_ab
- 	;     tay         lda         tax      illegal
+      	dc.l opcode_a8, opcode_a9,     opcode_aa, DIRECT
+ 	;     tay         lda         tax          oal
 
       	dc.l opcode_ac, opcode_ad, opcode_ae, opcode_af
 	;      ldy         lda        ldx        lax
@@ -673,7 +672,7 @@ MODE_TABLE1:
 	;       ldy        lda         ldx           lax
 
       	dc.l opcode_c0, opcode_c1, opcode_c2, opcode_c3
-	;    cpy          cmp         nop        illegal
+	;    cpy          cmp         nop       dcm
 
       	dc.l opcode_c4, opcode_c5, opcode_c6, opcode_c7
 	;     cpy         cmp       dec         illegal
@@ -702,7 +701,7 @@ MODE_TABLE1:
       	dc.l opcode_e4, opcode_e5, opcode_e6, opcode_e7
 	;     cpx        sbc          inc        illegal
 
-      	dc.l opcode_e8, opcode_e9,opcode_ea, opcode_eb
+      	dc.l opcode_e8, opcode_e9,opcode_ea,  opcode_eb
 	;      inx       sbc           nop      illegal
 
       	dc.l opcode_ec, opcode_ed, opcode_ee, opcode_ef
@@ -723,126 +722,126 @@ MODE_TABLE1:
 
 
 MODE_TABLE2:
-	dc.l opcode_00, INDIRECT_X, opcode_02, opcode_03
-	;     brk         ora        illegal     illegal
+	dc.l opcode_00, INDIRECT_X, opcode_02, INDIRECT_X
+	;     brk         ora        illegal     aso
 
-	dc.l opcode_04,  ZPAGE,      ZPAGE,   opcode_07
-	;     nop         ora          asl        nop
+	dc.l opcode_04,  ZPAGE,      ZPAGE,      ZPAGE
+	;     nop         ora          asl       aso
 
-	dc.l opcode_08,  DIRECT,   opcode_0a, opcode_0b
-	;     php         ora          asla     illegal
+	dc.l opcode_08,  DIRECT,   opcode_0a,   DIRECT
+	;     php         ora          asla      aso
 
-	dc.l opcode_0c, ABSOLUTE,   ABSOLUTE,  opcode_0f
-	;     nop 3       ora          asl      illegal
+	dc.l opcode_0c, ABSOLUTE,   ABSOLUTE,  ABSOLUTE
+	;     nop 3       ora          asl      aso
 
-	dc.l opcode_10, INDIRECT_Y, opcode_12, opcode_13
-	;     bpl         ora        illegal    illegal
+	dc.l opcode_10, INDIRECT_Y, opcode_12, INDIRECT_Y
+	;     bpl         ora        illegal     aso
 
-	dc.l opcode_14,   ZPAGE_X,   ZPAGE_X,  opcode_17
-	;     nop         ora         asl       illegal
+	dc.l opcode_14,   ZPAGE_X,   ZPAGE_X,  ZPAGE_X
+	;     nop         ora         asl       aso
 
-	dc.l opcode_18, ABSOLUTE_Y, opcode_1a, opcode_1b
-	;     clc         ora         nop       illegal
+	dc.l opcode_18, ABSOLUTE_Y, opcode_1a, ABSOLUTE_Y
+	;     clc         ora         nop       aso
 
-      	dc.l opcode_1c, ABSOLUTE_X,ABSOLUTE_X, opcode_1f
-	;     nop         ora        asl        illegal
+      	dc.l opcode_1c, ABSOLUTE_X,ABSOLUTE_X, ABSOLUTE_X
+	;     nop         ora        asl        aso
 
-      	dc.l opcode_20, INDIRECT_X,opcode_22,  opcode_23
-	;     jsr         and       illegal     illegal
+      	dc.l opcode_20, INDIRECT_X,opcode_22,  INDIRECT_X
+	;     jsr         and       illegal     rla
 
-      	dc.l ZPAGE,      ZPAGE,    ZPAGE,      opcode_27
-	;     bit         and        rol        illegal
+      	dc.l ZPAGE,      ZPAGE,    ZPAGE,      ZPAGE
+	;     bit         and        rol         rla
 
-      	dc.l opcode_28, DIRECT,    opcode_2a,  opcode_2b
-	;     plp        and         rolA      illegal
+      	dc.l opcode_28, DIRECT,    opcode_2a,  DIRECT
+	;     plp        and         rolA       rla
 
-       	dc.l ABSOLUTE, ABSOLUTE,   ABSOLUTE,   opcode_2f
-	;      bit       and         rol       illegal
+       	dc.l ABSOLUTE, ABSOLUTE,   ABSOLUTE,   ABSOLUTE
+	;      bit       and         rol        rla
 
-      	dc.l opcode_30, INDIRECT_Y, opcode_32, opcode_33
-	;      bmi       and        illegal     illegal
+      	dc.l opcode_30, INDIRECT_Y, opcode_32, INDIRECT_Y
+	;      bmi       and        illegal     rla
 
-      	dc.l opcode_34, ZPAGE_X,    ZPAGE_X, opcode_37
-	;     nop        and         rol       illegal
+      	dc.l opcode_34, ZPAGE_X,    ZPAGE_X,   ZPAGE_X
+	;     nop        and         rol        rla
 
-      	dc.l opcode_38, ABSOLUTE_Y, opcode_3a, opcode_3b
-	;      sec        and        nop        illegal
+      	dc.l opcode_38, ABSOLUTE_Y, opcode_3a, ABSOLUTE_Y
+	;      sec        and        nop        rla
 
-      	dc.l opcode_3c, ABSOLUTE_X, ABSOLUTE_X, opcode_3f
-	;      nop         and       rol        illegal
+      	dc.l opcode_3c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
+	;      nop         and       rol         rla
 
-      	dc.l opcode_40, INDIRECT_X, opcode_42, opcode_43
-            ;      rti        eor        illegal   illegal
+      	dc.l opcode_40, INDIRECT_X, opcode_42, INDIRECT_X
+            ;      rti        eor        illegal    lse
 
-      	dc.l opcode_44,  ZPAGE,    ZPAGE,      opcode_47
-	;      nop        eor        lsr       illegal
+      	dc.l opcode_44,  ZPAGE,    ZPAGE,      ZPAGE
+	;      nop        eor        lsr       lse
 
-      	dc.l opcode_48, DIRECT,     opcode_4a, opcode_4b
-      	;      pha        eor        lsrA       illegal
+      	dc.l opcode_48, DIRECT,     opcode_4a, DIRECT
+      	;      pha        eor        lsrA       alr
 
-	dc.l opcode_4c, ABSOLUTE, ABSOLUTE,    opcode_4f
-	;      jmp        eor        lsr       illegal
+	dc.l opcode_4c, ABSOLUTE, ABSOLUTE,    ABSOLUTE
+	;      jmp        eor        lsr        lse
 
-      	dc.l opcode_50, INDIRECT_Y,  opcode_52, opcode_53
-	;      bvc       eor        illegal     illegal
+      	dc.l opcode_50, INDIRECT_Y,  opcode_52, INDIRECT_Y
+	;      bvc       eor        illegal     lse
 
-      	dc.l opcode_54, ZPAGE_X,  ZPAGE_X, opcode_57
-	;      nop        eor      lsr       illegal
+      	dc.l opcode_54, ZPAGE_X,  ZPAGE_X,  ZPAGE_X
+	;      nop        eor      lsr        lse
 
-      	dc.l opcode_58, ABSOLUTE_Y, opcode_5a, opcode_5b
-	;      cli        eor      nop         illegal
+      	dc.l opcode_58, ABSOLUTE_Y, opcode_5a, ABSOLUTE_Y
+	;      cli        eor      nop         lse
 
-      	dc.l opcode_5c, ABSOLUTE_X, ABSOLUTE_X, opcode_5f
-	;      nop        eor        lsr        illegal
+      	dc.l opcode_5c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
+	;      nop        eor        lsr         lse
 
-      	dc.l opcode_60, INDIRECT_X, opcode_62, opcode_63
-	;      rts        adc        illegal    illegal
+      	dc.l opcode_60, INDIRECT_X, opcode_62, INDIRECT_X
+	;      rts        adc        illegal     rra
 
-      	dc.l opcode_64, ZPAGE,      ZPAGE,     opcode_67
-	;      nop        adc        ror        illegal
+      	dc.l opcode_64, ZPAGE,      ZPAGE,     ZPAGE
+	;      nop        adc        ror         rra
 
-      	dc.l opcode_68, DIRECT,   opcode_6a,  opcode_6b
-	;      pla       adc         rorA       illegal
+      	dc.l opcode_68, DIRECT,   opcode_6a,  DIRECT
+	;      pla       adc         rorA      arr
 
-      	dc.l opcode_6c, ABSOLUTE, ABSOLUTE,   opcode_6f
-	;    jmp (abcd)   adc      ror          illegal
+      	dc.l opcode_6c, ABSOLUTE, ABSOLUTE,   ABSOLUTE
+	;    jmp (abcd)   adc      ror          rra
 
-      	dc.l opcode_70, INDIRECT_Y, opcode_72, opcode_73
-	;      bvs        adc      illegal    illegal
+      	dc.l opcode_70, INDIRECT_Y, opcode_72, INDIRECT_Y
+	;      bvs        adc      illegal     rra
 
-      	dc.l opcode_74,  ZPAGE_X,   ZPAGE_X,   opcode_77
-	;      nop         adc       ror       illegal
+      	dc.l opcode_74,  ZPAGE_X,   ZPAGE_X,   ZPAGE_X
+	;      nop         adc       ror       rra
 
-      	dc.l opcode_78, ABSOLUTE_Y, opcode_7a, opcode_7b
-	;     SEI          adc        illegal   illegal
+      	dc.l opcode_78, ABSOLUTE_Y, opcode_7a, ABSOLUTE_Y
+	;     SEI          adc        illegal   rra
 
-      	dc.l opcode_7c, ABSOLUTE_X, ABSOLUTE_X, opcode_7f
-	;     nop          adc       ror        illegal
+      	dc.l opcode_7c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
+	;     nop          adc       ror        rra
 
-      	dc.l opcode_80, INDIRECT_X, opcode_82, opcode_83
-	;     nop          sta       nop        illegal
+      	dc.l opcode_80, INDIRECT_X, opcode_82, INDIRECT_X
+	;     nop          sta       nop        axs
 
-      	dc.l ZPAGE,     ZPAGE,      ZPAGE,     opcode_87
-	;     sty	       sta       stx        illegal
+      	dc.l ZPAGE,     ZPAGE,      ZPAGE,     ZPAGE
+	;     sty	       sta       stx        axs
 
-      	dc.l opcode_88, opcode_89, opcode_8a, opcode_8b
-	;     dey          nop        txa       illegal
+      	dc.l opcode_88, opcode_89, opcode_8a, DIRECT
+	;     dey          nop        txa       xaa
 
-      	dc.l ABSOLUTE,  ABSOLUTE,  ABSOLUTE, opcode_8f
-	;     sty	       sta       stx        illegal
+      	dc.l ABSOLUTE,  ABSOLUTE,  ABSOLUTE, ABSOLUTE
+	;     sty	       sta       stx        axs
 
-      	dc.l opcode_90, INDIRECT_Y, opcode_92, opcode_93
-	;      bcc         sta       illegal    illegal
+      	dc.l opcode_90, INDIRECT_Y, opcode_92, INDIRECT_Y
+	;      bcc         sta       illegal    axs
 
-      	dc.l ZPAGE_X,   ZPAGE_X,   ZPAGE_Y, opcode_97
-	;      sty       sta         stx        illegal
+      	dc.l ZPAGE_X,   ZPAGE_X,   ZPAGE_Y, ZPAGE_Y
+	;      sty       sta         stx        axs
 
 
-      	dc.l opcode_98, ABSOLUTE_Y, opcode_9a, opcode_9b
-	;     tya        sta         txs         illegal
+      	dc.l opcode_98, ABSOLUTE_Y, opcode_9a, ABSOLUTE_Y
+	;     tya        sta         txs         xaa
 
-      	dc.l opcode_9c, ABSOLUTE_X, opcode_9e, opcode_9f
-	;     illegal     sta         ilegal     illegal
+      	dc.l opcode_9c, ABSOLUTE_X, ABSOLUTE, ABSOLUTE
+	;     illegal     sta        mkx     mka
 
       	dc.l DIRECT,    INDIRECT_X, DIRECT,    INDIRECT_X
 	;      ldy         lda        ldx        lax
@@ -862,65 +861,65 @@ MODE_TABLE2:
       	dc.l ZPAGE_X,  ZPAGE_X,    ZPAGE_Y,    ZPAGE_Y
 	;      ldy        lda         ldx       lax
 
-      	dc.l opcode_b8, ABSOLUTE_Y, opcode_ba, opcode_bb
-	;      clv         lda        tsx        illegal
+      	dc.l opcode_b8, ABSOLUTE_Y, opcode_ba, ABSOLUTE_Y
+	;      clv         lda        tsx        axa
 
       	dc.l ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_Y,  ABSOLUTE_Y
 	;       ldy        lda         ldx           lax
 
-      	dc.l DIRECT,    INDIRECT_X, opcode_c2, opcode_c3
-	;    cpy          cmp         nop        illegal
+      	dc.l DIRECT,    INDIRECT_X, opcode_c2, INDIRECT_X
+	;    cpy          cmp         nop        dcm
 
-      	dc.l ZPAGE,       ZPAGE,    ZPAGE,     opcode_c7
-	;     cpy         cmp       dec         illegal
+      	dc.l ZPAGE,       ZPAGE,    ZPAGE,     ZPAGE
+	;     cpy         cmp       dec         dcm
 
-      	dc.l opcode_c8, DIRECT,  opcode_ca, opcode_cb
-	;      iny       cmp       dex         illegal
+      	dc.l opcode_c8, DIRECT,  opcode_ca,    DIRECT
+	;      iny       cmp       dex          sax
 
-      	dc.l ABSOLUTE,  ABSOLUTE, ABSOLUTE, opcode_cf
-	;     cpy        cmp        dec        illegal
+      	dc.l ABSOLUTE,  ABSOLUTE, ABSOLUTE, ABSOLUTE
+	;     cpy        cmp        dec       dcm
 
-      	dc.l opcode_d0, INDIRECT_Y, opcode_d2, opcode_d3
-	;      bne       cmp         escrts      illegal
+      	dc.l opcode_d0, INDIRECT_Y, opcode_d2, INDIRECT_Y
+	;      bne       cmp         escrts      dcm
 
-      	dc.l opcode_d4, ZPAGE_X,    ZPAGE_X,   opcode_d7
-	;     nop         cmp      dec         illegal
+      	dc.l opcode_d4, ZPAGE_X,    ZPAGE_X,   ZPAGE_X
+	;     nop         cmp      dec          dcm
 
+      	dc.l opcode_d8, ABSOLUTE_Y, opcode_da, ABSOLUTE_Y
+	;     cld         cmp          nop      dcm
 
-      	dc.l opcode_d8, ABSOLUTE_Y, opcode_da, opcode_db
-	;     cld         cmp          nop     illegal
+      	dc.l opcode_dc, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
+	;      nop         cmp        dec        dcm
 
-      	dc.l opcode_dc, ABSOLUTE_X, ABSOLUTE_X, opcode_df
-	;      nop         cmp        dec       illegal
+      	dc.l DIRECT,    INDIRECT_X, opcode_e2, INDIRECT_X
+ 	;     cpx         sbc        nop         ins
 
-      	dc.l DIRECT,    INDIRECT_X, opcode_e2, opcode_e3
- 	;     cpx         sbc        nop         nop
+      	dc.l ZPAGE,    ZPAGE,       ZPAGE,       ZPAGE
+	;     cpx        sbc          inc         ins
 
-      	dc.l ZPAGE,    ZPAGE,       ZPAGE,     opcode_e7
-	;     cpx        sbc          inc        illegal
+      	dc.l opcode_e8, DIRECT,     opcode_ea, DIRECT
+	;      inx       sbc           nop      sbc
 
-      	dc.l opcode_e8, DIRECT,     opcode_ea, opcode_eb
-	;      inx       sbc           nop      illegal
+      	dc.l ABSOLUTE,  ABSOLUTE,   ABSOLUTE, ABSOLUTE
+	;       cpx      sbc          inc       ins
 
-      	dc.l ABSOLUTE,  ABSOLUTE,   ABSOLUTE, opcode_ef
-	;       cpx      sbc          inc         illegal
-
-	dc.l opcode_f0, INDIRECT_Y, opcode_f2, opcode_f3
+	dc.l opcode_f0, INDIRECT_Y, opcode_f2, INDIRECT_Y
 	;     beq          sbc        esc#ab     illegal
 
-      	dc.l opcode_f4, ZPAGE_X,     ZPAGE_X,  opcode_f7
-	;     nop          sbc        inc       illegal
+      	dc.l opcode_f4, ZPAGE_X,     ZPAGE_X,  ZPAGE_X
+	;     nop          sbc        inc        ins
 
-      	dc.l opcode_f8, ABSOLUTE_Y, opcode_fa, opcode_fb
-	;     sed         sbc         nop         illegal
+      	dc.l opcode_f8, ABSOLUTE_Y, opcode_fa, ABSOLUTE_Y
+	;     sed         sbc         nop        ins
 
-      	dc.l opcode_fc, ABSOLUTE_X, ABSOLUTE_X, opcode_ff
-	;     nop         sbc          inc        esc#ab
-
+      	dc.l opcode_fc, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
+	;     nop         sbc          inc        ins
 
 
 
 	section text
+
+FIELDS_POINTERS:	ds.l 3
 
 _GO: ;cycles (d0)
 
@@ -945,8 +944,11 @@ _GO: ;cycles (d0)
 ;   2. The timing of the IRQs are not that critical.
 ;*/
 
-	movem.l d0-d7/a0-a6,-(a7)
-	move.w 66(a7),CD ;write how much cycles (should be 6)
+	move.l 4(a7),d0 ;write how many cycles
+	tst.w _wsync_halt+2
+	bne FAST_FINISH
+	movem.l d2-d7/a2-a6,-(a7)
+	move.l d0,a6 ;now really use it
 	lea _memory,memory_pointer
 	UPDATE_LOCAL_REGS
 	ConvertRegP_STATUS
@@ -954,6 +956,7 @@ _GO: ;cycles (d0)
 	lea _attrib,attrib_pointer
 	tst.b _IRQ
 	beq GET_FIRST_INSTRUCTION
+_PRERUSENI:
 	move.b _regP,d6
 	and.b #I_FLAG,d6 ;is interrupt active
 	bne GET_FIRST_INSTRUCTION ;yes, no other interrupt
@@ -961,7 +964,6 @@ _AIRQ:	move.w _regPC,d7     ;UAAAA :)	;write back addr
 	LoHi
 	move.w d7,-(stack_pointer)
 	move.b _regP,-(stack_pointer)
-	;PHP
 	SetI
 	clr.l d7
 	move.w (memory_pointer,$fffe.l),d7
@@ -969,17 +971,19 @@ _AIRQ:	move.w _regPC,d7     ;UAAAA :)	;write back addr
 	move.l d7,PC6502
 	add.l memory_pointer,PC6502
 	clr.b _IRQ ;clear interrupt.....
-	ifd SERVER
-	move.w #-1,WAIT
-	endc
 	bra GET_FIRST_INSTRUCTION
 
+FAST_FINISH:
+	clr.l d0 ;returned value
+	rts
+
 END_OF_CYCLE:
-	;move.l (a7)+,a1
 	ConvertSTATUS_RegP
  	move.b d6,_regP
 	UPDATE_GLOBAL_REGS
-	movem.l (a7)+,d0-d7/a0-a6
+	move.l CD,d0 ;returned value
+UNUSUAL_END:
+	movem.l (a7)+,d2-d7/a2-a6
 	rts
 ADRESA:	dc.l 1
 
@@ -1016,7 +1020,7 @@ ZPAGE_X
 	move.l 4(a0,d7.l*8),d6
 	move.b (PC6502)+,d7
 	add.b X,d7
-	subq.w #2,CD
+	subq.l #2,CD
 	bra.s TEST
 
 
@@ -1024,7 +1028,7 @@ ZPAGE_Y
 	move.l 4(a0,d7.l*8),d6
 	move.b (PC6502)+,d7
 	add.b Y,d7
-	subq.w #2,CD
+	subq.l #2,CD
 	bra.s TEST
 
 
@@ -1033,7 +1037,7 @@ ABSOLUTE_Y
 	move.w (PC6502)+,d7
 	ror.w #8,d7
 	add.w Y,d7
-	subq.w #2,CD
+	subq.l #2,CD
 	bra.s TEST
 
 INDIRECT_Y
@@ -1042,7 +1046,7 @@ INDIRECT_Y
 	move.w (memory_pointer,d7.l),d7
 	ror.w #8,d7 ;swap bytes
 	add.w Y,d7
-	subq.w #4,CD
+	subq.l #4,CD
 	bra.s TEST
 
 ABSOLUTE_X
@@ -1050,7 +1054,7 @@ ABSOLUTE_X
 	move.w (PC6502)+,d7
 	ror.w #8,d7
 	add.w X,d7 ;add x to
-	subq.w #2,CD
+	subq.l #2,CD
 	bra.s TEST
 
 INDIRECT_X
@@ -1059,21 +1063,21 @@ INDIRECT_X
 	add.b X,d7
 	move.w (memory_pointer,d7.l),d7
 	ror.w #8,d7
-	subq.w #4,CD
+	subq.l #4,CD
 	bra.s TEST
 
 ABSOLUTE:
 	move.l 4(a0,d7.l*8),d6
 	move.w (PC6502)+,d7
 	ror.w #8,d7 ;d7 contains reversed value
-	subq.w #2,CD
+	subq.l #2,CD
 	bra.s TEST
 
 
 ZPAGE:
 	move.l 4(a0,d7.l*8),d6
 	move.b (PC6502)+,d7 ;d6 contains offset
-	subq.w #1,CD
+	subq.l #1,CD
 	bra.s TEST
 
 DIRECT:
@@ -1081,7 +1085,7 @@ DIRECT:
 	move.b (PC6502)+,d6
 	jmp (a1)
 
-TEST:	bclr #31,d6  ;get highest byte away
+TEST:	bclr #31,d6  ;get highest bit away
 	bne.s JUST_WRITE
 	move.l d6,a1
 GONEBYTE:	;get one byte from memory
@@ -1104,7 +1108,7 @@ PUTONEBYTE_FL:
 PUTONEBYTE:	tst.b (attrib_pointer,d7.l)
 	bne.s .Putbyte
 	move.b d6,(memory_pointer,d7.l)
-            goto NEXTCHANGE_WITHOUT
+           	goto NEXTCHANGE_WITHOUT
 
 .Putbyte
 	bra A800PUTB
@@ -1119,8 +1123,7 @@ PUTONEBYTE:	tst.b (attrib_pointer,d7.l)
 ;#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[addr+1]<<8)+memory[addr]+(UWORD)Y;
 ;#define	ZPAGE_X	addr=(memory[PC++]+X)&0xff;
 ;#define	ZPAGE_Y	addr=(memory[PC++]+Y)&0xff;
-
-BB
+	
 
 
 opcode_8d: ;/* STA abcd */
@@ -1227,6 +1230,7 @@ opcode_cc: ;/* CPY abcd */
 	move.b Y,NFLAG
 	bra.s COMPARE
 
+instruction_cmp:
 opcode_c1: ;/* CMP (ab,x) */
 opcode_c5: ;/* CMP ab */
 opcode_c9: ;/* CMP #ab */
@@ -1287,54 +1291,8 @@ NEXTCHANGE:	move.b d6,ZFLAG
 NEXTCHANGE_WITHOUT:
 
 	ifd C_BUGGING
-	tst.w CD
-	bmi ENDGO ;should be .S
-	endc
-
-	ifd SERVER
-	UPDATE_GLOBAL_REGS
-	ConvertSTATUS_RegP
-	move.b d6,_regP
-	tst.w WAIT
-	bne STRAIGHT_GO ;if interrupt is active we won't test and will run until the end of interrupt is reached
-	lea $400000,a1
-.WAIT_FOR_DATA:
-	cmp.l #$12345678,-16(a1)
-	bne.s .WAIT_FOR_DATA
-	move.b _regP,d6
-	cmp.b -1(a1),d6
-	bne.s .PRINT_OUT
-	move.b _regS,d6
-	cmp.b -2(a1),d6
-	bne.s .PRINT_OUT
-	move.b _regA,d6
-	cmp.b -3(a1),d6
-	bne.s .PRINT_OUT
-	move.b _regX,d6
-	cmp.b -4(a1),d6
-	bne.s .PRINT_OUT
-	move.b _regY,d6
-	cmp.b -5(a1),d6
-	bne.s .PRINT_OUT
-	move.w _regPC,d6
-	cmp.w -8(a1),d6
-	bne.s .PRINT_OUT
-	bra CONTINUE
-
-
-.PRINT_OUT:
-
-      movem.l a0-a6,-(a7)
-      CPU_GetStatus
-      jsr _tisk /*in atari c*/
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-
-CONTINUE:   lea $400000,a1
-	move.l #'A800',-16(a1)
-
-STRAIGHT_GO: ;interrupt is active, dont try trace....
-      UPDATE_LOCAL_REGS
+	tst.l CD
+	ble ENDGO ;should be .S
 	endc
 
 	ifd C_BUGGING
@@ -1348,13 +1306,14 @@ _ADRESA:	nop
 	endc
 	endc
 
-CONT:	;move.l a1,-(a7)
-            subq.w #2,CD
-	tst.w CD
-	bmi.s ENDGO
+CONT:	
+            subq.l #2,CD
+	tst.l CD
+	ble.s ENDGO
+
 GET_FIRST_INSTRUCTION:
 ****************************************
-	ifd BREAKING		following block of code allows you to enter
+	ifd MONITOR_BREAK	following block of code allows you to enter
 	move ccr,-(sp)		a break address in monitor
 	move.l PC6502,d7
 	sub.l memory_pointer,d7
@@ -1362,7 +1321,7 @@ GET_FIRST_INSTRUCTION:
 	bne.s   .get_first
 	move.b #$ff,d7
 	move (sp)+,ccr
-          bsr odskoc_si		on break monitor is invoked
+	bsr odskoc_si		on break monitor is invoked
 	move ccr,-(sp)
 
 .get_first
@@ -1371,7 +1330,6 @@ GET_FIRST_INSTRUCTION:
 ****************************************
 	clr.l d7
 	move.b (PC6502)+,d7
-	;move.w 4(a0,d7.l*8),d6
 JUMPMODE:	jmp ([a0,d7.l*8])
 ENDGO: 	bra END_OF_CYCLE  ;the end of cycle
 
@@ -1463,7 +1421,7 @@ opcode_4c: ;/* JMP abcd */
       LoHi ;(in d7 adress where we want to jump)
       lea (memory_pointer,d7.l),PC6502
       ;add.l d7,PC6502
-      subq.w #4,CD
+      subq.l #4,CD
       goto NEXTCHANGE_WITHOUT
 
 
@@ -1471,17 +1429,16 @@ opcode_60: ;/* RTS */
       move.w (stack_pointer)+,d7
       LoHi
       lea 1(memory_pointer,d7.l),PC6502
-      ;addq.l #1,PC6502
-      subq.w #4,CD
+      subq.l #4,CD
       goto NEXTCHANGE_WITHOUT
 
 opcode_50: ;/* BVC */
-	btst #V_FLAGB,_regP
+	btst #16,ZFLAG ;V_FLAGB,_regP - exactly
 	beq.s SOLVE
 	bra.s NOTHING
 
 opcode_70: ;/* BVS */
-	btst #V_FLAGB,_regP
+	btst #16,ZFLAG ;V_FLAGB,_regP - exactly
 	bne.s SOLVE
 	bra.s NOTHING
 
@@ -1501,17 +1458,15 @@ opcode_2c: ;/* BIT abcd */
 	move.b d6,NFLAG
 	btst #V_FLAGB,d6
 	beq.s .UNSET
-	bset #V_FLAGB,_regP
+	bset #16,ZFLAG
 	move.b A,ZFLAG
 	and.b NFLAG,ZFLAG
 	bra NEXTCHANGE_WITHOUT
 .UNSET:
-	bclr #V_FLAGB,_regP
+	bclr #16,ZFLAG ;exactly V_FLAGB,_regP
 	move.b A,ZFLAG
 	and.b NFLAG,ZFLAG
 	bra NEXTCHANGE_WITHOUT
-
-
 
 opcode_40: ;/* RTI */
 _RTI:
@@ -1519,10 +1474,7 @@ _RTI:
       move.w (stack_pointer)+,d7
       LoHi
       lea (memory_pointer,d7.l),PC6502
-      subq.w #4,CD
-      ifd SERVER
-      clr.w WAIT
-      endc
+      subq.l #4,CD
       goto NEXTCHANGE_WITHOUT
 
 
@@ -1559,11 +1511,12 @@ adc:
 	move.w CCR6502,CCR
 	addx.b d6,A ;data are added with carry (in 68000 Extended bit in this case)
 	move.w CCR,CCR6502
-	svs d6
-	and.b #V_FLAG,d6
-*	and.b #-V_FLAG,_regP
-	and.b #~V_FLAG,_regP
-	or.b d6,_regP
+	svs ZFLAG
+	swap ZFLAG
+	;and.b #V_FLAG,d6
+	;*	and.b #-V_FLAG,_regP
+	;and.b #~V_FLAG,_regP
+	;or.b d6,_regP
 	bra NEXTCHANGE_A
 
 
@@ -1607,6 +1560,7 @@ BDC_ADC:
 
 opcode_e1: ;/* SBC (ab,x) */
 opcode_e5: ;/* SBC ab */
+opcode_eb: ;/* SBC #ab [unofficial] */
 opcode_e9: ;/* SBC #ab */
 opcode_ed: ;/* SBC abcd */
 opcode_f1: ;/* SBC (ab),y */
@@ -1637,12 +1591,13 @@ sbc:
 	move.w CCR6502,CCR
 	subx.b d6,A
 	move.w CCR,CCR6502
-	svs d6
+	svs ZFLAG
+	swap ZFLAG
 	not.w CCR6502
-	and.b #V_FLAG,d6
-*	and.b #-V_FLAG,_regP
-	and.b #~V_FLAG,_regP
-	or.b d6,_regP
+	;and.b #V_FLAG,d6
+	;*	and.b #-V_FLAG,_regP
+	;and.b #~V_FLAG,_regP
+	;or.b d6,_regP
 	bra NEXTCHANGE_A
 
 
@@ -1697,26 +1652,26 @@ BDC_SBC:
 
 opcode_68: ;/* PLA */
       move.b (stack_pointer)+,A
-      subq.w #1,CD
+      subq.l #1,CD
       bra NEXTCHANGE_A
 
 
 opcode_08: ;/* PHP */
       PHP
-      subq.w #1,CD
+      subq.l #1,CD
       bra NEXTCHANGE_WITHOUT
 
 
 opcode_48: ;/* PHA */
       move.b A,-(stack_pointer)
-      subq.w #1,CD
+      subq.l #1,CD
       bra NEXTCHANGE_WITHOUT
 
 
 
 opcode_28: ;/* PLP */
       PLP
-      subq.w #1,CD
+      subq.l #1,CD
 	bra NEXTCHANGE_WITHOUT
 
 opcode_18: ;/* CLC */
@@ -1727,9 +1682,6 @@ opcode_38: ;/* SEC */
 	moveq.w #-1,CCR6502
 	bra NEXTCHANGE_WITHOUT
 
-opcode_58: ;/* CLI */
-	ClrI
-	bra NEXTCHANGE_WITHOUT
 
 
 opcode_d8: ;/* CLD */
@@ -1737,16 +1689,34 @@ opcode_d8: ;/* CLD */
 	bra NEXTCHANGE_WITHOUT
 
 opcode_b8: ;/* CLV */
-	bclr.b #V_FLAGB,_regP
+	bclr #16,ZFLAG ;exactly - V_FLAGB,_regP
 	bra NEXTCHANGE_WITHOUT
 
 opcode_6c: ;/* JMP (abcd) */
+_SKOK:
+      	subq.l #5,CD ;this jump takes five cycles
       	move.w (PC6502)+,d7
       	LoHi
+	ifd P65C02
       	move.w (memory_pointer,d7.l),d7
       	LoHi
       	lea (memory_pointer,d7.l),PC6502
-      	subq.w #5,CD
+	else
+	;/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
+      	cmp.b #$ff,d7
+      	beq.s .PROBLEM_FOUND ;when problematic jump is found
+     	move.w (memory_pointer,d7.l),d7
+      	LoHi
+      	lea (memory_pointer,d7.l),PC6502
+	bra NEXTCHANGE_WITHOUT
+.PROBLEM_FOUND:
+	move.l d7,d6 ;we have to use both of them
+	clr.b d7 ;instead of reading right this adress, we read adress at this start of page
+	move.b (memory_pointer,d7.l),d7
+	LoHi
+	move.b (memory_pointer,d6.l),d7
+      	lea (memory_pointer,d7.l),PC6502
+	endc
 	bra NEXTCHANGE_WITHOUT
 
 opcode_78: ;/* SEI */
@@ -1771,239 +1741,22 @@ opcode_ba: ;/* TSX */
       	bra NEXTCHANGE
 
 
-
-opcode_0c: ;/* NOP (3 bytes) [unofficial] */
-opcode_3c:
-opcode_5c:
-opcode_7c:
-opcode_dc:
-opcode_fc:
-
-      addq.l #1,PC6502
-      subq.w #3,CD
-
-
-
-opcode_04: ;/* NOP (2 bytes) [unofficial] */
-opcode_14:
-opcode_1c:
-opcode_34:
-opcode_44:
-opcode_54:
-opcode_64:
-opcode_74:
-opcode_80:
-opcode_82:
-opcode_89:
-opcode_c2:
-opcode_d4:
-opcode_e2:
-opcode_f4:
-
-      addq.l #1,PC6502
-      subq.w #3,CD
-
-opcode_1a: ;/* NOP (1 byte) [unofficial] */
-opcode_3a:
-opcode_5a:
-opcode_7a:
-opcode_da:
-opcode_fa:
-opcode_ea: ;/* NOP */ ;oficial
-	goto NEXTCHANGE_WITHOUT
-
-opcode_d2: ;/* ESCRTS #ab (JAM) */
-      move.b (PC6502)+,d7
-      UPDATE_GLOBAL_REGS
-      movem.l a0-a6,-(a7)
-      CPU_GetStatus
-      move.l d7,-(a7)
-      jsr _Escape /*in atari c*/
-      addq.l #4,a7
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-      UPDATE_LOCAL_REGS
-      move.w (stack_pointer)+,d7
-      LoHi
-      lea (memory_pointer,d7.l),PC6502
-      addq.l #1,PC6502
-      bra GET_FIRST_INSTRUCTION
-
-opcode_f2: ;/* ESC #ab (JAM) */
-opcode_ff: ;/* ESC #ab */
-      move.b (PC6502)+,d7
-      UPDATE_GLOBAL_REGS
-      movem.l a0-a6,-(a7)
-      CPU_GetStatus
-      move.l d7,-(a7)
-      jsr _Escape
-      addq.l #4,a7
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-      UPDATE_LOCAL_REGS
-      bra GET_FIRST_INSTRUCTION
-
-
-
-
-opcode_a3: ;/* LAX (ind,x) [unofficial] */
-      ;INDIRECT_X
-      ;GetByte d7
-      move.b d7,A
-      move.b d7,X
-      move.b A,NFLAG
-      move.b A,ZFLAG
-      bra NEXTCHANGE_WITHOUT
-
-
-
-
-opcode_a7: ;/* LAX zpage [unofficial] */
-      ;ZPAGE
-      ;GetByte d7
-      move.b d7,A
-      move.b d7,X
-      move.b A,NFLAG
-      move.b A,ZFLAG
-      bra NEXTCHANGE_WITHOUT
-
-
-
-
-
-opcode_af: ;/* LAX absolute [unofficial] */
-      ;ABSOLUTE
-      ;GetByte d7
-      move.b d7,X
-      move.b d7,A
-      move.b A,NFLAG
-      move.b A,ZFLAG
-      bra NEXTCHANGE_WITHOUT
-
-
-
-opcode_b3: ;/* LAX (ind),y [unofficial] */
-      ;INDIRECT_Y
-      ;GetByte d7
-      move.b d7,A
-      move.b d7,X
-      move.b A,NFLAG
-      move.b A,ZFLAG
-      bra NEXTCHANGE_WITHOUT
-
-
-
-opcode_b7: ;/* LAX zpage,y [unofficial] */
-      ;ZPAGE_Y
-      ;GetByte d7
-      move.b d7,A
-      move.b d7,X
-      move.b A,NFLAG
-      move.b A,ZFLAG
-      bra NEXTCHANGE_WITHOUT
-
-opcode_bf: ;/* LAX absolute,y [unofficial] */
-      ;ABSOLUTE_Y
-      ;GetByte d7
-      move.b d7,A
-      move.b d7,X
-      move.b X,ZFLAG
-      move.b X,NFLAG
-      bra NEXTCHANGE_WITHOUT
-
-
-
-
-
-
-
-
-
-opcode_02:
-opcode_03:
-opcode_07:
-opcode_0b:
-opcode_0f:
-opcode_12:
-opcode_13:
-opcode_17:
-opcode_1b:
-opcode_1f:
-opcode_22:
-opcode_23:
-opcode_27:
-opcode_2b:
-opcode_2f:
-opcode_32:
-opcode_33:
-opcode_37:
-opcode_3b:
-opcode_3f:
-opcode_42:
-opcode_43:
-opcode_47:
-opcode_4b:
-opcode_4f:
-opcode_52:
-opcode_53:
-opcode_57:
-opcode_5b:
-opcode_5f:
-opcode_62:
-opcode_63:
-opcode_67:
-opcode_6b:
-opcode_6f:
-opcode_72:
-opcode_73:
-opcode_77:
-opcode_7b:
-opcode_7f:
-opcode_83:
-opcode_87:
-opcode_8b:
-opcode_8f:
-opcode_92:
-opcode_93:
-opcode_97:
-opcode_9b:
-opcode_9c:
-opcode_9e:
-opcode_9f:
-opcode_ab:
-opcode_b2:
-opcode_bb:
-opcode_c3:
-opcode_c7:
-opcode_cb:
-opcode_cf:
-opcode_d3:
-opcode_d7:
-opcode_db:
-opcode_df:
-opcode_e3:
-opcode_e7:
-opcode_eb:
-opcode_ef:
-opcode_f3:
-opcode_f7:
-opcode_fb:
-	;pea text(pc)
-	;move.w #9,-(a7)
-	;trap #1
-	;addq.l #1,ILEGALY
-	;illegal
-	bra NEXTCHANGE_WITHOUT
-ILEGALY:	dc.l 0
-text:	dc.b 'NEJAKA CHYBA TY BLBE'
-	even
-
-UPDATE_GLOBAL_REGS
-
-      ;printf ("*** Invalid Opcode %02x at address %04x\n",
-      ;	      memory[PC-1], PC-1);
-      ;ncycles = 0;
-      ;break;
+opcode_58: ;/* CLI */
+	ClrI
+	tst.b _IRQ  ;no IRQ continue, some routine comes, it should help in Lucasfilm Games or what
+	beq NEXTCHANGE_WITHOUT
+	move.l PC6502,d7
+_ZASTAV:	sub.l memory_pointer,d7
+	LoHi
+      	move.w d7,-(stack_pointer)
+      	PHP
+      	SetI
+      	move.w (memory_pointer,$fffe.l),d7
+      	LoHi
+      	move.l d7,PC6502
+      	add.l memory_pointer,PC6502
+      	clr.b _IRQ
+      	bra NEXTCHANGE_WITHOUT
 
 opcode_00: ;/* BRK */
       btst #I_FLAGB,_regP
@@ -2020,9 +1773,436 @@ opcode_00: ;/* BRK */
       LoHi
       move.l d7,PC6502
       add.l memory_pointer,PC6502
-      subq.w #5,CD
+      subq.l #5,CD
       bra NEXTCHANGE_WITHOUT
 
+opcode_0c: ;/* NOP (3 bytes) [unofficial] */ !RS! call it SKW (skip word)
+opcode_1c:
+opcode_3c: 
+opcode_5c:
+opcode_7c:
+opcode_9c: ;/* SKW [unofficial - skip word] */
+opcode_dc:
+opcode_fc:
+
+      addq.l #1,PC6502
+      subq.l #3,CD
+
+
+
+opcode_04: ;/* NOP (2 bytes) [unofficial] */ !RS! call it SKB (skip byte)
+opcode_14:
+opcode_34:
+opcode_44:
+opcode_54:
+opcode_64:
+opcode_74:
+opcode_80:
+opcode_82:
+opcode_89:	;/* SKB [unofficial - skip byte] */
+opcode_c2:
+opcode_d4:
+opcode_e2:
+opcode_f4:
+
+      addq.l #1,PC6502
+      subq.l #3,CD
+
+opcode_1a: ;/* NOP (1 byte) [unofficial] */
+opcode_3a:
+opcode_5a:
+opcode_7a:
+opcode_da:
+opcode_fa:
+opcode_ea: ;/* NOP */ ;oficial
+	goto NEXTCHANGE_WITHOUT
+
+opcode_d2: ;/* ESCRTS #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
+      move.b (PC6502)+,d7
+      movem.l a0-a6,-(a7)
+      move.l d7,-(a7)
+      UPDATE_GLOBAL_REGS ;we need d7 in update global
+      CPU_GetStatus
+      jsr _AtariEscape /*in atari c*/
+      addq.l #4,a7
+      CPU_PutStatus
+      movem.l (a7)+,a0-a6
+      UPDATE_LOCAL_REGS
+      move.w (stack_pointer)+,d7
+      LoHi
+      lea (memory_pointer,d7.l),PC6502
+      addq.l #1,PC6502
+      bra GET_FIRST_INSTRUCTION
+
+opcode_f2:	;/* ESC #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
+	;/* opcode_ff: ESC #ab - opcode FF is now used for INS [unofficial] instruction !RS! */
+      move.b (PC6502)+,d7
+      movem.l a0-a6,-(a7)
+      move.l d7,-(a7) ;we need d7 for movem in UPDATE_GLOBAL
+      UPDATE_GLOBAL_REGS
+      CPU_GetStatus
+      jsr _AtariEscape
+      addq.l #4,a7
+      CPU_PutStatus
+      movem.l (a7)+,a0-a6
+      UPDATE_LOCAL_REGS
+      bra GET_FIRST_INSTRUCTION
+
+opcode_a7: ;/* LAX zpage [unofficial] */
+opcode_a3: ;/* LAX (ind,x) [unofficial] */
+opcode_af: ;/* LAX absolute [unofficial] */
+opcode_b3: ;/* LAX (ind),y [unofficial] */
+opcode_b7: ;/* LAX zpage,y [unofficial] */
+opcode_bf: ;/* LAX absolute,y [unofficial] */
+      move.b d6,X
+      move.b d6,A
+      bra NEXTCHANGE
+
+
+
+;/* R.S.980113
+;   My changes of original code is marked !RS!
+;   UNDOCUMENTED INSTRUCTIONS
+;   NOP (2 bytes) => SKB [unofficial - skip byte]
+;   NOP (3 bytes) => SKW [unofficial - skip word]
+;   CIM [unoficial - crash intermediate] => implemented as "PC--;"
+;   AXS [unofficial - Store result A AND X]
+;   ASO [unofficial - ASL then ORA with Acc]
+;   XAA [unofficial - X AND Mem to Acc]
+;   MKA [unofficial - Acc AND #$40 to Acc]
+;   MKX [unofficial - X AND #$40 to X]
+; */
+
+opcode_02:				;/* CIM [unofficial - crash intermediate] */
+opcode_12:
+opcode_22:
+opcode_32:
+opcode_42:
+opcode_52:
+opcode_62:
+opcode_72:
+opcode_92:
+opcode_b2:
+;/* opcode_d2: Used for ESCRTS #ab (JAM) */
+;/* opcode_f2: Used for ESC #ab (JAM) */
+	subq.w #1,PC6502
+	bra NEXTCHANGE_WITHOUT
+
+
+
+opcode_83:	;/* AXS (ab,x) [unofficial - Store result A AND X] */
+opcode_87:	;/* AXS zpage [unofficial - Store result A AND X] */
+opcode_8f:	;/* AXS abcd [unofficial - Store result A AND X] */
+opcode_93:	;/* AXS (ab),y [unofficial - Store result A AND X] */
+opcode_97:	;/* AXS zpage,y [unofficial - Store result A AND X] */
+	move.b X,d6
+	and.b A,d6
+	bra PUTONEBYTE_FL
+
+opcode_03:	;/* ASO (ab,x) [unofficial - ASL then ORA with Acc] */
+opcode_07:	;/* ASO zpage [unofficial - ASL then ORA with Acc] */
+opcode_0b:	;/* ASO #ab [unofficial - ASL then ORA with Acc] */
+opcode_0f:	;/* ASO abcd [unofficial - ASL then ORA with Acc] */
+opcode_13:	;/* ASO (ab),y [unofficial - ASL then ORA with Acc] */
+opcode_17:	;/* ASO zpage,x [unofficial - ASL then ORA with Acc] */
+opcode_1b:	;/* ASO abcd,y [unofficial - ASL then ORA with Acc] */
+opcode_1f:	;/* ASO abcd,x [unofficial - ASL then ORA with Acc] */
+	add.b d6,d6 ;left
+	move.w CCR,CCR6502
+	or.b A,d6
+	bra NEXTCHANGE
+
+opcode_8b:	;/* XAA #ab [unofficial - X AND Mem to Acc] */
+opcode_9b:	;/* XAA abcd,y [unofficial - X AND Mem to Acc] */
+	move.b X,A
+	and.b d6,A
+	bra NEXTCHANGE_A
+	
+	
+opcode_9f:	;/* MKA abcd [unofficial - Acc AND #$40 to Acc] */
+	and.b #$40,A
+	bra NEXTCHANGE_A
+
+opcode_9e:	;/* MKX abcd [unofficial - X AND #$40 to X] */
+	and.b #$40,X
+	move.b X,d6
+	bra NEXTCHANGE
+
+
+;/* UNDOCUMENTED INSTRUCTIONS (Part II)
+;   LSE [unofficial - LSR then EOR result with A]
+;   ALR [unofficial - Acc AND Data, LSR result]
+;   ARR [unofficial - Acc AND Data, ROR result]
+; */
+
+opcode_43:	;/* LSE (ab,x) [unofficial - LSR then EOR result with A] */
+opcode_47:	;/* LSE zpage [unofficial - LSR then EOR result with A] */
+opcode_4f:	;/* LSE abcd [unofficial - LSR then EOR result with A] */
+opcode_53:	;/* LSE (ab),y [unofficial - LSR then EOR result with A] */
+opcode_57:	;/* LSE zpage,x [unofficial - LSR then EOR result with A] */
+opcode_5b:	;/* LSE abcd,y [unofficial - LSR then EOR result with A] */
+opcode_5f:	;/* LSE abcd,x [unofficial - LSR then EOR result with A] */
+	lsr.b #1,d6
+	move.w CCR,CCR6502
+	eor.b A,d6
+	bra NEXTCHANGE			
+
+opcode_4b:	;/* ALR #ab [unofficial - Acc AND Data, LSR result] */
+	clr.w CCR6502
+	
+opcode_6b:	;/* ARR #ab [unofficial - Acc AND Data, ROR result] */
+	and.b A,d6
+	move.w CCR6502,CCR
+	roxr.b #1,d6
+	move.w CCR,CCR6502
+	bra NEXTCHANGE
+
+
+
+;/* UNDOCUMENTED INSTRUCTIONS (Part III)
+;   RLA [unofficial - ROL Mem, then AND with A]
+; */
+opcode_2b: ;/* RLA #ab [unofficial - ROL Mem, then AND with A] */
+	move.w CCR6502,CCR
+	addx.b d6,d6 ;left
+	move.w CCR,CCR6502
+	move.b d6,ZFLAG
+	and.b A,ZFLAG
+	move.b ZFLAG,NFLAG
+	bra NEXTCHANGE_WITHOUT
+
+opcode_23: ;/* RLA (ab,x) [unofficial - ROL Mem, then AND with A] */
+opcode_27: ;/* RLA zpage [unofficial - ROL Mem, then AND with A] */
+opcode_2f: ;/* RLA abcd [unofficial - ROL Mem, then AND with A] */
+opcode_33: ;/* RLA (ab),y [unofficial - ROL Mem, then AND with A] */
+opcode_37: ;/* RLA zpage,x [unofficial - ROL Mem, then AND with A] */
+opcode_3b: ;/* RLA abcd,y [unofficial - ROL Mem, then AND with A] */
+opcode_3f: ;/* RLA abcd,x [unofficial - ROL Mem, then AND with A] */
+	move.w CCR6502,CCR
+	addx.b d6,d6 ;left
+	move.w CCR,CCR6502
+	move.b d6,ZFLAG
+	and.b A,ZFLAG
+	move.b ZFLAG,NFLAG
+	bra PUTONEBYTE
+
+
+;/* R.S.980113<<<
+;   R.S.980114>>>
+;   RRA [unofficial - ROR Mem, then ADC to Acc]
+; */
+opcode_63:	;/* RRA (ab,x) [unofficial - ROR Mem, then ADC to Acc] */
+opcode_67:	;/* RRA zpage [unofficial - ROR Mem, then ADC to Acc] */
+opcode_6f:	;/* RRA abcd [unofficial - ROR Mem, then ADC to Acc] */
+opcode_73:	;/* RRA (ab),y [unofficial - ROR Mem, then ADC to Acc] */
+opcode_77:	;/* RRA zpage,x [unofficial - ROR Mem, then ADC to Acc] */
+opcode_7b:	;/* RRA abcd,y [unofficial - ROR Mem, then ADC to Acc] */
+opcode_7f:	;/* RRA abcd,x [unofficial - ROR Mem, then ADC to Acc] */
+	move.w CCR6502,CCR
+	roxr.b #1,d6
+	move.w CCR,CCR6502
+
+	tst.b (attrib_pointer,d7.l)
+	bne.s .Putbyte
+	move.b d6,(memory_pointer,d7.l)
+           	goto adc
+
+.Putbyte
+	cmp.b #1,(attrib_pointer,d7.l)
+	beq.s .DONT_WRITE_TO_ROM
+
+	move.l a0,-(a7)
+	move.w d0,-(a7)
+	move.w d1,-(a7)
+	move.l a6,-(a7)
+	move.w d6,-(a7)
+	clr.l -(a7)
+	move.b d6,3(a7) ;byte
+	move.l d7,-(a7) ;adress
+	jsr _PUTBYTE
+	move.w d0,d7 ;put value onto right place
+	addq.l #8,a7
+	move.w (a7)+,d6
+	move.l (a7)+,a6
+	move.w (a7)+,d1
+	move.w (a7)+,d0
+	move.l (a7)+,a0
+	tst.w d7
+	bne ENDGO
+	bra adc
+
+.DONT_WRITE_TO_ROM:
+	bra adc
+	
+
+
+;/* OAL [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
+opcode_ab:	;/* OAL #ab [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
+	or.b #$ee,A
+	and d6,A
+	move A,X
+	bra NEXTCHANGE_A
+
+;/* DCM [unofficial - DEC Mem then CMP with Acc] */
+opcode_c3:	;/* DCM (ab,x) [unofficial - DEC Mem then CMP with Acc] */
+opcode_c7:	;/* DCM zpage [unofficial - DEC Mem then CMP with Acc] */
+opcode_cf:	;/* DCM abcd [unofficial - DEC Mem then CMP with Acc] */
+opcode_d3:	;/* DCM (ab),y [unofficial - DEC Mem then CMP with Acc] */
+opcode_d7:	;/* DCM zpage,x [unofficial - DEC Mem then CMP with Acc] */
+opcode_db:	;/* DCM abcd,y [unofficial - DEC Mem then CMP with Acc] */
+opcode_df:	;/* DCM abcd,x [unofficial - DEC Mem then CMP with Acc] */
+	subq.b #1,d6
+	tst.b (attrib_pointer,d7.l)
+	bne.s .Putbyte
+	move.b d6,(memory_pointer,d7.l)
+           	goto instruction_cmp
+
+.Putbyte
+	cmp.b #1,(attrib_pointer,d7.l)
+	beq.s .DONT_WRITE_TO_ROM
+
+	move.l a0,-(a7)
+	move.w d0,-(a7)
+	move.w d1,-(a7)
+	move.l a6,-(a7)
+	move.w d6,-(a7)
+	clr.l -(a7)
+	move.b d6,3(a7) ;byte
+	move.l d7,-(a7) ;adress
+	jsr _PUTBYTE
+	move.w d0,d7 ;put value onto right place
+	addq.l #8,a7
+	move.w (a7)+,d6
+	move.l (a7)+,a6
+	move.w (a7)+,d1
+	move.w (a7)+,d0
+	move.l (a7)+,a0
+	tst.w d7
+	bne ENDGO
+           	goto instruction_cmp
+
+.DONT_WRITE_TO_ROM:
+           	goto instruction_cmp
+	
+
+
+;/* SAX   [unofficial - A AND X, then SBC Mem, store to X] */
+opcode_cb:	;/* SAX #ab [unofficial - A AND X, then SBC Mem, store to X] */
+	and.b A,X
+
+	btst #D_FLAGB,_regP
+	bne.s .BDC_SBC
+
+	not.w CCR6502 ;change it????
+	move.w CCR6502,CCR
+	subx.b d6,X
+	move.w CCR,CCR6502
+	svs ZFLAG
+	swap ZFLAG
+	not.w CCR6502
+
+	;and.b #V_FLAG,d6
+	;and.b #~V_FLAG,_regP
+	;or.b d6,_regP
+	move.b X,ZFLAG
+	move.b X,NFLAG
+	bra NEXTCHANGE_WITHOUT
+
+.BDC_SBC:
+	not.w CCR6502 ;change it ?????
+	move.b CCR6502,CCR
+	ori.b #4,CCR ; set zero flag
+	sbcd d6,X
+	move.b CCR,CCR6502  ;V flag isn't soluted
+	not.w CCR6502
+	move.b X,ZFLAG
+	move.b X,NFLAG
+	bra NEXTCHANGE_WITHOUT
+				
+
+
+;/* INS [unofficial - INC Mem then SBC with Acc] */
+opcode_e3:	;/* INS (ab,x) [unofficial - INC Mem then SBC with Acc] */
+opcode_e7:	;/* INS zpage [unofficial - INC Mem then SBC with Acc] */
+opcode_ef:	;/* INS abcd [unofficial - INC Mem then SBC with Acc] */
+opcode_f3:	;/* INS (ab),y [unofficial - INC Mem then SBC with Acc] */
+opcode_f7:	;/* INS zpage,x [unofficial - INC Mem then SBC with Acc] */
+opcode_fb:	;/* INS abcd,y [unofficial - INC Mem then SBC with Acc] */
+opcode_ff:	;/* INS abcd,x [unofficial - INC Mem then SBC with Acc] */
+	addq.b #1,d6
+
+	tst.b (attrib_pointer,d7.l)
+	bne.s .Putbyte
+	move.b d6,(memory_pointer,d7.l)
+           	goto sbc
+
+.Putbyte
+	cmp.b #1,(attrib_pointer,d7.l)
+	beq.s .DONT_WRITE_TO_ROM
+
+	move.l a0,-(a7)
+	move.w d0,-(a7)
+	move.w d1,-(a7)
+	move.l a6,-(a7)
+	move.w d6,-(a7)
+	clr.l -(a7)
+	move.b d6,3(a7) ;byte
+	move.l d7,-(a7) ;adress
+	jsr _PUTBYTE
+	move.w d0,d7 ;put value onto right place
+	addq.l #8,a7
+	move.w (a7)+,d6
+	move.l (a7)+,a6
+	move.w (a7)+,d1
+	move.w (a7)+,d0
+	move.l (a7)+,a0
+	tst.w d7
+	bne ENDGO
+	bra sbc
+
+.DONT_WRITE_TO_ROM:
+	bra sbc
+	
+	
+
+
+
+;/* AXA [unofficial - original decode by R.Sterba and R.Petruzela 15.1.1998 :-)]
+;   AXA - this is our new imaginative name for instruction with opcode hex BB.
+;   AXA - Store Mem AND #$FD to Acc and X, then set stackpoint to value (Acc - 4)
+;   It's cool! :-)
+;*/
+opcode_bb:	;/* AXA abcd,y [unofficial - Store Mem AND #$FD to Acc and X, then set stackpoint to value (Acc - 4) */
+	and.b #$fd,d6
+	clr.l A
+	move.b d6,A
+	move.b d6,X
+	move.b d6,ZFLAG
+	move.b d6,NFLAG
+	move.l A,stack_pointer
+      	subq.l #4,stack_pointer
+	add.l memory_pointer,stack_pointer
+	lea 101(stack_pointer),stack_pointer
+      	bra NEXTCHANGE_WITHOUT
+
+;opcode_eb:	;/* SBC #ab [unofficial] */ I have put it into sbc chunk
+
+	;pea text(pc)
+	;move.w #9,-(a7)
+	;trap #1
+	;addq.l #1,ILEGALY
+	;illegal
+	bra NEXTCHANGE_WITHOUT
+ILEGALY:	dc.l 0
+text:	dc.b 'NEJAKA CHYBA TY BLBE'
+	even
+
+UPDATE_GLOBAL_REGS
+
+      ;printf ("*** Invalid Opcode %02x at address %04x\n",
+      ;	      memory[PC-1], PC-1);
+      ;ncycles = 0;
+      ;break;
 
 
 A800GETB:
@@ -2056,16 +2236,14 @@ A800PUTB:
 	move.l a0,-(a7)
 	move.w d0,-(a7)
 	move.w d1,-(a7)
-	move.w a6,-(a7)
-	;movem.l a0/a6/d0/d1,-(a7)
+	move.l a6,-(a7)
 	clr.l -(a7)
 	move.b d6,3(a7) ;byte
 	move.l d7,-(a7) ;adress
 	jsr _PUTBYTE
 	move.w d0,d6 ;put value onto right place
 	addq.l #8,a7
-	;movem.l (a7)+,a0/a6/d0/d1
-	move.w (a7)+,a6
+	move.l (a7)+,a6
 	move.w (a7)+,d1
 	move.w (a7)+,d0
 	move.l (a7)+,a0
@@ -2085,7 +2263,7 @@ odskoc_si:
       movem.l a0-a6,-(a7)
       CPU_GetStatus
       move.l d7,-(a7)
-      jsr _Escape
+      jsr _AtariEscape
       addq.l #4,a7
       CPU_PutStatus
       movem.l (a7)+,a0-a6
