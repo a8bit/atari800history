@@ -1,3 +1,21 @@
+Changes in 0.9.9b
+-----------------
+
+o fixed SD and ED floppy formatting in SIO code (sector size is hardcoded)
+
+o monitor's commands 'COLDSTART' and 'WARMSTART' perform the reboot
+  immediately now (previously you have to give it the 'cont' command
+  to actually perform the reboot).
+
+o statesave bug in SaveINT fixed (negative integers weren't saved
+  correctly). <Krzysztof>
+
+o Makefile.unix updated - the rawkey lib is now essential for the
+  linux-svgalib version of Atari800.
+
+o Linux-svgalib version now recognizes F8 keypress for jumping to monitor
+
+
 Changes in 0.9.9a
 -----------------
 

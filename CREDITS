@@ -175,3 +175,6 @@ Marek Zelem <marek@formax.elf.stuba.sk>
 
 Petr Mojzisek <mojzisek@bimbo.fjfi.cvut.cz>
 - rawkey support for svgalib
+
+Krzysztof Nikiel <krzych00@priv7.onet.pl>
+- SaveINT() fix in state save code

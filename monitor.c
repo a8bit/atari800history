@@ -769,9 +769,11 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 #endif
 		else if (strcmp(t, "COLDSTART") == 0) {
 			Coldstart();
+			return 1;	/* perform reboot immediately */
 		}
 		else if (strcmp(t, "WARMSTART") == 0) {
 			Warmstart();
+			return 1;	/* perform reboot immediately */
 		}
 #ifndef PAGED_MEM
 		else if (strcmp(t, "READ") == 0) {
