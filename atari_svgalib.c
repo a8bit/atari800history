@@ -1,10 +1,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/soundcard.h>
 
 #include <vga.h>
 #include <vgagl.h>
+
+static char *rcsid = "$Id: atari_svgalib.c,v 1.4 1996/07/19 19:53:29 david Exp $";
+
+#include "config.h"
+#include "atari.h"
+#include "colours.h"
 
 #ifdef LINUX_JOYSTICK
 #include <linux/joystick.h>
@@ -20,63 +25,55 @@ static int js1_centre_y;
 static struct JS_DATA_TYPE js_data;
 #endif
 
-#include "atari.h"
-#include "colours.h"
-
-static int	sb = -1;
-
-/*
- * /dev/sequencer only has 49 notes :-( and these notes
- * are in terms of musical notes (A,B,C etc) and not
- * frequency as on the atari. i.e. It is not possible
- * to play all 256 frequencies values (let alone
- * the 16 bit sound modes).
- */
-
-#define	NUM_NOTES	49
-
-static int	values[NUM_NOTES] =
-{
-  243, 230, 217, 204, 193, 182, 173, 162, 153, 144, 136, 128,
-  121, 114, 108, 102, 96, 91, 85, 81, 76, 72, 68, 64,
-  60, 57, 53, 50, 47, 45, 42, 40, 37, 35, 33, 31,
-  29
-};
-
 static int	lookup[256];
 
 #define FALSE 0
 #define TRUE 1
 
-static int sound_enabled = FALSE;
-
 static int trig0;
 static int stick0;
 static int consol;
+
+extern double deltatime;
+
+/*
+   Interlace variables
+*/
+
+static int first_lno = 24;
+static int ypos_inc = 1;
+static int svga_ptr_inc = 320;
+static int scrn_ptr_inc = ATARI_WIDTH;
 
 void Atari_Initialise (int *argc, char *argv[])
 {
   int	VGAMODE = G320x200x256;
 
-  struct sbi_instrument	instr;
-
   int fd;
-  char buf[100];
-  int note;
   int status;
 
   int i;
   int j;
 
+#ifdef NAS
+  NAS_Initialise (argc, argv);
+#endif
+
   for (i=j=1;i<*argc;i++)
     {
-      if (strcmp(argv[i],"-sound") == 0)
+      if (strcmp(argv[i],"-interlace") == 0)
 	{
-	  printf ("SVGALIB sound enabled\n");
-	  sound_enabled = TRUE;
+	  ypos_inc = 2;
+	  svga_ptr_inc = 320 + 320;
+	  scrn_ptr_inc = ATARI_WIDTH + ATARI_WIDTH;
 	}
       else
 	{
+	  if (strcmp(argv[i],"-help") == 0)
+	    {
+	      printf ("\t-interlace    Generate screen with interlace\n");
+	    }
+
 	  argv[j++] = argv[i];
 	}
     }
@@ -143,83 +140,6 @@ void Atari_Initialise (int *argc, char *argv[])
       gl_setpalettecolor (i, red, green, blue);
     }
 
-  if (sound_enabled)
-    {
-      sb = open ("/dev/sequencer", O_WRONLY, 0);
-      if (sb == -1)
-	{
-	  perror ("/dev/sequencer");
-	  exit (1);
-	}
-
-      fd = open ("piano1.sbi", O_RDONLY, 0);
-      if (fd == -1)
-	{
-	  perror ("piano1.sbi");
-	  exit (1);
-	}
-
-      read (fd, buf, 100);
-      if (buf[0] != 'S' || buf[1] != 'B' || buf[2] != 'I')
-	{
-	  printf ("Not SBI file\n");
-	  exit (1);
-	}
-
-      close (fd);
-
-      instr.channel = 129;
-      for (i=0;i<16;i++)
-	instr.operators[i] = buf[i+0x24];
-
-      status = ioctl (sb, SNDCTL_FM_LOAD_INSTR, &instr);
-      if (status == -1)
-	{
-	  perror ("ioctl");
-	  exit (1);
-	}
-
-      buf[0] = SEQ_FMPGMCHANGE;
-      buf[1] = 0;
-      buf[2] = 129;
-      write (sb, buf, 4);
-
-      buf[0] = SEQ_FMPGMCHANGE;
-      buf[1] = 1;
-      buf[2] = 129;
-      write (sb, buf, 4);
-
-      buf[0] = SEQ_FMPGMCHANGE;
-      buf[1] = 2;
-      buf[2] = 129;
-      write (sb, buf, 4);
-
-      buf[0] = SEQ_FMPGMCHANGE;
-      buf[1] = 3;
-      buf[2] = 129;
-      write (sb, buf, 4);
-
-      for (i=0;i<256;i++)
-	lookup[i] = -1;
-
-      for (i=0;i<NUM_NOTES;i++)
-	{
-	  int octave = i / 12;
-	  int note = i - (octave * 12);
-      
-	  lookup[values[i]] = (octave + 2) * 12 + note;
-	}
-
-      note = -1;
-      for (i=0;i<256;i++)
-	{
-	  if (lookup[i] != -1)
-	    note = lookup[i];
-	  else
-	    lookup[i] = note;
-	}
-    }
-
   trig0 = 1;
   stick0 = 15;
   consol = 7;
@@ -230,9 +150,6 @@ int Atari_Exit (int run_monitor)
   int restart;
 
   vga_setmode (TEXT);
-
-  if (sound_enabled && (sb != -1))
-    close (sb);
 
   if (run_monitor)
     restart = monitor ();
@@ -269,34 +186,65 @@ int Atari_Exit (int run_monitor)
 	  gl_setpalettecolor (i, red, green, blue);
 	}
     }
-#ifdef LINUX_JOYSTICK
   else
     {
+#ifdef LINUX_JOYSTICK
       if (js0 != -1)
 	close (js0);
 
       if (js1 != -1)
 	close (js1);
-    }
 #endif
+
+#ifdef NAS
+      NAS_Exit ();
+#endif
+    }
 
   return restart;
 }
 
 void Atari_DisplayScreen (UBYTE *screen)
 {
-  UBYTE *svga_ptr = graph_mem;
-  UBYTE *scrn_ptr = &screen[24*ATARI_WIDTH+32];
+  static int lace = 0;
+
+  UBYTE *svga_ptr;
+  UBYTE *scrn_ptr;
   int ypos;
 
-  consol = 7;
+/*
+ * This single command will replace all this function but doesn't allow
+ * the interlace option - maybe the interlace option should dropped.
+ *
+ * gl_putboxpart (0, 0, 320, 200, 384, 240, screen, 32, first_lno);
+ */
 
-  for (ypos=0;ypos<192;ypos++)
+  svga_ptr = graph_mem;
+  scrn_ptr = &screen[first_lno*ATARI_WIDTH+32];
+
+  if (ypos_inc == 2)
+    {
+      if (lace)
+	{
+	  svga_ptr += 320;
+	  scrn_ptr += ATARI_WIDTH;
+	}
+
+      lace = 1 - lace;
+    }
+
+  for (ypos=0;ypos<200;ypos+=ypos_inc)
     {
       memcpy (svga_ptr, scrn_ptr, 320);
-      svga_ptr += 320;
-      scrn_ptr += ATARI_WIDTH;
+      svga_ptr += svga_ptr_inc;
+      scrn_ptr += scrn_ptr_inc;
     }
+
+#ifdef NAS
+  NAS_UpdateSound ();
+#endif
+
+  consol = 7;
 }
 
 static int special_keycode = -1;
@@ -318,149 +266,373 @@ int Atari_Keyboard (void)
   switch (keycode)
     {
     case 0x01 :
-      keycode = AKEY_CTRL_A;
+      keycode = AKEY_CTRL_a;
       break;
     case 0x02 :
-      keycode = AKEY_CTRL_B;
+      keycode = AKEY_CTRL_b;
       break;
 /*
    case 0x03 :
-   keycode = AKEY_CTRL_C;
+   keycode = AKEY_CTRL_c;
    break;
 */
     case 0x04 :
-      keycode = AKEY_CTRL_D;
+      keycode = AKEY_CTRL_d;
       break;
     case 0x05 :
-      keycode = AKEY_CTRL_E;
+      keycode = AKEY_CTRL_e;
       break;
     case 0x06 :
-      keycode = AKEY_CTRL_F;
+      keycode = AKEY_CTRL_f;
       break;
     case 0x07 :
-      keycode = AKEY_CTRL_G;
+      keycode = AKEY_CTRL_g;
       break;
     case 0x08 :
-      keycode = AKEY_CTRL_H;
+      keycode = AKEY_CTRL_h;
       break;
     case 0x09 :
-      keycode = AKEY_CTRL_I;
+      keycode = AKEY_CTRL_i;
       break;
 /*
    case 0x0a :
-   keycode = AKEY_CTRL_J;
+   keycode = AKEY_CTRL_j;
    break;
 */
     case 0x0b :
-      keycode = AKEY_CTRL_K;
+      keycode = AKEY_CTRL_k;
       break;
     case 0x0c :
-      keycode = AKEY_CTRL_L;
+      keycode = AKEY_CTRL_l;
       break;
 /*
    case 0x0d :
-   keycode = AKEY_CTRL_M;
+   keycode = AKEY_CTRL_m;
    break;
 */
     case 0x0e :
-      keycode = AKEY_CTRL_N;
+      keycode = AKEY_CTRL_n;
       break;
     case 0x0f :
-      keycode = AKEY_CTRL_O;
+      keycode = AKEY_CTRL_o;
       break;
     case 0x10 :
-      keycode = AKEY_CTRL_P;
+      keycode = AKEY_CTRL_p;
       break;
     case 0x11 :
-      keycode = AKEY_CTRL_Q;
+      keycode = AKEY_CTRL_q;
       break;
     case 0x12 :
-      keycode = AKEY_CTRL_R;
+      keycode = AKEY_CTRL_r;
       break;
     case 0x13 :
-      keycode = AKEY_CTRL_S;
+      keycode = AKEY_CTRL_s;
       break;
     case 0x14 :
-      keycode = AKEY_CTRL_T;
+      keycode = AKEY_CTRL_t;
       break;
     case 0x15 :
-      keycode = AKEY_CTRL_U;
+      keycode = AKEY_CTRL_u;
       break;
     case 0x16 :
-      keycode = AKEY_CTRL_V;
+      keycode = AKEY_CTRL_v;
       break;
     case 0x17 :
-      keycode = AKEY_CTRL_W;
+      keycode = AKEY_CTRL_w;
       break;
     case 0x18 :
-      keycode = AKEY_CTRL_X;
+      keycode = AKEY_CTRL_x;
       break;
     case 0x19 :
-      keycode = AKEY_CTRL_Y;
+      keycode = AKEY_CTRL_y;
       break;
     case 0x1a :
-      keycode = AKEY_CTRL_Z;
+      keycode = AKEY_CTRL_z;
+      break;
+    case ' ' :
+      keycode = AKEY_SPACE;
       break;
     case '`' :
       keycode = AKEY_CAPSTOGGLE;
       break;
+    case '~' :
+      keycode = AKEY_CAPSLOCK;
+      break;
     case '!' :
+      keycode = AKEY_EXCLAMATION;
+      break;
     case '"' :
+      keycode = AKEY_DBLQUOTE;
+      break;
     case '#' :
+      keycode = AKEY_HASH;
+      break;
     case '$' :
+      keycode = AKEY_DOLLAR;
+      break;
     case '%' :
+      keycode = AKEY_PERCENT;
+      break;
     case '&' :
+      keycode = AKEY_AMPERSAND;
+      break;
     case '\'' :
+      keycode = AKEY_QUOTE;
+      break;
     case '@' :
+      keycode = AKEY_AT;
+      break;
     case '(' :
+      keycode = AKEY_PARENLEFT;
+      break;
     case ')' :
+      keycode = AKEY_PARENRIGHT;
+      break;
+    case '[' :
+      keycode = AKEY_BRACKETLEFT;
+      break;
+    case ']' :
+      keycode = AKEY_BRACKETRIGHT;
+      break;
     case '<' :
+      keycode = AKEY_LESS;
+      break;
     case '>' :
+      keycode = AKEY_GREATER;
+      break;
     case '=' :
+      keycode = AKEY_EQUAL;
+      break;
     case '?' :
+      keycode = AKEY_QUESTION;
+      break;
     case '-' :
+      keycode = AKEY_MINUS;
+      break;
     case '+' :
+      keycode = AKEY_PLUS;
+      break;
     case '*' :
+      keycode = AKEY_ASTERISK;
+      break;
     case '/' :
+      keycode = AKEY_SLASH;
+      break;
     case ':' :
+      keycode = AKEY_COLON;
+      break;
     case ';' :
+      keycode = AKEY_SEMICOLON;
+      break;
     case ',' :
+      keycode = AKEY_COMMA;
+      break;
     case '.' :
+      keycode = AKEY_FULLSTOP;
+      break;
     case '_' :
+      keycode = AKEY_UNDERSCORE;
+      break;
     case '{' :
+      keycode = AKEY_NONE;
+      break;
     case '}' :
+      keycode = AKEY_NONE;
+      break;
     case '^' :
+      keycode = AKEY_CIRCUMFLEX;
+      break;
     case '\\' :
+      keycode = AKEY_BACKSLASH;
+      break;
     case '|' :
-    case '0' : case '1' : case '2' : case '3' : case '4' :
-    case '5' : case '6' : case '7' : case '8' : case '9' :
-    case ' ' :
-    case 'a' : case 'A' :
-    case 'b' : case 'B' :
-    case 'c' : case 'C' :
-    case 'd' : case 'D' :
-    case 'e' : case 'E' :
-    case 'f' : case 'F' :
-    case 'g' : case 'G' :
-    case 'h' : case 'H' :
-    case 'i' : case 'I' :
-    case 'j' : case 'J' :
-    case 'k' : case 'K' :
-    case 'l' : case 'L' :
-    case 'm' : case 'M' :
-    case 'n' : case 'N' :
-    case 'o' : case 'O' :
-    case 'p' : case 'P' :
-    case 'q' : case 'Q' :
-    case 'r' : case 'R' :
-    case 's' : case 'S' :
-    case 't' : case 'T' :
-    case 'u' : case 'U' :
-    case 'v' : case 'V' :
-    case 'w' : case 'W' :
-    case 'x' : case 'X' :
-    case 'y' : case 'Y' :
-    case 'z' : case 'Z' :
+      keycode = AKEY_BAR;
+      break;
+    case '0' :
+      keycode = AKEY_0;
+      break;
+    case '1' :
+      keycode = AKEY_1;
+      break;
+    case '2' :
+      keycode = AKEY_2;
+      break;
+    case '3' :
+      keycode = AKEY_3;
+      break;
+    case '4' :
+      keycode = AKEY_4;
+      break;
+    case '5' :
+      keycode = AKEY_5;
+      break;
+    case '6' :
+      keycode = AKEY_6;
+      break;
+    case '7' :
+      keycode = AKEY_7;
+      break;
+    case '8' :
+      keycode = AKEY_8;
+      break;
+    case '9' :
+      keycode = AKEY_9;
+      break;
+    case 'a' :
+      keycode = AKEY_a;
+      break;
+    case 'b' :
+      keycode = AKEY_b;
+      break;
+    case 'c' :
+      keycode = AKEY_c;
+      break;
+    case 'd' :
+      keycode = AKEY_d;
+      break;
+    case 'e' :
+      keycode = AKEY_e;
+      break;
+    case 'f' :
+      keycode = AKEY_f;
+      break;
+    case 'g' :
+      keycode = AKEY_g;
+      break;
+    case 'h' :
+      keycode = AKEY_h;
+      break;
+    case 'i' :
+      keycode = AKEY_i;
+      break;
+    case 'j' :
+      keycode = AKEY_j;
+      break;
+    case 'k' :
+      keycode = AKEY_k;
+      break;
+    case 'l' :
+      keycode = AKEY_l;
+      break;
+    case 'm' :
+      keycode = AKEY_m;
+      break;
+    case 'n' :
+      keycode = AKEY_n;
+      break;
+    case 'o' :
+      keycode = AKEY_o;
+      break;
+    case 'p' :
+      keycode = AKEY_p;
+      break;
+    case 'q' :
+      keycode = AKEY_q;
+      break;
+    case 'r' :
+      keycode = AKEY_r;
+      break;
+    case 's' :
+      keycode = AKEY_s;
+      break;
+    case 't' :
+      keycode = AKEY_t;
+      break;
+    case 'u' :
+      keycode = AKEY_u;
+      break;
+    case 'v' :
+      keycode = AKEY_v;
+      break;
+    case 'w' :
+      keycode = AKEY_w;
+      break;
+    case 'x' :
+      keycode = AKEY_x;
+      break;
+    case 'y' :
+      keycode = AKEY_y;
+      break;
+    case 'z' :
+      keycode = AKEY_z;
+      break;
+    case 'A' :
+      keycode = AKEY_A;
+      break;
+    case 'B' :
+      keycode = AKEY_B;
+      break;
+    case 'C' :
+      keycode = AKEY_C;
+      break;
+    case 'D' :
+      keycode = AKEY_D;
+      break;
+    case 'E' :
+      keycode = AKEY_E;
+      break;
+    case 'F' :
+      keycode = AKEY_F;
+      break;
+    case 'G' :
+      keycode = AKEY_G;
+      break;
+    case 'H' :
+      keycode = AKEY_H;
+      break;
+    case 'I' :
+      keycode = AKEY_I;
+      break;
+    case 'J' :
+      keycode = AKEY_J;
+      break;
+    case 'K' :
+      keycode = AKEY_K;
+      break;
+    case 'L' :
+      keycode = AKEY_L;
+      break;
+    case 'M' :
+      keycode = AKEY_M;
+      break;
+    case 'N' :
+      keycode = AKEY_N;
+      break;
+    case 'O' :
+      keycode = AKEY_O;
+      break;
+    case 'P' :
+      keycode = AKEY_P;
+      break;
+    case 'Q' :
+      keycode = AKEY_Q;
+      break;
+    case 'R' :
+      keycode = AKEY_R;
+      break;
+    case 'S' :
+      keycode = AKEY_S;
+      break;
+    case 'T' :
+      keycode = AKEY_T;
+      break;
+    case 'U' :
+      keycode = AKEY_U;
+      break;
+    case 'V' :
+      keycode = AKEY_V;
+      break;
+    case 'W' :
+      keycode = AKEY_W;
+      break;
+    case 'X' :
+      keycode = AKEY_X;
+      break;
+    case 'Y' :
+      keycode = AKEY_Y;
+      break;
+    case 'Z' :
+      keycode = AKEY_Z;
       break;
     case 0x7f :	/* Backspace */
       keycode = AKEY_BACKSPACE;
@@ -478,7 +650,11 @@ int Atari_Keyboard (void)
 	  buff[nc++] = keycode;
 	buff[nc++] = '\0';
 
-	if (strcmp(buff, "\133\133\101") == 0)		/* F1 */
+	if (nc == 1)
+	  {
+	    keycode = AKEY_ESCAPE;
+	  }
+	else if (strcmp(buff, "\133\133\101") == 0)	/* F1 */
 	  {
 	    keycode = AKEY_WARMSTART;
 	  }
@@ -520,67 +696,75 @@ int Atari_Keyboard (void)
 	else if (strcmp(buff, "\133\062\061\176") == 0)	/* F10 */
 	  {
 	    keycode = AKEY_NONE;
+	    if (deltatime == 0.0)
+	      deltatime = (1.0 / 8.0);
+	    else
+	      deltatime = 0.0;
 	  }
 	else if (strcmp(buff, "\133\062\063\176") == 0)	/* F11 */
 	  {
+	    if (first_lno > 0)
+	      first_lno--;
 	    keycode = AKEY_NONE;
 	  }
 	else if (strcmp(buff, "\133\062\064\176") == 0)	/* F12 */
 	  {
+	    if (first_lno < (ATARI_HEIGHT - 200))
+	      first_lno++;
 	    keycode = AKEY_NONE;
 	  }
 	else if (strcmp(buff, "\141\000") == 0)
-	  keycode = AKEY_SHFTCTRL_A;
+	  keycode = AKEY_CTRL_A;
 	else if (strcmp(buff, "\142\000") == 0)
-	  keycode = AKEY_SHFTCTRL_B;
+	  keycode = AKEY_CTRL_B;
 	else if (strcmp(buff, "\143\000") == 0)
-	  keycode = AKEY_SHFTCTRL_C;
+	  keycode = AKEY_CTRL_C;
 	else if (strcmp(buff, "\144\000") == 0)
-	  keycode = AKEY_SHFTCTRL_D;
+	  keycode = AKEY_CTRL_D;
 	else if (strcmp(buff, "\145\000") == 0)
-	  keycode = AKEY_SHFTCTRL_E;
+	  keycode = AKEY_CTRL_E;
 	else if (strcmp(buff, "\146\000") == 0)
-	  keycode = AKEY_SHFTCTRL_F;
+	  keycode = AKEY_CTRL_F;
 	else if (strcmp(buff, "\147\000") == 0)
-	  keycode = AKEY_SHFTCTRL_G;
+	  keycode = AKEY_CTRL_G;
 	else if (strcmp(buff, "\150\000") == 0)
-	  keycode = AKEY_SHFTCTRL_H;
+	  keycode = AKEY_CTRL_H;
 	else if (strcmp(buff, "\151\000") == 0)
-	  keycode = AKEY_SHFTCTRL_I;
+	  keycode = AKEY_CTRL_I;
 	else if (strcmp(buff, "\152\000") == 0)
-	  keycode = AKEY_SHFTCTRL_J;
+	  keycode = AKEY_CTRL_J;
 	else if (strcmp(buff, "\153\000") == 0)
-	  keycode = AKEY_SHFTCTRL_K;
+	  keycode = AKEY_CTRL_K;
 	else if (strcmp(buff, "\154\000") == 0)
-	  keycode = AKEY_SHFTCTRL_L;
+	  keycode = AKEY_CTRL_L;
 	else if (strcmp(buff, "\155\000") == 0)
-	  keycode = AKEY_SHFTCTRL_M;
+	  keycode = AKEY_CTRL_M;
 	else if (strcmp(buff, "\156\000") == 0)
-	  keycode = AKEY_SHFTCTRL_N;
+	  keycode = AKEY_CTRL_N;
 	else if (strcmp(buff, "\157\000") == 0)
-	  keycode = AKEY_SHFTCTRL_O;
+	  keycode = AKEY_CTRL_O;
 	else if (strcmp(buff, "\160\000") == 0)
-	  keycode = AKEY_SHFTCTRL_P;
+	  keycode = AKEY_CTRL_P;
 	else if (strcmp(buff, "\161\000") == 0)
-	  keycode = AKEY_SHFTCTRL_Q;
+	  keycode = AKEY_CTRL_Q;
 	else if (strcmp(buff, "\162\000") == 0)
-	  keycode = AKEY_SHFTCTRL_R;
+	  keycode = AKEY_CTRL_R;
 	else if (strcmp(buff, "\163\000") == 0)
-	  keycode = AKEY_SHFTCTRL_S;
+	  keycode = AKEY_CTRL_S;
 	else if (strcmp(buff, "\164\000") == 0)
-	  keycode = AKEY_SHFTCTRL_T;
+	  keycode = AKEY_CTRL_T;
 	else if (strcmp(buff, "\165\000") == 0)
-	  keycode = AKEY_SHFTCTRL_U;
+	  keycode = AKEY_CTRL_U;
 	else if (strcmp(buff, "\166\000") == 0)
-	  keycode = AKEY_SHFTCTRL_V;
+	  keycode = AKEY_CTRL_V;
 	else if (strcmp(buff, "\167\000") == 0)
-	  keycode = AKEY_SHFTCTRL_W;
+	  keycode = AKEY_CTRL_W;
 	else if (strcmp(buff, "\170\000") == 0)
-	  keycode = AKEY_SHFTCTRL_X;
+	  keycode = AKEY_CTRL_X;
 	else if (strcmp(buff, "\171\000") == 0)
-	  keycode = AKEY_SHFTCTRL_Y;
+	  keycode = AKEY_CTRL_Y;
 	else if (strcmp(buff, "\172\000") == 0)
-	  keycode = AKEY_SHFTCTRL_Z;
+	  keycode = AKEY_CTRL_Z;
 	else if (strcmp(buff, "\133\062\176") == 0)	/* Keypad 0 */
 	  {
 	    trig0 = 0;
@@ -594,7 +778,7 @@ int Atari_Keyboard (void)
 	else if (strcmp(buff, "\133\102") == 0)		/* Keypad 2 */
 	  {
 	    stick0 = STICK_BACK;
-	    keycode = AKEY_NONE;
+	    keycode = AKEY_DOWN;
 	  }
 	else if (strcmp(buff, "\133\066\176") == 0)	/* Keypad 3 */
 	  {
@@ -604,7 +788,7 @@ int Atari_Keyboard (void)
 	else if (strcmp(buff, "\133\104") == 0)		/* Keypad 4 */
 	  {
 	    stick0 = STICK_LEFT;
-	    keycode = AKEY_NONE;
+	    keycode = AKEY_LEFT;
 	  }
 	else if (strcmp(buff, "\133\107") == 0)		/* Keypad 5 */
 	  {
@@ -614,7 +798,7 @@ int Atari_Keyboard (void)
 	else if (strcmp(buff, "\133\103") == 0)		/* Keypad 6 */
 	  {
 	    stick0 = STICK_RIGHT;
-	    keycode = AKEY_NONE;
+	    keycode = AKEY_RIGHT;
 	  }
 	else if (strcmp(buff, "\133\061\176") == 0)	/* Keypad 7 */
 	  {
@@ -624,7 +808,7 @@ int Atari_Keyboard (void)
 	else if (strcmp(buff, "\133\101") == 0)		/* Keypad 8 */
 	  {
 	    stick0 = STICK_FORWARD;
-	    keycode = AKEY_NONE;
+	    keycode = AKEY_UP;
 	  }
 	else if (strcmp(buff, "\133\065\176") == 0)	/* Keypad 9 */
 	  {
@@ -731,41 +915,16 @@ int Atari_CONSOL (void)
   return consol;
 }
 
+#ifndef NAS
 void Atari_AUDC (int channel, int byte)
 {
 }
 
 void Atari_AUDF (int channel, int byte)
 {
-  if (sound_enabled)
-    {
-      static char buf[4];
-
-      int pitch;
-      int volume = 64;
-
-/*
-   ========================================
-   Don't ask me why, but sound doesn't work
-   if the following printf is missing!
-   ========================================
-*/
-      printf ("\n");
-
-      pitch = lookup[byte];
-      if (pitch != -1)
-	{
-	  buf[0] = SEQ_FMNOTEON;
-	  buf[1] = channel - 1;
-	  buf[2] = pitch;
-	  buf[3] = volume;
-
-	  write (sb, buf, 4);
-	}
-    }
 }
 
 void Atari_AUDCTL (int byte)
 {
 }
-
+#endif

@@ -1,3 +1,7 @@
+#include "atari.h"
+
+static char *rcsid = "$Id: atari_basic.c,v 1.2 1995/12/30 22:11:02 david Exp $";
+
 #define FALSE 0
 #define TRUE 1
 
@@ -15,6 +19,11 @@ int Atari_Exit (int run_monitor)
     restart = FALSE;
 
   return restart;
+}
+
+int Atari_Keyboard (void)
+{
+  return AKEY_NONE;
 }
 
 int Atari_PORT (int num)

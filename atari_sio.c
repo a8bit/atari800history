@@ -7,22 +7,24 @@
 
 #include	<stdio.h>
 #include	<stdlib.h>
-#include	<fcntl.h>
 
+#ifdef VMS
+#include	<unixio.h>
+#include	<file.h>
+#else
+#include	<fcntl.h>
 #ifndef AMIGA
 #include	<unistd.h>
 #endif
-
-#ifdef VMS
-#include	<file.h>
 #endif
+
+static char *rcsid = "$Id: atari_sio.c,v 1.12 1996/07/18 00:33:03 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
 
-#include	"system.h"
-#include	"cpu.h"
 #include	"atari.h"
+#include	"cpu.h"
 
 #define	MAX_DRIVES	8
 
@@ -63,9 +65,9 @@ int SIO_Mount (int diskno, char *filename)
       status = read (fd, &header, sizeof(struct ATR_Header));
       if (status == -1)
 	{
-	  perror ("SIO_Mount");
-	  Atari800_Exit (FALSE);
-	  exit (1);
+	  close (fd);
+	  disk[diskno-1] = -1;
+	  return FALSE;
 	}
 
       if ((header.magic1 == MAGIC1) && (header.magic2 == MAGIC2))
@@ -78,9 +80,18 @@ int SIO_Mount (int diskno, char *filename)
 	  sectorsize[diskno-1] = header.secsizehi << 8 |
 	    header.secsizelo;
 
+	  sectorcount[diskno-1] /= 8;
+	  if (sectorsize[diskno-1] == 256)
+	    {
+	      sectorcount[diskno-1] += 3; /* Compensate for first 3 sectors */
+	      sectorcount[diskno-1] /= 2;
+	    }
+
+#ifdef DEBUG
 	  printf ("ATR: sectorcount = %d, sectorsize = %d\n",
 		  sectorcount[diskno-1],
 		  sectorsize[diskno-1]);
+#endif
 
 	  format[diskno-1] = ATR;
 	}
@@ -104,28 +115,51 @@ int SIO_Dismount (int diskno)
     }
 }
 
+void SeekSector (int dskno, int sector)
+{
+  int	offset;
+
+  switch (format[dskno])
+    {
+    case XFD :
+      offset = (sector-1)*128;
+      break;
+    case ATR :
+      if (sector < 4)
+	offset = (sector-1) * 128 + 16;
+      else
+	offset = (sector - 1) * sectorsize[dskno] + 16;
+/*
+	offset = 3*128 + (sector-4) * sectorsize[dskno] + 16;
+*/
+      break;
+    default :
+      printf ("Fatal Error in atari_sio.c\n");
+      Atari800_Exit (FALSE);
+      exit (1);
+    }
+
+  lseek (disk[dskno], offset, SEEK_SET);
+}
+
 SIO ()
 {
-  CPU_Status	cpu_status;
-
-  UBYTE DDEVIC = GetByte (0x0300);
-  UBYTE DUNIT = GetByte (0x0301);
-  UBYTE DCOMND = GetByte (0x0302);
-  UBYTE DSTATS = GetByte(0x0303);
-  UBYTE DBUFLO = GetByte(0x0304);
-  UBYTE DBUFHI = GetByte(0x0305);
-  UBYTE DTIMLO = GetByte(0x0306);
-  UBYTE DBYTLO = GetByte(0x0308);
-  UBYTE DBYTHI = GetByte(0x0309);
-  UBYTE DAUX1 = GetByte(0x030a);
-  UBYTE DAUX2 = GetByte(0x030b);
+  UBYTE DDEVIC = memory[0x0300];
+  UBYTE DUNIT = memory[0x0301];
+  UBYTE DCOMND = memory[0x0302];
+  UBYTE DSTATS = memory[0x0303];
+  UBYTE DBUFLO = memory[0x0304];
+  UBYTE DBUFHI = memory[0x0305];
+  UBYTE DTIMLO = memory[0x0306];
+  UBYTE DBYTLO = memory[0x0308];
+  UBYTE DBYTHI = memory[0x0309];
+  UBYTE DAUX1 = memory[0x030a];
+  UBYTE DAUX2 = memory[0x030b];
 
   int	sector;
   int	buffer;
   int	count;
   int	i;
-
-  CPU_GetStatus (&cpu_status);
 
   if (disk[DUNIT-1] != -1)
     {
@@ -144,7 +178,10 @@ SIO ()
 	  if (sector < 4)
 	    offset = (sector-1) * 128 + 16;
 	  else
-	    offset = (sector-1) * sectorsize[DUNIT-1] + 16;
+	    offset = (sector - 1) * sectorsize[DUNIT-1] + 16;
+/*
+	    offset = 3*128 + (sector-4) * sectorsize[DUNIT-1] + 16;
+*/
 	  break;
 	default :
 	  printf ("Fatal Error in atari_sio.c\n");
@@ -164,17 +201,19 @@ SIO ()
 	case 0x50 :
 	case 0x57 :
 	  write (disk[DUNIT-1], &memory[buffer], count);
-	  cpu_status.Y = 1;
-	  cpu_status.flag.N = 0;
+	  regY = 1;
+	  ClrN;
 	  break;
 	case 0x52 :
 	  read (disk[DUNIT-1], &memory[buffer], count);
-	  cpu_status.Y = 1;
-	  cpu_status.flag.N = 0;
+	  regY = 1;
+	  ClrN;
 	  break;
-	case 0x21 :	/* Single Density Format */
-	  cpu_status.Y = 1;
-	  cpu_status.flag.N = 0;
+	case 0x21 : /* Single Density Format */
+	case 0x22 : /* Duel Density Format */
+	case 0x66 : /* US Doubler Format - I think! */
+	  regY = 1;
+	  ClrN;
 	  break;
 /*
    Status Request from Atari 400/800 Technical Reference Notes
@@ -201,65 +240,124 @@ SIO ()
 	  for (i=0;i<count;i++)
 	    {
 	      if (sectorsize[DUNIT-1] == 256)
-		PutByte (buffer+i, 32 + 16)
+		memory[buffer+i] = 32 + 16;
 	      else
-		PutByte (buffer+i, 16)
+		memory[buffer+i] = 16;
 	    }
-	  cpu_status.Y = 1;
-	  cpu_status.flag.N = 0;
+	  regY = 1;
+	  ClrN;
 	  break;
 	default :
 	  printf ("SIO: DCOMND = %0x\n", DCOMND);
-	  cpu_status.Y = 146;
-	  cpu_status.flag.N = 1;
+	  regY = 146;
+	  SetN;
 	  break;
 	}
     }
   else
     {
-      cpu_status.Y = 146;
-      cpu_status.flag.N = 1;
+      regY = 146;
+      SetN;
     }
 
-  CPU_PutStatus (&cpu_status);
-
-  PutByte(0x0303, cpu_status.Y);
+  memory[0x0303] = regY;
 }
 
 static unsigned char cmd_frame[5];
 static int ncmd = 0;
 static int checksum = 0;
 
-static unsigned char data[128];
+static unsigned char data[256];
 static int offst;
 
 static int buffer_offset;
 static int buffer_size;
 
+extern int DELAYED_SERIN_IRQ;
+extern int DELAYED_SEROUT_IRQ;
+extern int DELAYED_XMTDONE_IRQ;
+
+typedef enum
+{
+  SIO_Normal,
+  SIO_Put,
+} SIO_State;
+
+static SIO_State sio_state = SIO_Normal;
+
 void Command_Frame (void)
 {
+  sio_state = SIO_Normal;
+
   switch (cmd_frame[1])
     {
     case 'R' : /* Read */
+#ifdef DEBUG
       printf ("Read command\n");
-      break;
-    case 'W' : /* Write with verify */
-      printf ("Write command\n");
+#endif
+      {
+	int sector;
+	int dskno;
+	int i;
+
+	dskno = cmd_frame[0] - 0x31;
+	sector = cmd_frame[2] + cmd_frame[3] * 256;
+#ifdef DEBUG
+	printf ("Sector: %d(%x)\n", sector, sector);
+#endif
+	SeekSector (dskno, sector);
+
+	data[0] = 0x41; /* ACK */
+	data[1] = 0x43; /* OPERATION COMPLETE */
+
+	read (disk[dskno], &data[2], 128);
+	checksum = 0;
+	for (i=2;i<130;i++)
+	  {
+	    checksum += (unsigned char)data[i];
+	    while (checksum > 255)
+	      checksum = checksum - 255;
+	  }
+	data[130] = checksum;
+
+        buffer_offset = 0;
+        buffer_size = 131;
+
+	DELAYED_SEROUT_IRQ = 1;
+	DELAYED_XMTDONE_IRQ = 3;
+	DELAYED_SERIN_IRQ = 7;
+      }
       break;
     case 'S' : /* Status */
+#ifdef DEBUG
       printf ("Status command\n");
+#endif
       data[0] = 0x41; /* ACK */
-      data[1] = 0x10;
-      data[2] = 0x10;
-      data[3] = 0x10;
-      data[4] = 0x10;
-      data[5] = 0x40; /* Checksum */
-      data[6] = 0x43; /* COMPLETE */
+      data[1] = 0x43; /* OPERATION COMPLETE */
+      data[2] = 0x10; /* 2ea */
+      data[3] = 0x00; /* 2eb */
+      data[4] = 0x01; /* 2ec */
+      data[5] = 0x00; /* 2ed */
+      data[6] = 0x11; /* Checksum */
       buffer_offset = 0;
       buffer_size = 7;
+
+      DELAYED_SEROUT_IRQ = 1;
+      DELAYED_XMTDONE_IRQ = 5;
+      DELAYED_SERIN_IRQ = 150;
       break;
+    case 'W' : /* Write with verify */
     case 'P' : /* Put without verify */
-      printf ("Put command\n");
+#ifdef DEBUG
+      printf ("Put or Write command\n");
+#endif
+      data[0] = 0x41; /* ACK */
+      buffer_offset = 0;
+      buffer_size = 1;
+      DELAYED_SEROUT_IRQ = 1;
+      DELAYED_XMTDONE_IRQ = 3;
+      DELAYED_SERIN_IRQ = 7;
+      sio_state = SIO_Put;
       break;
     case '!' : /* Format */
       printf ("Format command\n");
@@ -277,10 +375,14 @@ void Command_Frame (void)
       printf ("Verify Sector\n");
       break;
     default :
-      printf ("Unknown command\n");
+      printf ("Unknown command: %02x\n", cmd_frame[1]);
+      buffer_offset = 0;
+      buffer_size = 0;
+      DELAYED_XMTDONE_IRQ = 3;
       break;
   }
 }
+#undef DEBUG
 
 void SIO_SEROUT (unsigned char byte, int cmd)
 {
@@ -298,47 +400,74 @@ void SIO_SEROUT (unsigned char byte, int cmd)
       cmd_frame[ncmd++] = byte;
       if (ncmd == 5)
 	{
-	  int sector;
-
 	  Command_Frame ();
-/*
-	  sector = cmd_frame[2] + cmd_frame[3] * 256;
-	  printf ("Sector: %d(%x)\n", sector, sector);
-	  lseek (disk[0], (sector-1)*128, SEEK_SET);
-	  read (disk[0], data, 128);
-*/
+
 	  offst = 0;
 	  checksum = 0;
-/*
-	  IRQST &= 0xdf;
-*/
-/*
-	  IRQST &= 0xc7;
-*/
-	  IRQST &= ~(IRQEN & (0x10 | 0x08));
-	  INTERRUPT |= IRQ_MASK;
 	  ncmd = 0;
 	}
       else
 	{
-/*
-	  IRQST &= 0xe7;
-*/
-	  IRQST &= ~(IRQEN & (0x10 | 0x08));
-	  INTERRUPT |= IRQ_MASK;
+	  DELAYED_SEROUT_IRQ = 1;
 	}
 
       if (cmd_frame[0] == 0)
 	ncmd = 0;
     }
+  else if (sio_state = SIO_Put)
+    {
+      data[buffer_offset++] = byte;
+      if (buffer_offset == 130)
+	{
+	  int sector;
+	  int dskno;
+	  int i;
+
+	  checksum = 0;
+
+	  for (i=1;i<129;i++)
+	    {
+	      checksum += (unsigned char)data[i];
+	      while (checksum > 255)
+		checksum = checksum - 255;
+	    }
+
+	  if (checksum != data[129])
+	    {
+	      printf ("Direct SIO Write Error\n");
+	      printf ("Calculated Checksum = %x\n", checksum);
+	      printf ("Actual Checksum = %x\n", data[129]);
+	      exit (1);
+	    }
+
+	  dskno = cmd_frame[0] - 0x31;
+	  sector = cmd_frame[2] + cmd_frame[3] * 256;
+
+#ifdef DEBUG
+	  printf ("Sector: %d(%x)\n", sector, sector);
+#endif
+
+	  SeekSector (dskno, sector);
+
+	  write (disk[dskno], &data[1], 128);
+	  data[buffer_offset] = 0x41; /* ACK */
+	  data[buffer_offset+1] = 0x43; /* OPERATION COMPLETE */
+	  buffer_size = buffer_offset + 2;
+	  DELAYED_SEROUT_IRQ = 1;
+	  DELAYED_XMTDONE_IRQ = 3;
+	  DELAYED_SERIN_IRQ = 7;
+	  DELAYED_XMTDONE_IRQ = 5;
+	  DELAYED_SERIN_IRQ = 150;
+	}
+      else
+	{
+	  DELAYED_SEROUT_IRQ = 4;
+	}
+    }
   else
     {
+      DELAYED_SEROUT_IRQ = 1;
       ncmd = 0;
-/*
-      IRQST &= 0xe7;
-*/
-      IRQST &= ~(IRQEN & (0x10 | 0x80));
-      INTERRUPT |= IRQ_MASK;
     }
 }
 
@@ -356,12 +485,11 @@ int SIO_SERIN ()
 
       if (buffer_offset < buffer_size)
 	{
-/*
-	  IRQST &= 0xdf;
-*/
-	  IRQST &= ~(IRQEN & 0x20);
-	  INTERRUPT |= IRQ_MASK;
+#ifdef DEBUG
 	  printf ("Setting SERIN Interrupt again\n");
+#endif
+	  DELAYED_SERIN_IRQ = 3;
+	  DELAYED_SERIN_IRQ = 4;
 	}
     }
 

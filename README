@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Version 0.2.1
+Atari 800 Emulator for Unix, Version 0.4.5
 ------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -8,15 +8,15 @@ Atari 800 Emulator for Unix, Version 0.2.1
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.2.1 of my Atari 800 emulator for Unix. My main
-objective is to create a freely distributable portable emulator (i.e.
-with source code available). It can be configured to run in the
-following ways :-
+This is the version 0.4.5 of my Atari 800, 800XL, 130XE and 5200 emulator
+for Unix. My main objective is to create a freely distributable portable
+emulator (i.e. with source code available). It can be configured to run in
+the following ways :-
 
 	1. BASIC mode
 	2. CURSES Mode
 	3. SVGALIB for Linux Systems
-	4. X-Windows
+	4. X-Windows + Optional XVIEW or MOTIF User Interface
 	5. CBM Amiga
 
 The basic mode is only useful for running programs such as MAC65,
@@ -30,10 +30,12 @@ fully - SunOS 4.1.3, VAX/VMS, LINUX (but ncurses is OK).
 
 The SVGALIB version runs at a reasonable speed. The screen dimensions
 are limited to 320x200 and is unable to display the overscan modes.
-Instead SVGALIB displays the core 320x192 pixels.
+Instead SVGALIB displays the core 320x200 pixels. The area which is
+displayed can be modified using the F11 and F12 keys.
 
-The X-Windows version supports graphics but runs *very* slowly. This
-appears to be due to overheads with X-Windows.
+The X-Windows version supports graphics and has an optional XVIEW
+user interface. The Linux X Window version can be built with
+joystick support (If joystick module is installed in the kernel).
 
 The Amiga version supports graphics but currently lacks Paddle support.
 
@@ -46,6 +48,8 @@ Note: Not all features are supported on all platforms.
 
 48K/52K Atari 400/800 emulation (optional RAM between 0xc000 and 0xcfff)
 Atari 800XL emulation.
+Atari 130XE emulation (but Antic access the same bank the CPU is using)
+Atari 5200 Games System.
 OSS Super Cartridges.
 Should run on any Unix computer running X-Windows.
 Wide / Normal / Standard Playfields.
@@ -60,21 +64,10 @@ Character vertical reflect, invert and blank.
 Files can be stored directly on your host computer via the H: device.
 	(H: replaces the C: device which serves no useful purpose)
 Reads both ATR and XFD disk files.
-Disk swapping (Crude but works - needs to be improved)
+Disk swapping for XVIEW, MOTIF and Amiga versions.
 PIL modes - allows memory between 0x8000 and 0xbfff to be toggled
 between RAM and ROM.
-Horizontal Fine Scrolling
+Horizontal and Vertical Fine Scrolling
 Playfield and Player/Missile Priorities
-
-Future Atari 800 Enhancements
------------------------------
-
-Vertical Fine Scrolling
-Atari 800XE emulation.
-Printer support (Print to file + spool on close).
-Paged memory using PORTB.
-More extensive sound support.
-
-It should be possible to add support for non OSS Super Cartridges. If
-you can forward details on how the cartridge works I'll see what I
-can do.
+Sound Support on Unix using the Network Audio System
+Printer support

@@ -1,4 +1,17 @@
 #include <stdio.h>
+#ifdef VMS
+#include <stat.h>
+#else
+#include <sys/stat.h>
+#endif
+
+/*
+ * Note: For SHM version check if image_data or the pixmap is needed
+ *       Check if rect, nrects, points and npoints are needed.
+ *       scanline_ptr.
+ */
+
+static char *rcsid = "$Id: atari_x11.c,v 1.23 1996/07/19 19:52:22 david Exp $";
 
 #ifdef XVIEW
 #include <xview/xview.h>
@@ -9,9 +22,50 @@
 #include <xview/file_chsr.h>
 #endif
 
+#ifdef MOTIF
+#include <Xm/MainW.h>
+#include <Xm/DrawingA.h>
+#include <Xm/MessageB.h>
+#include <Xm/FileSB.h>
+
+static XtAppContext app;
+static Widget toplevel;
+static Widget main_w;
+static Widget drawing_area;
+static Widget fsel;
+#endif
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+
+#ifndef VMS
+#include "config.h"
+#endif
+#include "atari.h"
+#include "colours.h"
+
+#ifdef FPS_MONITOR
+#include <sys/time.h>
+
+static struct timeval tp;
+static struct timezone tzp;
+
+static double basetime;
+static int totframes = 0;
+static int nframes = 0;
+#endif
+
+#ifdef SHM
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <X11/extensions/XShm.h>
+
+static XShmSegmentInfo shminfo;
+static XImage *image;
+extern char *atari_screen;
+extern int colour_translation_table[256];
+#endif
 
 #ifdef LINUX_JOYSTICK
 #include <linux/joystick.h>
@@ -28,10 +82,6 @@ static int js1_centre_y;
 static struct JS_DATA_TYPE js_data;
 #endif
 
-#include "system.h"
-#include "atari.h"
-#include "colours.h"
-
 #define	FALSE	0
 #define	TRUE	1
 
@@ -44,17 +94,22 @@ typedef enum
 
 static WindowSize windowsize = Large;
 
+static int x11bug = FALSE;
+
 static int window_width;
 static int window_height;
 
 static Display	*display;
 static Screen	*screen;
 static Window	window;
+#ifndef SHM
 static Pixmap	pixmap;
+#endif
 static Visual	*visual;
 
-static GC	gc;
-static GC	gc_colour[256];
+static GC gc;
+static GC gc_colour[256];
+static int colours[256];
 
 static XComposeStatus	keyboard_status;
 
@@ -62,10 +117,11 @@ static XComposeStatus	keyboard_status;
 static Frame frame;
 static Panel panel;
 static Canvas canvas;
-static Menu disk_menu;
+static Menu system_menu;
+static Menu coldstart_menu;
 static Menu consol_menu;
 static Menu options_menu;
-static Frame disk_change_chooser;
+static Frame chooser;
 
 static Frame controllers_frame;
 static Panel controllers_panel;
@@ -119,6 +175,7 @@ static int consol;
 
 extern int refresh_rate;
 extern int countdown_rate;
+extern double deltatime;
 
 int GetKeyCode (XEvent *event)
 {
@@ -132,26 +189,33 @@ int GetKeyCode (XEvent *event)
   switch (event->type)
     {
     case Expose :
+#ifndef SHM
       XCopyArea (display, pixmap, window, gc,
 		 0, 0,
 		 window_width, window_height,
 		 0, 0);
+#endif
       break;
     case KeyPress :
       switch (keysym)
 	{
 	case XK_Shift_L :
 	case XK_Shift_R :
-	  SHIFT = 0x40;
+	  SHIFT = AKEY_SHFT;
 	  break;
 	case XK_Control_L :
 	case XK_Control_R :
-	  CONTROL = 0x80;
+	  CONTROL = AKEY_CTRL;
 	  break;
 	case XK_Caps_Lock :
-	  keycode = AKEY_CAPSTOGGLE;
+	  if (SHIFT)
+	    keycode = AKEY_CAPSLOCK;
+	  else
+	    keycode = AKEY_CAPSTOGGLE;
 	  break;
 	case XK_Shift_Lock :
+	  if (x11bug)
+	    printf ("XK_Shift_Lock\n");
 	  break;
 	case XK_Alt_L :
 	case XK_Alt_R :
@@ -181,11 +245,18 @@ int GetKeyCode (XEvent *event)
 	case XK_F7 :
 	  keycode = AKEY_BREAK;
 	  break;
+	case XK_F8 :
+	  keycode = AKEY_DISKCHANGE;
+	  break;
 	case XK_F9 :
 	  keycode = AKEY_EXIT;
 	  break;
 	case XK_F10 :
 	  keycode = AKEY_NONE;
+	  if (deltatime == 0.0)
+	    deltatime = (1.0 / 50.0);
+	  else
+	    deltatime = 0.0;
 	  break;
 	case XK_Home :
 	  keycode = 0x76;
@@ -195,6 +266,14 @@ int GetKeyCode (XEvent *event)
 	    keycode = AKEY_INSERT_LINE;
 	  else
 	    keycode = AKEY_INSERT_CHAR;
+	  break;
+	case XK_BackSpace :
+	  if (CONTROL)
+	    keycode = AKEY_DELETE_CHAR;
+	  else if (SHIFT)
+	    keycode = AKEY_DELETE_LINE;
+	  else
+	    keycode = AKEY_BACKSPACE;
 	  break;
 	case XK_Delete :
 	  if (CONTROL)
@@ -232,91 +311,91 @@ int GetKeyCode (XEvent *event)
 	    keycode = AKEY_TAB;
 	  break;
 	case XK_exclam :
-	  keycode = '!';
+	  keycode = AKEY_EXCLAMATION;
 	  break;
 	case XK_quotedbl :
-	  keycode = '"';
+	  keycode = AKEY_DBLQUOTE;
 	  break;
 	case XK_numbersign :
-	  keycode = '#';
+	  keycode = AKEY_HASH;
 	  break;
 	case XK_dollar :
-	  keycode = '$';
+	  keycode = AKEY_DOLLAR;
 	  break;
 	case XK_percent :
-	  keycode = '%';
+	  keycode = AKEY_PERCENT;
 	  break;
 	case XK_ampersand :
-	  keycode = '&';
+	  keycode = AKEY_AMPERSAND;
 	  break;
 	case XK_quoteright :
-	  keycode = '\'';
+	  keycode = AKEY_QUOTE;
 	  break;
 	case XK_at :
-	  keycode = '@';
+	  keycode = AKEY_AT;
 	  break;
 	case XK_parenleft :
-	  keycode = '(';
+	  keycode = AKEY_PARENLEFT;
 	  break;
 	case XK_parenright :
-	  keycode = ')';
+	  keycode = AKEY_PARENRIGHT;
 	  break;
 	case XK_less :
-	  keycode = '<';
+	  keycode = AKEY_LESS;
 	  break;
 	case XK_greater :
-	  keycode = '>';
+	  keycode = AKEY_GREATER;
 	  break;
 	case XK_equal :
-	  keycode = '=';
+	  keycode = AKEY_EQUAL;
 	  break;
 	case XK_question :
-	  keycode = '?';
+	  keycode = AKEY_QUESTION;
 	  break;
 	case XK_minus :
-	  keycode = '-';
+	  keycode = AKEY_MINUS;
 	  break;
 	case XK_plus :
-	  keycode = '+';
+	  keycode = AKEY_PLUS;
 	  break;
 	case XK_asterisk :
-	  keycode = '*';
+	  keycode = AKEY_ASTERISK;
 	  break;
 	case XK_slash :
-	  keycode = '/';
+	  keycode = AKEY_SLASH;
 	  break;
 	case XK_colon :
-	  keycode = ':';
+	  keycode = AKEY_COLON;
 	  break;
 	case XK_semicolon :
-	  keycode = ';';
+	  keycode = AKEY_SEMICOLON;
 	  break;
 	case XK_comma :
-	  keycode = ',';
+	  keycode = AKEY_COMMA;
 	  break;
 	case XK_period :
-	  keycode = '.';
+	  keycode = AKEY_FULLSTOP;
 	  break;
 	case XK_underscore :
-	  keycode = '_';
+	  keycode = AKEY_UNDERSCORE;
 	  break;
 	case XK_bracketleft :
-	  keycode = '[';
+	  keycode = AKEY_BRACKETLEFT;
 	  break;
 	case XK_bracketright :
-	  keycode = ']';
+	  keycode = AKEY_BRACKETRIGHT;
 	  break;
 	case XK_asciicircum :
-	  keycode = '^';
+	  keycode = AKEY_CIRCUMFLEX;
 	  break;
 	case XK_backslash :
-	  keycode = '\\';
+	  keycode = AKEY_BACKSLASH;
 	  break;
 	case XK_bar :
-	  keycode = '|';
+	  keycode = AKEY_BAR;
 	  break;
 	case XK_space :
-	  keycode = ' ';
+	  keycode = AKEY_SPACE;
 	  keypad_trig = 0;
 	  break;
 	case XK_Return :
@@ -324,480 +403,112 @@ int GetKeyCode (XEvent *event)
 	  keypad_stick = STICK_CENTRE;
 	  break;
 	case XK_0 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_0;
-	  else
-	    keycode = '0';
+	  keycode = CONTROL | AKEY_0;
 	  break;
 	case XK_1 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_1;
-	  else
-	    keycode = '1';
+	  keycode = CONTROL | AKEY_1;
 	  break;
 	case XK_2 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_2;
-	  else
-	    keycode = '2';
+	  keycode = CONTROL | AKEY_2;
 	  break;
 	case XK_3 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_3;
-	  else
-	    keycode = '3';
+	  keycode = CONTROL | AKEY_3;
 	  break;
 	case XK_4 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_4;
-	  else
-	    keycode = '4';
+	  keycode = CONTROL | AKEY_4;
 	  break;
 	case XK_5 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_5;
-	  else
-	    keycode = '5';
+	  keycode = CONTROL | AKEY_5;
 	  break;
 	case XK_6 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_6;
-	  else
-	    keycode = '6';
+	  keycode = CONTROL | AKEY_6;
 	  break;
 	case XK_7 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_7;
-	  else
-	    keycode = '7';
+	  keycode = CONTROL | AKEY_7;
 	  break;
 	case XK_8 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_8;
-	  else
-	    keycode = '8';
+	  keycode = CONTROL | AKEY_8;
 	  break;
 	case XK_9 :
-	  if (CONTROL)
-	    keycode = AKEY_CTRL_9;
-	  else
-	    keycode = '9';
+	  keycode = CONTROL | AKEY_9;
 	  break;
-	case XK_a :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_A;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_A;
-	  else
-	    keycode = 'a';
+	case XK_A : case XK_a :
+	  keycode = SHIFT | CONTROL | AKEY_a;
 	  break;
-	case XK_b :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_B;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_B;
-	  else
-	    keycode = 'b';
+	case XK_B : case XK_b :
+	  keycode = SHIFT | CONTROL | AKEY_b;
 	  break;
-	case XK_c :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_C;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_C;
-	  else
-	    keycode = 'c';
+	case XK_C : case XK_c :
+	  keycode = SHIFT | CONTROL | AKEY_c;
 	  break;
-	case XK_d :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_D;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_D;
-	  else
-	    keycode = 'd';
+	case XK_D : case XK_d :
+	  keycode = SHIFT | CONTROL | AKEY_d;
 	  break;
-	case XK_e :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_E;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_E;
-	  else
-	    keycode = 'e';
+	case XK_E : case XK_e :
+	  keycode = SHIFT | CONTROL | AKEY_e;
 	  break;
-	case XK_f :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_F;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_F;
-	  else
-	    keycode = 'f';
+	case XK_F : case XK_f :
+	  keycode = SHIFT | CONTROL | AKEY_f;
 	  break;
-	case XK_g :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_G;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_G;
-	  else
-	    keycode = 'g';
+	case XK_G : case XK_g :
+	  keycode = SHIFT | CONTROL | AKEY_g;
 	  break;
-	case XK_h :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_H;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_H;
-	  else
-	    keycode = 'h';
+	case XK_H : case XK_h :
+	  keycode = SHIFT | CONTROL | AKEY_h;
 	  break;
-	case XK_i :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_I;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_I;
-	  else
-	    keycode = 'i';
+	case XK_I : case XK_i :
+	  keycode = SHIFT | CONTROL | AKEY_i;
 	  break;
-	case XK_j :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_J;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_J;
-	  else
-	    keycode = 'j';
+	case XK_J : case XK_j :
+	  keycode = SHIFT | CONTROL | AKEY_j;
 	  break;
-	case XK_k :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_K;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_K;
-	  else
-	    keycode = 'k';
+	case XK_K : case XK_k :
+	  keycode = SHIFT | CONTROL | AKEY_k;
 	  break;
-	case XK_l :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_L;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_L;
-	  else
-	    keycode = 'l';
+	case XK_L : case XK_l :
+	  keycode = SHIFT | CONTROL | AKEY_l;
 	  break;
-	case XK_m :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_M;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_M;
-	  else
-	    keycode = 'm';
+	case XK_M : case XK_m :
+	  keycode = SHIFT | CONTROL | AKEY_m;
 	  break;
-	case XK_n :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_N;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_N;
-	  else
-	    keycode = 'n';
+	case XK_N : case XK_n :
+	  keycode = SHIFT | CONTROL | AKEY_n;
 	  break;
-	case XK_o :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_O;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_O;
-	  else
-	    keycode = 'o';
+	case XK_O : case XK_o :
+	  keycode = SHIFT | CONTROL | AKEY_o;
 	  break;
-	case XK_p :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_P;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_P;
-	  else
-	    keycode = 'p';
+	case XK_P : case XK_p :
+	  keycode = SHIFT | CONTROL | AKEY_p;
 	  break;
-	case XK_q :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Q;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Q;
-	  else
-	    keycode = 'q';
+	case XK_Q : case XK_q :
+	  keycode = SHIFT | CONTROL | AKEY_q;
 	  break;
-	case XK_r :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_R;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_R;
-	  else
-	    keycode = 'r';
+	case XK_R : case XK_r :
+	  keycode = SHIFT | CONTROL | AKEY_r;
 	  break;
-	case XK_s :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_S;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_S;
-	  else
-	    keycode = 's';
+	case XK_S : case XK_s :
+	  keycode = SHIFT | CONTROL | AKEY_s;
 	  break;
-	case XK_t :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_T;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_T;
-	  else
-	    keycode = 't';
+	case XK_T : case XK_t :
+	  keycode = SHIFT | CONTROL | AKEY_t;
 	  break;
-	case XK_u :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_U;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_U;
-	  else
-	    keycode = 'u';
+	case XK_U : case XK_u :
+	  keycode = SHIFT | CONTROL | AKEY_u;
 	  break;
-	case XK_v :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_V;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_V;
-	  else
-	    keycode = 'v';
+	case XK_V : case XK_v :
+	  keycode = SHIFT | CONTROL | AKEY_v;
 	  break;
-	case XK_w :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_W;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_W;
-	  else
-	    keycode = 'w';
+	case XK_W : case XK_w :
+	  keycode = SHIFT | CONTROL | AKEY_w;
 	  break;
-	case XK_x :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_X;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_X;
-	  else
-	    keycode = 'x';
+	case XK_X : case XK_x :
+	  keycode = SHIFT | CONTROL | AKEY_x;
 	  break;
-	case XK_y :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Y;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Y;
-	  else
-	    keycode = 'y';
+	case XK_Y : case XK_y :
+	  keycode = SHIFT | CONTROL | AKEY_y;
 	  break;
-	case XK_z :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Z;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Z;
-	  else
-	    keycode = 'z';
-	  break;
-	case XK_A :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_A;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_A;
-	  else
-	    keycode = 'A';
-	  break;
-	case XK_B :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_B;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_B;
-	  else
-	    keycode = 'B';
-	  break;
-	case XK_C :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_C;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_C;
-	  else
-	    keycode = 'C';
-	  break;
-	case XK_D :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_D;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_D;
-	  else
-	    keycode = 'D';
-	  break;
-	case XK_E :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_E;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_E;
-	  else
-	    keycode = 'E';
-	  break;
-	case XK_F :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_F;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_F;
-	  else
-	    keycode = 'F';
-	  break;
-	case XK_G :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_G;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_G;
-	  else
-	    keycode = 'G';
-	  break;
-	case XK_H :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_H;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_H;
-	  else
-	    keycode = 'H';
-	  break;
-	case XK_I :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_I;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_I;
-	  else
-	    keycode = 'I';
-	  break;
-	case XK_J :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_J;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_J;
-	  else
-	    keycode = 'J';
-	  break;
-	case XK_K :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_K;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_K;
-	  else
-	    keycode = 'K';
-	  break;
-	case XK_L :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_L;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_L;
-	  else
-	    keycode = 'L';
-	  break;
-	case XK_M :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_M;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_M;
-	  else
-	    keycode = 'M';
-	  break;
-	case XK_N :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_N;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_N;
-	  else
-	    keycode = 'N';
-	  break;
-	case XK_O :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_O;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_O;
-	  else
-	    keycode = 'O';
-	  break;
-	case XK_P :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_P;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_P;
-	  else
-	    keycode = 'P';
-	  break;
-	case XK_Q :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Q;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Q;
-	  else
-	    keycode = 'Q';
-	  break;
-	case XK_R :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_R;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_R;
-	  else
-	    keycode = 'R';
-	  break;
-	case XK_S :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_S;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_S;
-	  else
-	    keycode = 'S';
-	  break;
-	case XK_T :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_T;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_T;
-	  else
-	    keycode = 'T';
-	  break;
-	case XK_U :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_U;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_U;
-	  else
-	    keycode = 'U';
-	  break;
-	case XK_V :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_V;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_V;
-	  else
-	    keycode = 'V';
-	  break;
-	case XK_W :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_W;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_W;
-	  else
-	    keycode = 'W';
-	  break;
-	case XK_X :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_X;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_X;
-	  else
-	    keycode = 'X';
-	  break;
-	case XK_Y :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Y;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Y;
-	  else
-	    keycode = 'Y';
-	  break;
-	case XK_Z :
-	  if (SHIFT && CONTROL)
-	    keycode = AKEY_SHFTCTRL_Z;
-	  else if (CONTROL)
-	    keycode = AKEY_CTRL_Z;
-	  else
-	    keycode = 'Z';
+	case XK_Z : case XK_z :
+	  keycode = SHIFT | CONTROL | AKEY_z;
 	  break;
 	case XK_KP_0 :
 	  keypad_trig = 0;
@@ -830,9 +541,11 @@ int GetKeyCode (XEvent *event)
 	  keypad_stick = STICK_UR;
 	  break;
 	default :
-	  printf ("Pressed Keysym = %x\n", (int)keysym);
+	  if (x11bug)
+	    printf ("Pressed Keysym = %x\n", (int)keysym);
 	  break;
 	}
+      break;
     case KeyRelease :
       switch (keysym)
 	{
@@ -844,6 +557,16 @@ int GetKeyCode (XEvent *event)
 	case XK_Control_R :
 	  CONTROL = 0x00;
 	  break;
+	case XK_Caps_Lock :
+	  if (SHIFT)
+	    keycode = AKEY_CAPSLOCK;
+	  else
+	    keycode = AKEY_CAPSTOGGLE;
+	  break;
+	case XK_Shift_Lock :
+	  if (x11bug)
+	    printf ("XK_Shift_Lock\n");
+	  break;
 	default :
 	  break;
 	}
@@ -853,7 +576,7 @@ int GetKeyCode (XEvent *event)
   return keycode;
 }
 
-static int xview_keycode;
+static int xview_keycode = AKEY_NONE;
 
 #ifdef XVIEW
 
@@ -902,7 +625,7 @@ int disk_change (char *a, char *full_filename, char *filename)
   else
     {
       if (auto_reboot)
-	xview_keycode = AKEY_COLDSTART;
+	Coldstart ();
       status = XV_OK;
     }
 
@@ -913,7 +636,10 @@ boot_callback ()
 {
   auto_reboot = TRUE;
 
-  xv_set (disk_change_chooser,
+  xv_set (chooser,
+	  FRAME_LABEL, "Disk Selector",
+	  FILE_CHOOSER_DIRECTORY, ATARI_DISK_DIR,
+	  FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 	  XV_SHOW, TRUE,
 	  NULL);
 }
@@ -922,7 +648,10 @@ insert_callback ()
 {
   auto_reboot = FALSE;
 
-  xv_set (disk_change_chooser,
+  xv_set (chooser,
+	  FRAME_LABEL, "Disk Selector",
+	  FILE_CHOOSER_DIRECTORY, ATARI_DISK_DIR,
+	  FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 	  XV_SHOW, TRUE,
 	  NULL);
 }
@@ -954,6 +683,105 @@ eject_callback ()
   SIO_Dismount(diskno);
 }
 
+int rom_change (char *a, char *full_filename, char *filename)
+{
+  struct stat buf;
+  int status = XV_ERROR;
+  int yesno;
+
+  stat (full_filename, &buf);
+
+  switch (buf.st_size)
+    {
+    case 0x2000 :
+      Remove_ROM ();
+      if (Insert_8K_ROM(full_filename))
+	{
+	  Coldstart ();
+	  status = XV_OK;
+	}
+      break;
+    case 0x4000 :
+      yesno = notice_prompt (panel, NULL,
+			     NOTICE_MESSAGE_STRINGS,
+			       filename,
+			       "Is this an OSS Supercartridge?",
+			       NULL,
+			     NOTICE_BUTTON_YES, "No",
+			     NOTICE_BUTTON_NO, "Yes",
+			     NULL);
+      if (yesno == NOTICE_YES)
+	{
+	  Remove_ROM ();
+	  if (Insert_16K_ROM(full_filename))
+	    {
+	      Coldstart ();
+	      status = XV_OK;
+	    }
+	}
+      else
+	{
+	  Remove_ROM ();
+	  if (Insert_OSS_ROM(full_filename))
+	    {
+	      Coldstart ();
+	      status = XV_OK;
+	    }
+	}
+      break;
+    case 0x8000 :
+      Remove_ROM ();
+      if (machine == Atari5200)
+	{
+	  if (Insert_32K_5200ROM(full_filename))
+	    {
+	      Coldstart ();
+	      status = XV_OK;
+	    }
+	}
+      else
+	{
+	  if (Insert_DB_ROM(full_filename))
+	    {
+	      Coldstart ();
+	      status = XV_OK;
+	    }
+	}
+      break;
+    default :
+      break;
+    }
+
+  return status;
+}
+
+insert_rom_callback ()
+{
+  xv_set (chooser,
+	  FRAME_LABEL, "ROM Selector",
+	  FILE_CHOOSER_DIRECTORY, ATARI_ROM_DIR,
+	  FILE_CHOOSER_NOTIFY_FUNC, rom_change,
+	  XV_SHOW, TRUE,
+	  NULL);
+}
+
+remove_rom_callback ()
+{
+  Remove_ROM ();
+  Coldstart ();
+}
+
+enable_pill_callback ()
+{
+  EnablePILL ();
+  Coldstart ();
+}
+
+exit_callback ()
+{
+  exit (1);
+}
+
 option_callback ()
 {
   consol &= 0x03;
@@ -981,12 +809,154 @@ break_callback ()
 
 reset_callback ()
 {
-  xview_keycode = AKEY_WARMSTART;
+  Warmstart ();
 }
 
 coldstart_callback ()
 {
-  xview_keycode = AKEY_COLDSTART;
+  Coldstart ();
+}
+
+coldstart_osa_callback ()
+{
+  int status;
+
+  status = Initialise_AtariOSA ();
+  if (status)
+    {
+      Menu_item menuitem;
+
+      menuitem = xv_get (consol_menu,
+			 MENU_NTH_ITEM, 4);
+
+      xv_set (menuitem,
+	      MENU_INACTIVE, TRUE,
+	      NULL);
+    }
+  else
+    {
+      notice_prompt (panel, NULL,
+		     NOTICE_MESSAGE_STRINGS,
+		       "Sorry, OS/A ROM Unavailable",
+		       NULL,
+		     NOTICE_BUTTON, "Cancel", 1,
+		     NULL);
+    }
+}
+
+coldstart_osb_callback ()
+{
+  int status;
+
+  status = Initialise_AtariOSB ();
+  if (status)
+    {
+      Menu_item menuitem;
+      
+      menuitem = xv_get (consol_menu,
+			 MENU_NTH_ITEM, 4);
+
+      xv_set (menuitem,
+	      MENU_INACTIVE, TRUE,
+	      NULL);
+    }
+  else
+    {
+      notice_prompt (panel, NULL,
+		     NOTICE_MESSAGE_STRINGS,
+		       "Sorry, OS/B ROM Unavailable",
+		       NULL,
+		     NOTICE_BUTTON, "Cancel", 1,
+		     NULL);
+    }
+}
+
+coldstart_xl_callback ()
+{
+  int status;
+
+  status = Initialise_AtariXL ();
+  if (status)
+    {
+      Menu_item menuitem;
+
+      menuitem = xv_get (consol_menu,
+			 MENU_NTH_ITEM, 4);
+      
+      xv_set (menuitem,
+	      MENU_INACTIVE, FALSE,
+	      NULL);
+    }
+  else
+    {
+      notice_prompt (panel, NULL,
+		     NOTICE_MESSAGE_STRINGS,
+		       "Sorry, XL/XE ROM Unavailable",
+		       NULL,
+		     NOTICE_BUTTON, "Cancel", 1,
+		     NULL);
+    }
+}
+
+coldstart_xe_callback ()
+{
+  int status;
+
+  status = Initialise_AtariXE ();
+  if (status)
+    {
+      Menu_item menuitem;
+
+      menuitem = xv_get (consol_menu,
+			 MENU_NTH_ITEM, 4);
+
+      xv_set (menuitem,
+	      MENU_INACTIVE, FALSE,
+	      NULL);
+    }
+  else
+    {
+      notice_prompt (panel, NULL,
+		     NOTICE_MESSAGE_STRINGS,
+		       "Sorry, XL/XE ROM Unavailable",
+		       NULL,
+		     NOTICE_BUTTON, "Cancel", 1,
+		     NULL);
+    }
+}
+
+coldstart_5200_callback ()
+{
+  int status;
+
+  status = Initialise_Atari5200 ();
+  if (status)
+    {
+      Menu_item menuitem;
+
+      menuitem = xv_get (consol_menu,
+			 MENU_NTH_ITEM, 4);
+
+      xv_set (menuitem,
+	      MENU_INACTIVE, FALSE,
+	      NULL);
+    }
+  else
+    {
+      notice_prompt (panel, NULL,
+		     NOTICE_MESSAGE_STRINGS,
+		       "Sorry, 5200 ROM Unavailable",
+		       NULL,
+		     NOTICE_BUTTON, "Cancel", 1,
+		     NULL);
+    }
+}
+
+controllers_ok_callback ()
+{
+  xv_set (controllers_frame,
+	  XV_SHOW, FALSE,
+	  NULL);
 }
 
 controllers_callback ()
@@ -998,14 +968,14 @@ controllers_callback ()
 
 void sorry_message ()
 {
-    notice_prompt (panel, NULL,
-		   NOTICE_MESSAGE_STRINGS,
-		     "Sorry, controller already assign",
-		     "to another device",
-		     NULL,
-		   NOTICE_BUTTON, "Cancel", 1,
-		   NULL);
-  }
+  notice_prompt (panel, NULL,
+		 NOTICE_MESSAGE_STRINGS,
+		   "Sorry, controller already assign",
+		   "to another device",
+		   NULL,
+		 NOTICE_BUTTON, "Cancel", 1,
+		 NULL);
+}
 
 keypad_callback ()
 {
@@ -1093,6 +1063,13 @@ js1_callback ()
 }
 #endif
 
+performance_ok_callback ()
+{
+  xv_set (performance_frame,
+	  XV_SHOW, FALSE,
+	  NULL);
+}
+
 performance_callback ()
 {
   xv_set (performance_frame,
@@ -1133,19 +1110,184 @@ void Atari_WhatIs (int mode)
     }
 }
 
+#ifdef MOTIF
+void motif_boot_disk (Widget fs, XtPointer client_data,
+		      XmFileSelectionBoxCallbackStruct *cbs)
+{
+  char *filename;
+
+  if (XmStringGetLtoR(cbs->value, XmSTRING_DEFAULT_CHARSET, &filename))
+    {
+      if (*filename)
+	{
+	  SIO_Dismount(1);
+	  if (SIO_Mount (1, filename))
+	    Coldstart ();
+	}
+
+      XtFree (filename);
+    }
+
+  XtUnmanageChild (fs);
+  XtPopdown (XtParent(fs));
+}
+
+void motif_fs_cancel (Widget fs)
+{
+  XtUnmanageChild (fs);
+  XtPopdown (XtParent(fs));
+}
+
+void motif_system_cback (Widget w, int item_no)
+{
+  XmString t;
+  int status;
+  char *errmsg = NULL;
+
+  switch (item_no)
+    {
+    case 0 :
+      t = XmStringCreateSimple ("/usr/local/lib/atari/DISKS/*");
+      XmFileSelectionDoSearch (fsel, t);
+      XmStringFree (t);
+      XtAddCallback (fsel, XmNokCallback, motif_boot_disk, NULL);
+      XtAddCallback (fsel, XmNcancelCallback, motif_fs_cancel, NULL);
+      XtManageChild (fsel);
+      XtPopup (XtParent(fsel), XtGrabNone);
+      break;
+    case 1 :
+    case 2 :
+    case 3 :
+      break;
+    case 4 :
+      Remove_ROM ();
+      Coldstart ();
+      break;
+    case 5 :
+      EnablePILL ();
+      Coldstart ();
+      break;
+    case 6 :
+      status = Initialise_AtariOSA ();
+      if (status == 0)
+	errmsg = "Sorry, OS/A ROM Unavailable";
+      break;
+    case 7 :
+      status = Initialise_AtariOSB ();
+      if (status == 0)
+	errmsg = "Sorry, OS/B ROM Unavailable";
+      break;
+    case 8 :
+      status = Initialise_AtariXL ();
+      if (status == 0)
+	errmsg = "Sorry, XL/XE ROM Unavailable";
+      break;
+    case 9 :
+      status = Initialise_AtariXE ();
+      if (status == 0)
+	errmsg = "Sorry, XL/XE ROM Unavailable";
+      break;
+    case 10 :
+      status = Initialise_Atari5200 ();
+      if (status == 0)
+	errmsg = "Sorry, 5200 ROM Unavailable";
+      break;
+    case 11 :
+      exit (0);
+    }
+
+  if (errmsg)
+    {
+      static Widget dialog;
+
+      if (!dialog)
+	{
+	  Arg arg[1];
+
+	  dialog = XmCreateErrorDialog (main_w, "message", arg, 0);
+
+	  XtVaSetValues (dialog,
+			 XmNdialogStyle, XmDIALOG_FULL_APPLICATION_MODAL,
+			 NULL);
+
+	  XtUnmanageChild (XmMessageBoxGetChild(dialog, XmDIALOG_OK_BUTTON));
+	  XtUnmanageChild (XmMessageBoxGetChild(dialog, XmDIALOG_HELP_BUTTON));
+	}
+
+      t = XmStringCreateSimple (errmsg);
+      XtVaSetValues (dialog,
+		     XmNmessageString, t,
+		     NULL);
+      XmStringFree (t);
+      XtManageChild (dialog);
+    }
+}
+
+void motif_consol_cback (Widget w, int item_no)
+{
+  switch (item_no)
+    {
+    case 0 :
+      consol &= 0x03; /* Option Pressed */
+      break;
+    case 1 :
+      consol &= 0x05; /* Select Pressed */
+      break;
+    case 2 :
+      consol &= 0x06; /* Start Pressed */
+      break;
+    case 3 :
+      xview_keycode = AKEY_HELP;
+      break;
+    case 4 :
+      xview_keycode = AKEY_BREAK;
+      break;
+    case 5 :
+      Warmstart ();
+      break;
+    case 6 :
+      Coldstart ();
+      break;
+    }
+}
+
+void motif_keypress (Widget w, XtPointer client_data, XEvent *event)
+{
+  int keycode;
+
+  keycode = GetKeyCode (event);
+  if (keycode != AKEY_NONE)
+    xview_keycode = keycode;
+}
+#endif
+
 void Atari_Initialise (int *argc, char *argv[])
 {
   XSetWindowAttributes	xswda;
 
   XGCValues	xgcvl;
 
-  int colours[256];
   int depth;
   int i, j;
   int mode = 0;
 
 #ifdef XVIEW
+  int ypos;
+
   xv_init (XV_INIT_ARGC_PTR_ARGV, argc, argv, NULL);
+#endif
+
+#ifdef MOTIF
+  toplevel = XtVaAppInitialize (&app, "Atari800",
+				NULL, 0,
+				argc, argv, NULL,
+				XtNtitle, ATARI_TITLE,
+				NULL);
+#endif
+
+#ifdef FPS_MONITOR
+  gettimeofday (&tp, &tzp);
+  basetime = tp.tv_sec + (tp.tv_usec / 1000000.0);
 #endif
 
   for (i=j=1;i<*argc;i++)
@@ -1156,11 +1298,38 @@ void Atari_Initialise (int *argc, char *argv[])
 	windowsize = Large;
       else if (strcmp(argv[i],"-huge") == 0)
 	windowsize = Huge;
+      else if (strcmp(argv[i],"-x11bug") == 0)
+	x11bug = TRUE;
       else
-	argv[j++] = argv[i];
+	{
+	  if (strcmp(argv[i],"-help") == 0)
+	    {
+	      printf ("\t-small        Small window (%dx%d)\n",
+		      ATARI_WIDTH, ATARI_HEIGHT);
+	      printf ("\t-large        Large window (%dx%d)\n",
+		      ATARI_WIDTH*2, ATARI_HEIGHT*2);
+	      printf ("\t-huge         Huge window (%dx%d)\n",
+		      ATARI_WIDTH*3, ATARI_HEIGHT*3);
+	      printf ("\t-x11bug       Enable debug code in atari_x11.c\n");
+	    }
+
+	  argv[j++] = argv[i];
+	}
     }
 
   *argc = j;
+
+#ifdef NAS
+  NAS_Initialise (argc, argv);
+#endif
+
+#ifdef SHM
+  if (windowsize != Small)
+    {
+      printf ("X Shared memory version only supports small window\n");
+      windowsize = Small;
+    }
+#endif
 
   switch (windowsize)
     {
@@ -1184,7 +1353,6 @@ void Atari_Initialise (int *argc, char *argv[])
     {
       int status;
 
-      printf ("/dev/js0 is available\n");
       status = read (js0, &js_data, JS_RETURN);
       if (status != JS_RETURN)
 	{
@@ -1195,8 +1363,9 @@ void Atari_Initialise (int *argc, char *argv[])
       js0_centre_x = js_data.x;
       js0_centre_y = js_data.y;
 
-      printf ("\tcentre_x = %d, centry_y = %d\n",
-	      js0_centre_x, js0_centre_y);
+      if (x11bug)
+	printf ("Joystick 0: centre_x = %d, centry_y = %d\n",
+		js0_centre_x, js0_centre_y);
 
       js0_mode = mode++;
     }
@@ -1206,7 +1375,6 @@ void Atari_Initialise (int *argc, char *argv[])
     {
       int status;
 
-      printf ("/dev/js1 is available\n");
       status = read (js1, &js_data, JS_RETURN);
       if (status != JS_RETURN)
 	{
@@ -1217,8 +1385,9 @@ void Atari_Initialise (int *argc, char *argv[])
       js1_centre_x = js_data.x;
       js1_centre_y = js_data.y;
 
-      printf ("\tcentre_x = %d, centry_y = %d\n",
-	      js1_centre_x, js1_centre_y);
+      if (x11bug)
+	printf ("Joystick 1: centre_x = %d, centry_y = %d\n",
+		js1_centre_x, js1_centre_y);
 
       js1_mode = mode++;
     }
@@ -1228,11 +1397,14 @@ void Atari_Initialise (int *argc, char *argv[])
   keypad_mode = mode++;
 
 #ifdef XVIEW
-  frame = (Frame)xv_create (NULL, FRAME,
+  frame = (Frame)xv_create ((Xv_opaque)NULL, FRAME,
 			    FRAME_LABEL, ATARI_TITLE,
 			    FRAME_SHOW_RESIZE_CORNER, FALSE,
 			    XV_WIDTH, window_width,
 			    XV_HEIGHT, window_height + 27,
+#ifdef FPS_MONITOR
+			    FRAME_SHOW_FOOTER, TRUE,
+#endif
 			    XV_SHOW, TRUE,
 			    NULL);
 
@@ -1241,27 +1413,63 @@ void Atari_Initialise (int *argc, char *argv[])
 			    XV_SHOW, TRUE,
 			    NULL);
 
-  disk_menu = xv_create (NULL, MENU,
-			 MENU_ITEM,
-			   MENU_STRING, "Boot Disk",
-			   MENU_NOTIFY_PROC, boot_callback,
-			   NULL,
-			 MENU_ITEM,
-			   MENU_STRING, "Insert Disk",
-			   MENU_NOTIFY_PROC, insert_callback,
-			   NULL,
-			 MENU_ITEM,
-			   MENU_STRING, "Eject Disk",
-			   MENU_NOTIFY_PROC, eject_callback,
-			   NULL,
-			 NULL);
+  system_menu = xv_create ((Xv_opaque)NULL, MENU,
+			   MENU_ITEM,
+			     MENU_STRING, "Boot Disk",
+			     MENU_NOTIFY_PROC, boot_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Insert Disk",
+			     MENU_NOTIFY_PROC, insert_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Eject Disk",
+			     MENU_NOTIFY_PROC, eject_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Insert Cartridge",
+			     MENU_NOTIFY_PROC, insert_rom_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Remove Cartridge",
+			     MENU_NOTIFY_PROC, remove_rom_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Enable PILL",
+			     MENU_NOTIFY_PROC, enable_pill_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Atari 800 OS/A",
+			     MENU_NOTIFY_PROC, coldstart_osa_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Atari 800 OS/B",
+			     MENU_NOTIFY_PROC, coldstart_osb_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Atari 800XL",
+			     MENU_NOTIFY_PROC, coldstart_xl_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Atari 130XE",
+			     MENU_NOTIFY_PROC, coldstart_xe_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Atari 5200",
+			     MENU_NOTIFY_PROC, coldstart_5200_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Exit",
+			     MENU_NOTIFY_PROC, exit_callback,
+			     NULL,
+			   NULL);
 
   xv_create (panel, PANEL_BUTTON,
-	     PANEL_LABEL_STRING, "Disk",
-	     PANEL_ITEM_MENU, disk_menu,
+	     PANEL_LABEL_STRING, "System",
+	     PANEL_ITEM_MENU, system_menu,
 	     NULL);
 
-  consol_menu = (Menu)xv_create (NULL, MENU,
+  consol_menu = (Menu)xv_create ((Xv_opaque)NULL, MENU,
 				 MENU_ITEM,
 				   MENU_STRING, "Option",
 				   MENU_NOTIFY_PROC, option_callback,
@@ -1298,7 +1506,7 @@ void Atari_Initialise (int *argc, char *argv[])
 	     PANEL_ITEM_MENU, consol_menu,
 	     NULL);
 
-  options_menu = (Menu)xv_create (NULL, MENU,
+  options_menu = (Menu)xv_create ((Xv_opaque)NULL, MENU,
 				  MENU_ITEM,
 				    MENU_STRING, "Controllers",
 				    MENU_NOTIFY_PROC, controllers_callback,
@@ -1315,8 +1523,8 @@ void Atari_Initialise (int *argc, char *argv[])
 	     NULL);
 
   canvas = (Canvas)xv_create (frame, CANVAS,
-			      CANVAS_WIDTH, ATARI_WIDTH,
-			      CANVAS_HEIGHT, ATARI_HEIGHT,
+			      CANVAS_WIDTH, window_width,
+			      CANVAS_HEIGHT, window_height,
 			      NULL);
 /*
    =====================================
@@ -1332,7 +1540,10 @@ void Atari_Initialise (int *argc, char *argv[])
   controllers_panel = (Panel)xv_get (controllers_frame, FRAME_CMD_PANEL,
 				     NULL);
 
+  ypos = 10;
   keypad_item = (Panel_item)xv_create (controllers_panel, PANEL_CHOICE_STACK,
+				       PANEL_VALUE_X, 150,
+				       PANEL_VALUE_Y, ypos,
 				       PANEL_LAYOUT, PANEL_HORIZONTAL,
 				       PANEL_LABEL_STRING, "Numeric Keypad",
 				       PANEL_CHOICE_STRINGS,
@@ -1344,8 +1555,11 @@ void Atari_Initialise (int *argc, char *argv[])
 				       PANEL_VALUE, keypad_mode,
 				       PANEL_NOTIFY_PROC, keypad_callback,
 				       NULL);
+  ypos += 25;
 
   mouse_item = (Panel_item)xv_create (controllers_panel, PANEL_CHOICE_STACK,
+				      PANEL_VALUE_X, 150,
+				      PANEL_VALUE_Y, ypos,
 				      PANEL_LAYOUT, PANEL_HORIZONTAL,
 				      PANEL_LABEL_STRING, "Mouse",
 				      PANEL_CHOICE_STRINGS,
@@ -1366,11 +1580,14 @@ void Atari_Initialise (int *argc, char *argv[])
 				      PANEL_VALUE, mouse_mode,
 				      PANEL_NOTIFY_PROC, mouse_callback,
 				      NULL);
+  ypos += 25;
 
 #ifdef LINUX_JOYSTICK
   if (js0 != -1)
     {
       js0_item = (Panel_item)xv_create (controllers_panel, PANEL_CHOICE_STACK,
+					PANEL_VALUE_X, 150,
+					PANEL_VALUE_Y, ypos,
 					PANEL_LAYOUT, PANEL_HORIZONTAL,
 					PANEL_LABEL_STRING, "/dev/js0",
 					PANEL_CHOICE_STRINGS,
@@ -1382,11 +1599,14 @@ void Atari_Initialise (int *argc, char *argv[])
 					PANEL_VALUE, js0_mode,
 					PANEL_NOTIFY_PROC, js0_callback,
 					NULL);
+      ypos += 25;
     }
 
   if (js1 != -1)
     {
       js1_item = (Panel_item)xv_create (controllers_panel, PANEL_CHOICE_STACK,
+					PANEL_VALUE_X, 150,
+					PANEL_VALUE_Y, ypos,
 					PANEL_LAYOUT, PANEL_HORIZONTAL,
 					PANEL_LABEL_STRING, "/dev/js1",
 					PANEL_CHOICE_STRINGS,
@@ -1398,8 +1618,16 @@ void Atari_Initialise (int *argc, char *argv[])
 					PANEL_VALUE, js1_mode,
 					PANEL_NOTIFY_PROC, js1_callback,
 					NULL);
+      ypos += 25;
     }
 #endif
+
+  xv_create (controllers_panel, PANEL_BUTTON,
+	     XV_X, 130,
+	     XV_Y, 125,
+	     PANEL_LABEL_STRING, "OK",
+	     PANEL_NOTIFY_PROC, controllers_ok_callback,
+	     NULL);
 /*
    ======================================
    Create Performance Configuration Frame
@@ -1407,14 +1635,17 @@ void Atari_Initialise (int *argc, char *argv[])
 */
   performance_frame = (Frame)xv_create (frame, FRAME_CMD,
 					FRAME_LABEL, "Performance Configuration",
-					XV_WIDTH, 500,
-					XV_HEIGHT, 75,
+					XV_WIDTH, 400,
+					XV_HEIGHT, 100,
 					NULL);
 
   performance_panel = (Panel)xv_get (performance_frame, FRAME_CMD_PANEL,
 				     NULL);
 
+  ypos = 10;
   refresh_slider = (Panel_item)xv_create (performance_panel, PANEL_SLIDER,
+					  PANEL_VALUE_X, 155,
+					  PANEL_VALUE_Y, ypos,
 					  PANEL_LAYOUT, PANEL_HORIZONTAL,
 					  PANEL_LABEL_STRING, "Screen Refresh Rate",
 					  PANEL_VALUE, refresh_rate,
@@ -1424,10 +1655,13 @@ void Atari_Initialise (int *argc, char *argv[])
 					  PANEL_TICKS, 32,
 					  PANEL_NOTIFY_PROC, refresh_callback,
 					  NULL);
+  ypos += 25;
 
   countdown_slider = (Panel_item)xv_create (performance_panel, PANEL_SLIDER,
+					    PANEL_VALUE_X, 155,
+					    PANEL_VALUE_Y, ypos,
 					    PANEL_LAYOUT, PANEL_HORIZONTAL,
-					    PANEL_LABEL_STRING, "Instructions during Vertical Blank",
+					    PANEL_LABEL_STRING, "Instructions per VBI",
 					    PANEL_VALUE, countdown_rate,
 					    PANEL_MIN_VALUE, 1000,
 					    PANEL_MAX_VALUE, 10000,
@@ -1435,28 +1669,45 @@ void Atari_Initialise (int *argc, char *argv[])
 					    PANEL_TICKS, 10,
 					    PANEL_NOTIFY_PROC, countdown_callback,
 					    NULL);
+
+  xv_create (performance_panel, PANEL_BUTTON,
+	     XV_X, 180,
+	     XV_Y, 75,
+	     PANEL_LABEL_STRING, "OK",
+	     PANEL_NOTIFY_PROC, performance_ok_callback,
+	     NULL);
 /*
    ====================
    Get X Window Objects
    ====================
 */
   display = (Display*)xv_get(frame, XV_DISPLAY);
+  if (!display)
+    {
+      printf ("Failed to open display\n");
+      exit (1);
+    }
+
   screen = XDefaultScreenOfDisplay (display);
+  if (!screen)
+    {
+      printf ("Unable to get screen\n");
+      exit (1);
+    }
+
+  visual = XDefaultVisualOfScreen (screen);
+  if (!visual)
+    {
+      printf ("Unable to get visual\n");
+      exit (1);
+    }
+
   window = (Window)xv_get(canvas_paint_window(canvas), XV_XID);
   depth = XDefaultDepthOfScreen (screen);
-  pixmap = XCreatePixmap (display, window,
-			  window_width, window_height, depth);
 
-  disk_change_chooser = (Frame)xv_create (frame, FILE_CHOOSER,
-					  FILE_CHOOSER_DIRECTORY, "/usr/local/lib/atari",
-					  FILE_CHOOSER_DIRECTORY, "/home/david/a800/disks",
-					  FILE_CHOOSER_TYPE, FILE_CHOOSER_OPEN,
-					  FILE_CHOOSER_NOTIFY_FUNC, disk_change,
-					  NULL);
-
-  xv_set (disk_change_chooser,
-	  FRAME_LABEL, "Disk Selector",
-	  NULL);
+  chooser = (Frame)xv_create (frame, FILE_CHOOSER,
+			      FILE_CHOOSER_TYPE, FILE_CHOOSER_OPEN,
+			      NULL);
 
   xv_set (canvas_paint_window(canvas),
 	  WIN_EVENT_PROC, event_proc,
@@ -1464,6 +1715,154 @@ void Atari_Initialise (int *argc, char *argv[])
 	  NULL);
 #endif
 
+#ifdef MOTIF
+  {
+    Widget menubar;
+
+    XmString s_system;
+    XmString s_boot_disk;
+    XmString s_insert_disk;
+    XmString s_eject_disk;
+    XmString s_insert_cart;
+    XmString s_remove_cart;
+    XmString s_enable_pill;
+    XmString s_osa;
+    XmString s_osb;
+    XmString s_osxl;
+    XmString s_osxe;
+    XmString s_os5200;
+    XmString s_exit;
+
+    XmString s_console;
+    XmString s_option;
+    XmString s_select;
+    XmString s_start;
+    XmString s_help;
+    XmString s_break;
+    XmString s_warmstart;
+    XmString s_coldstart;
+
+    main_w = XtVaCreateManagedWidget ("main_window",
+				      xmMainWindowWidgetClass, toplevel,
+				      NULL);
+
+    s_system = XmStringCreateSimple ("System");
+    s_boot_disk = XmStringCreateSimple ("Boot Disk");
+    s_insert_disk = XmStringCreateSimple ("Insert Disk");
+    s_eject_disk = XmStringCreateSimple ("Eject Disk");
+    s_insert_cart = XmStringCreateSimple ("Insert Cartridge");
+    s_remove_cart = XmStringCreateSimple ("Remove Cartridge");
+    s_enable_pill = XmStringCreateSimple ("Enable PILL");
+    s_osa = XmStringCreateSimple ("Atari 800 OS/A");
+    s_osb = XmStringCreateSimple ("Atari 800 OS/B");
+    s_osxl = XmStringCreateSimple ("Atari 800XL");
+    s_osxe = XmStringCreateSimple ("Atari 130XE");
+    s_os5200 = XmStringCreateSimple ("Atari 5200");
+    s_exit = XmStringCreateSimple ("Exit");
+
+    s_console = XmStringCreateSimple ("Console");
+    s_option = XmStringCreateSimple ("Option");
+    s_select = XmStringCreateSimple ("Select");
+    s_start = XmStringCreateSimple ("Start");
+    s_help = XmStringCreateSimple ("Help");
+    s_break = XmStringCreateSimple ("Break");
+    s_warmstart = XmStringCreateSimple ("Warmstart");
+    s_coldstart = XmStringCreateSimple ("Coldstart");
+;
+    menubar = XmVaCreateSimpleMenuBar (main_w, "menubar",
+				       XmVaCASCADEBUTTON, s_system, 'S',
+				       XmVaCASCADEBUTTON, s_console, 'C',
+				       NULL);
+
+    XmVaCreateSimplePulldownMenu (menubar, "system_menu", 0, motif_system_cback,
+				  XmVaPUSHBUTTON, s_boot_disk, 'O', NULL, NULL,
+				  XmVaPUSHBUTTON, s_insert_disk, 'I', NULL, NULL,
+				  XmVaPUSHBUTTON, s_eject_disk, 'J', NULL, NULL,
+				  XmVaSEPARATOR,
+				  XmVaPUSHBUTTON, s_insert_cart, 'N', NULL, NULL,
+				  XmVaPUSHBUTTON, s_remove_cart, 'R', NULL, NULL,
+				  XmVaPUSHBUTTON, s_enable_pill, 'P', NULL, NULL,
+				  XmVaSEPARATOR,
+				  XmVaPUSHBUTTON, s_osa, 'A', NULL, NULL,
+				  XmVaPUSHBUTTON, s_osb, 'B', NULL, NULL,
+				  XmVaPUSHBUTTON, s_osxl, 'L', NULL, NULL,
+				  XmVaPUSHBUTTON, s_osxe, 'E', NULL, NULL,
+				  XmVaPUSHBUTTON, s_os5200, '5', NULL, NULL,
+				  XmVaSEPARATOR,
+				  XmVaPUSHBUTTON, s_exit, 'x', NULL, NULL,
+				  NULL);
+
+    XmVaCreateSimplePulldownMenu (menubar, "console_menu", 1, motif_consol_cback,
+				  XmVaPUSHBUTTON, s_option, 'O', NULL, NULL,
+				  XmVaPUSHBUTTON, s_select, 't', NULL, NULL,
+				  XmVaPUSHBUTTON, s_start, 'S', NULL, NULL,
+				  XmVaSEPARATOR,
+				  XmVaPUSHBUTTON, s_help, 'H', NULL, NULL,
+				  XmVaPUSHBUTTON, s_break, 'B', NULL, NULL,
+				  XmVaSEPARATOR,
+				  XmVaPUSHBUTTON, s_warmstart, 'W', NULL, NULL,
+				  XmVaPUSHBUTTON, s_coldstart, 'C', NULL, NULL,
+				  NULL);
+
+    XmStringFree (s_system);
+    XmStringFree (s_osa);
+    XmStringFree (s_osb);
+    XmStringFree (s_osxl);
+    XmStringFree (s_osxe);
+    XmStringFree (s_os5200);
+    XmStringFree (s_exit);
+
+    XmStringFree (s_console);
+    XmStringFree (s_option);
+    XmStringFree (s_select);
+    XmStringFree (s_start);
+    XmStringFree (s_help);
+    XmStringFree (s_break);
+    XmStringFree (s_warmstart);
+    XmStringFree (s_coldstart);
+
+    XtManageChild (menubar);
+
+    fsel = XmCreateFileSelectionDialog (toplevel, "filesb", NULL, 0);
+
+    drawing_area = XtVaCreateManagedWidget ("Canvas",
+					    xmDrawingAreaWidgetClass, main_w,
+					    XmNunitType, XmPIXELS,
+					    XmNheight, window_height,
+					    XmNwidth, window_width,
+					    XmNresizePolicy, XmNONE,
+					    NULL);
+
+    XtAddEventHandler (drawing_area,
+		       KeyPressMask | KeyReleaseMask,
+		       False,
+		       motif_keypress, NULL);
+
+    XtRealizeWidget (toplevel);
+  }
+
+  display = XtDisplay (drawing_area);
+
+  window = XtWindow (drawing_area);
+
+  screen = XDefaultScreenOfDisplay (display);
+  if (!screen)
+    {
+      printf ("Unable to get screen\n");
+      exit (1);
+    }
+
+  visual = XDefaultVisualOfScreen (screen);
+  if (!visual)
+    {
+      printf ("Unable to get visual\n");
+      exit (1);
+    }
+
+  depth = XDefaultDepthOfScreen (screen);
+#endif
+
+#ifndef MOTIF
 #ifndef XVIEW
   display = XOpenDisplay (NULL);
   if (!display)
@@ -1479,6 +1878,13 @@ void Atari_Initialise (int *argc, char *argv[])
       exit (1);
     }
 
+  visual = XDefaultVisualOfScreen (screen);
+  if (!visual)
+    {
+      printf ("Unable to get visual\n");
+      exit (1);
+    }
+
   depth = XDefaultDepthOfScreen (screen);
 
   xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask;
@@ -1491,10 +1897,44 @@ void Atari_Initialise (int *argc, char *argv[])
 			  CWEventMask | CWBackPixel,
 			  &xswda);
 
+  XStoreName (display, window, ATARI_TITLE);
+#endif
+#endif
+
+#ifdef SHM
+  {
+    int major;
+    int minor;
+    Bool pixmaps;
+    Status status;
+
+    status = XShmQueryVersion (display, &major, &minor, &pixmaps);
+    if (!status)
+      {
+	printf ("X Shared Memory extensions not available\n");
+	exit (1);
+      }
+
+    printf ("Using X11 Shared Memory Extensions\n");
+
+    image = XShmCreateImage (display, visual, depth, ZPixmap,
+			     NULL, &shminfo, window_width, window_height);
+
+    shminfo.shmid = shmget (IPC_PRIVATE,
+			    (ATARI_HEIGHT+16) * ATARI_WIDTH,
+			    IPC_CREAT | 0777);
+    shminfo.shmaddr = image->data = atari_screen = shmat (shminfo.shmid, 0, 0);
+    shminfo.readOnly = False;
+
+    XShmAttach (display, &shminfo);
+
+    XSync (display, False);
+
+    shmctl (shminfo.shmid, IPC_RMID, 0);
+  }
+#else
   pixmap = XCreatePixmap (display, window,
 			  window_width, window_height, depth);
-
-  XStoreName (display, window, ATARI_TITLE);
 #endif
 
   for (i=0;i<256;i+=2)
@@ -1514,6 +1954,11 @@ void Atari_Initialise (int *argc, char *argv[])
 
       colours[i] = colour.pixel;
       colours[i+1] = colour.pixel;
+
+#ifdef SHM
+      colour_translation_table[i] = colours[i];
+      colour_translation_table[i+1] = colours[i+1];
+#endif
     }
 
   for (i=0;i<256;i++)
@@ -1533,8 +1978,10 @@ void Atari_Initialise (int *argc, char *argv[])
 		  GCForeground | GCBackground,
 		  &xgcvl);
 
+#ifndef SHM
   XFillRectangle (display, pixmap, gc, 0, 0,
 		  window_width, window_height);
+#endif
 
   XMapWindow (display, window);
 
@@ -1553,12 +2000,15 @@ void Atari_Initialise (int *argc, char *argv[])
 
   consol = 7;
 
-  printf ("Initial X11 controller configuration\n");
-  printf ("------------------------------------\n\n");
-  printf ("Keypad is "); Atari_WhatIs (keypad_mode); printf ("\n");
-  printf ("Mouse is "); Atari_WhatIs (mouse_mode); printf ("\n");
-  printf ("/dev/js0 is "); Atari_WhatIs (js0_mode); printf ("\n");
-  printf ("/dev/js1 is "); Atari_WhatIs (js1_mode); printf ("\n");
+  if (x11bug)
+    {
+      printf ("Initial X11 controller configuration\n");
+      printf ("------------------------------------\n\n");
+      printf ("Keypad is "); Atari_WhatIs (keypad_mode); printf ("\n");
+      printf ("Mouse is "); Atari_WhatIs (mouse_mode); printf ("\n");
+      printf ("/dev/js0 is "); Atari_WhatIs (js0_mode); printf ("\n");
+      printf ("/dev/js1 is "); Atari_WhatIs (js1_mode); printf ("\n");
+    }
 }
 
 int Atari_Exit (int run_monitor)
@@ -1576,7 +2026,11 @@ int Atari_Exit (int run_monitor)
 
       XSync (display, True);
 
+#ifdef SHM
+      XDestroyImage (image);
+#else
       XFreePixmap (display, pixmap);
+#endif
       XUnmapWindow (display, window);
       XDestroyWindow (display, window);
       XCloseDisplay (display);
@@ -1588,11 +2042,16 @@ int Atari_Exit (int run_monitor)
       if (js1 != -1)
 	close (js1);
 #endif
+
+#ifdef NAS
+      NAS_Exit ();
+#endif
     }
 
   return restart;
 }
 
+#ifndef SHM
 void Atari_ScanLine_Flush ()
 {
   if (windowsize == Small)
@@ -1618,17 +2077,19 @@ void Atari_ScanLine_Flush ()
 
   last_colour = -1;
 }
+#endif
 
 void Atari_DisplayScreen (UBYTE *screen)
 {
-  UBYTE *scanline_ptr;
-
+#ifdef SHM
+  XShmPutImage (display, window, gc, image, 0, 0, 0, 0,
+		window_width, window_height, 0);
+#else
+  UBYTE *scanline_ptr = image_data;
   int xpos;
   int ypos;
+  int i;
 
-  consol = 7;
-  keypad_trig = 1;
-  scanline_ptr = image_data;
   modified = FALSE;
 
   for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
@@ -1638,6 +2099,7 @@ void Atari_DisplayScreen (UBYTE *screen)
 	  UBYTE colour;
 
 	  colour = *screen++;
+
 	  if (colour != *scanline_ptr)
 	    {
 	      int flush = FALSE;
@@ -1701,10 +2163,52 @@ void Atari_DisplayScreen (UBYTE *screen)
       XCopyArea (display, pixmap, window, gc, 0, 0,
 		 window_width, window_height, 0, 0);
     }
+#endif
+
+  keypad_trig = 1;
 
 #ifdef XVIEW
+#ifdef FPS_MONITOR
+  {
+    double curtime;
+
+    gettimeofday (&tp, &tzp);
+    curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
+
+    nframes++;
+
+    if ((curtime - basetime) >= 2.0)
+      {
+	static char gash[64];
+
+	sprintf (gash, "%.2f FPS", (double)nframes / (curtime - basetime));
+
+	xv_set (frame,
+		FRAME_LEFT_FOOTER, gash,
+		NULL);
+
+	nframes = 0;
+	basetime = curtime;
+      }
+  }
+#endif
+
   notify_dispatch ();
   XFlush (display);
+#endif
+
+#ifdef MOTIF
+  while (XtAppPending(app))
+    {
+      static XEvent event;
+
+      XtAppNextEvent (app, &event);
+      XtDispatchEvent (&event);
+    }
+#endif
+
+#ifdef NAS
+  NAS_UpdateSound ();
 #endif
 }
 
@@ -1716,6 +2220,10 @@ int Atari_Keyboard (void)
   keycode = xview_keycode;
   xview_keycode = AKEY_NONE;
 #else
+#ifdef MOTIF
+  keycode = xview_keycode;
+  xview_keycode = AKEY_NONE;
+#else
   if (XEventsQueued (display, QueuedAfterFlush) > 0)
     {
       XEvent	event;
@@ -1723,6 +2231,7 @@ int Atari_Keyboard (void)
       XNextEvent (display, &event);
       keycode = GetKeyCode (&event);
     }
+#endif
 #endif
 
   return keycode;
@@ -1787,6 +2296,7 @@ mouse_joystick (int mode)
 }
 
 #ifdef LINUX_JOYSTICK
+
 void read_joystick (int js, int centre_x, int centre_y)
 {
   const int threshold = 50;
@@ -1952,7 +2462,7 @@ int Atari_TRIG (int num)
 	trig = 1;
 
       if (js_data.buttons & 0x02)
-	xview_keycode = ' ';
+	xview_keycode = AKEY_SPACE;
     }
 
   if (num == js1_mode)
@@ -1979,13 +2489,13 @@ int Atari_POT (int num)
 
   if (num == (mouse_mode - 4))
     {
-      Window	root_return;
-      Window	child_return;
-      int	root_x_return;
-      int	root_y_return;
-      int	win_x_return;
-      int	win_y_return;
-      int	mask_return;
+      Window root_return;
+      Window child_return;
+      int root_x_return;
+      int root_y_return;
+      int win_x_return;
+      int win_y_return;
+      int mask_return;
 
       if (XQueryPointer (display, window, &root_return,
 			 &child_return, &root_x_return, &root_y_return,
@@ -2018,9 +2528,15 @@ int Atari_POT (int num)
 
 int Atari_CONSOL (void)
 {
-  return consol;
+  int temp;
+
+  temp = consol;
+  consol = 0x07;
+
+  return temp;
 }
 
+#ifndef NAS
 int Atari_AUDC (int channel, int byte)
 {
 }
@@ -2032,3 +2548,4 @@ int Atari_AUDF (int channel, int byte)
 int Atari_AUDCTL (int byte)
 {
 }
+#endif

@@ -19,14 +19,21 @@ Bugs and Known Problems
    until the objects hits a playfield object. The result is that the
    object drops 3 out of 4 frames even when touching a playfield.
 
-6. Test Sound Implementation for Linux SVGALIB needs a printf("\n")
-   instruction before every note! The program doesn't make any
-   sound if it is removed. I have noticed that the title screen of
-   K-Razy Antiks has different coloured letters depending on whether
-   sound has been enabled.
-
-7. Reset and Coldstart do not work when emulating either the XL or
-   XE.
+   + These programs work OK if you select a refresh rate of 1.
 
 8. Player/Missiles are not displayed over a GTIA [sub]playfield -
    Not really a bug since its not been implemented yet!
+
+9. The Linux XVIEW (a.out) version generates a segmentation faults when
+   linked with the Network Audio System. The fault occurs simply by
+   linking the NAS routines with the XVIEW version, you do not even
+   need to execute a single line of code added to support sound. At the
+   moment I believe that this is a conflict between the current version
+   of XVIEW I am using (XVIEW 3.2 Linux Rel. 5 + X11R6) and the Network
+   Audio System. XVIEW and NAS work OK together under Solaris and
+   Linux/ELF.
+
+10. SHAMUS doesn't work because you need to switch the drive off. I did
+    a test modification to atari_sio.c so that 138 (Device Timeout) was
+    returned if no disk was present. This corrected the problem and
+    needs to be added permanently.

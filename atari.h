@@ -1,101 +1,135 @@
 #ifndef __ATARI__
 #define	__ATARI__
 
-#include	"system.h"
+/*
+	=================================
+	Define Data Types on Local System
+	=================================
+*/
+
+#ifdef VMS
+#define SBYTE	char
+#define SWORD	short int
+#define SLONG	long int
+#else
+#define	SBYTE	signed char
+#define	SWORD	signed short int
+#define	SLONG	signed long int
+#endif
+
+#define	UBYTE	unsigned char
+#define	UWORD	unsigned short int
+#define	ULONG	unsigned long int
+
+typedef enum
+{
+  Atari,
+  AtariXL,
+  AtariXE,
+  Atari5200
+} Machine;
+
+extern Machine	machine;
 
 #define	ATARI_WIDTH	(384)
 #define	ATARI_HEIGHT	(192 + 24 + 24)
-#define	ATARI_TITLE	"Atari 800 Emulator, Version 0.2.1"
+#define	ATARI_TITLE	"Atari 800 Emulator, Version 0.5.0"
 
+#define NO_CART		0
 #define	NORMAL8_CART	1
 #define	NORMAL16_CART	2
-#define	OSS_SUPERCART	3
-#define	DB_SUPERCART	4
+#define AGS32_CART      3
+#define	OSS_SUPERCART	4
+#define	DB_SUPERCART	5
 
 enum ESCAPE
 {
-	ESC_SIO,
+	ESC_SIOV,
+	ESC_DSKINV,
+	ESC_SETVBV,
+
+	ESC_AFP,
+	ESC_FASC,
+	ESC_IFP,
+	ESC_FPI,
+	ESC_FADD,
+	ESC_FSUB,
+	ESC_FMUL,
+	ESC_FDIV,
+	ESC_LOG,
+	ESC_LOG10,
+	ESC_EXP,
+	ESC_EXP10,
+	ESC_PLYEVL,
+	ESC_ZFR0,
+	ESC_ZF1,
+	ESC_FLD0R,
+	ESC_FLD0P,
+	ESC_FLD1R,
+	ESC_FLD1P,
+	ESC_FST0R,
+	ESC_FST0P,
+	ESC_FMOVE,
+/*
+ * These are special device escape codes required by the Basic version
+ */
 	ESC_E_OPEN,
 	ESC_E_CLOSE,
 	ESC_E_READ,
 	ESC_E_WRITE,
 	ESC_E_STATUS,
 	ESC_E_SPECIAL,
+
 	ESC_K_OPEN,
 	ESC_K_CLOSE,
 	ESC_K_READ,
 	ESC_K_WRITE,
 	ESC_K_STATUS,
 	ESC_K_SPECIAL,
-	ESC_H_OPEN,
-	ESC_H_CLOSE,
-	ESC_H_READ,
-	ESC_H_WRITE,
-	ESC_H_STATUS,
-	ESC_H_SPECIAL
-};
-
 /*
-	==================
-	Hardware Registers
-	==================
-*/
+ * These are Escape codes for the normal device handlers.
+ * Some are never used and some are only sometimes used.
+ */
+	ESC_KHOPEN = 0x80,
+	ESC_KHCLOS = 0x81,
+	ESC_KHREAD = 0x82,
+	ESC_KHWRIT = 0x83,
+	ESC_KHSTAT = 0x84,
+	ESC_KHSPEC = 0x85,
+	ESC_KHINIT = 0x86,
 
-extern UBYTE	ALLPOT;
-extern UBYTE	CHACTL;
-extern UBYTE	CHBASE;
-extern UBYTE	COLBK;
-extern UBYTE	DLISTH;
-extern UBYTE	DLISTL;
-extern UBYTE	DMACTL;
-extern UBYTE	GRACTL;
-extern UBYTE	GRAFM;
-extern UBYTE	GRAFP0;
-extern UBYTE	GRAFP1;
-extern UBYTE	GRAFP2;
-extern UBYTE	GRAFP3;
-extern UBYTE	HSCROL;
-extern UBYTE	IRQEN;
-extern UBYTE	IRQST;
-extern UBYTE	KBCODE;
-extern UBYTE	M0PF;
-extern UBYTE	M0PL;
-extern UBYTE	M1PF;
-extern UBYTE	M1PL;
-extern UBYTE	M2PF;
-extern UBYTE	M2PL;
-extern UBYTE	M3PF;
-extern UBYTE	M3PL;
-extern UBYTE	NMIEN;
-extern UBYTE	NMIRES;
-extern UBYTE	NMIST;
-extern UBYTE	P0PF;
-extern UBYTE	P0PL;
-extern UBYTE	P1PF;
-extern UBYTE	P1PL;
-extern UBYTE	P2PF;
-extern UBYTE	P2PL;
-extern UBYTE	P3PF;
-extern UBYTE	P3PL;
-extern UBYTE	PACTL;
-extern UBYTE	PAL;
-extern UBYTE	PBCTL;
-extern UBYTE	PENH;
-extern UBYTE	PENV;
-extern UBYTE	PMBASE;
-extern UBYTE	PORTA;
-extern UBYTE	PORTB;
-extern UBYTE	POTGO;
-extern UBYTE	PRIOR;
-extern UBYTE	SERIN;
-extern UBYTE	SEROUT;
-extern UBYTE	SKCTL;
-extern UBYTE	SKREST;
-extern UBYTE	SKSTAT;
-extern UBYTE	STIMER;
-extern UBYTE	VCOUNT;
-extern UBYTE	VDELAY;
-extern UBYTE	VSCROL;
+	ESC_SHOPEN = 0x90,
+	ESC_SHCLOS = 0x91,
+	ESC_SHREAD = 0x92,
+	ESC_SHWRIT = 0x93,
+	ESC_SHSTAT = 0x94,
+	ESC_SHSPEC = 0x95,
+	ESC_SHINIT = 0x96,
+
+	ESC_EHOPEN = 0xa0,
+	ESC_EHCLOS = 0xa1,
+	ESC_EHREAD = 0xa2,
+	ESC_EHWRIT = 0xa3,
+	ESC_EHSTAT = 0xa4,
+	ESC_EHSPEC = 0xa5,
+	ESC_EHINIT = 0xa6,
+
+	ESC_PHOPEN = 0xb0,
+	ESC_PHCLOS = 0xb1,
+	ESC_PHREAD = 0xb2,
+	ESC_PHWRIT = 0xb3,
+	ESC_PHSTAT = 0xb4,
+	ESC_PHSPEC = 0xb5,
+	ESC_PHINIT = 0xb6,
+
+	ESC_HHOPEN = 0xc0,
+	ESC_HHCLOS = 0xc1,
+	ESC_HHREAD = 0xc2,
+	ESC_HHWRIT = 0xc3,
+	ESC_HHSTAT = 0xc4,
+	ESC_HHSPEC = 0xc5,
+	ESC_HHINIT = 0xc6
+};
 
 /*
 	=================
@@ -114,113 +148,205 @@ extern UBYTE	VSCROL;
 #define	STICK_UR	0x06;
 
 /*
-	=================================================================
-	Defines return values to be used by the various keyboard handlers
-	=================================================================
+   ===========================
+   non-standard keyboard codes
+   ===========================
 */
 
-typedef enum
-{
-	AKEY_NONE = -1,
-	AKEY_WARMSTART = 256,
-	AKEY_COLDSTART,
-	AKEY_EXIT,
-	AKEY_HELP,
-	AKEY_BREAK,
-	AKEY_PIL,
-	AKEY_DOWN,
-	AKEY_LEFT,
-	AKEY_RIGHT,
-	AKEY_UP,
-	AKEY_BACKSPACE,
-	AKEY_DELETE_CHAR,
-	AKEY_DELETE_LINE,
-	AKEY_INSERT_CHAR,
-	AKEY_INSERT_LINE,
-	AKEY_ESCAPE,
-	AKEY_ATARI,
-	AKEY_CAPSLOCK,
-	AKEY_CAPSTOGGLE,
-	AKEY_TAB,
-	AKEY_SETTAB,
-	AKEY_CLRTAB,
-	AKEY_RETURN,
+#define AKEY_NONE -1
+#define AKEY_WARMSTART -2
+#define AKEY_COLDSTART -3
+#define AKEY_EXIT -4
+#define AKEY_BREAK -5
+#define AKEY_PIL -6
+#define AKEY_DISKCHANGE -7
 
-	AKEY_CTRL_A,
-	AKEY_CTRL_B,
-	AKEY_CTRL_C,
-	AKEY_CTRL_D,
-	AKEY_CTRL_E,
-	AKEY_CTRL_F,
-	AKEY_CTRL_G,
-	AKEY_CTRL_H,
-	AKEY_CTRL_I,
-	AKEY_CTRL_J,
-	AKEY_CTRL_K,
-	AKEY_CTRL_L,
-	AKEY_CTRL_M,
-	AKEY_CTRL_N,
-	AKEY_CTRL_O,
-	AKEY_CTRL_P,
-	AKEY_CTRL_Q,
-	AKEY_CTRL_R,
-	AKEY_CTRL_S,
-	AKEY_CTRL_T,
-	AKEY_CTRL_U,
-	AKEY_CTRL_V,
-	AKEY_CTRL_W,
-	AKEY_CTRL_X,
-	AKEY_CTRL_Y,
-	AKEY_CTRL_Z,
-
-	AKEY_CTRL_0,
-	AKEY_CTRL_1,
-	AKEY_CTRL_2,
-	AKEY_CTRL_3,
-	AKEY_CTRL_4,
-	AKEY_CTRL_5,
-	AKEY_CTRL_6,
-	AKEY_CTRL_7,
-	AKEY_CTRL_8,
-	AKEY_CTRL_9,
-
-	AKEY_SHFTCTRL_A,
-	AKEY_SHFTCTRL_B,
-	AKEY_SHFTCTRL_C,
-	AKEY_SHFTCTRL_D,
-	AKEY_SHFTCTRL_E,
-	AKEY_SHFTCTRL_F,
-	AKEY_SHFTCTRL_G,
-	AKEY_SHFTCTRL_H,
-	AKEY_SHFTCTRL_I,
-	AKEY_SHFTCTRL_J,
-	AKEY_SHFTCTRL_K,
-	AKEY_SHFTCTRL_L,
-	AKEY_SHFTCTRL_M,
-	AKEY_SHFTCTRL_N,
-	AKEY_SHFTCTRL_O,
-	AKEY_SHFTCTRL_P,
-	AKEY_SHFTCTRL_Q,
-	AKEY_SHFTCTRL_R,
-	AKEY_SHFTCTRL_S,
-	AKEY_SHFTCTRL_T,
-	AKEY_SHFTCTRL_U,
-	AKEY_SHFTCTRL_V,
-	AKEY_SHFTCTRL_W,
-	AKEY_SHFTCTRL_X,
-	AKEY_SHFTCTRL_Y,
-	AKEY_SHFTCTRL_Z
-} AtariKey;
+#define AKEY_SHFT 0x40
+#define AKEY_CTRL 0x80
+#define AKEY_SHFTCTRL 0xc0
 
 /*
-	==========================
-	Define Function Prototypes
-	==========================
+   ===============================
+   keyboard codes for numbers 0..9
+   ===============================
 */
 
-void	initialise_os ();
-void	add_esc (UWORD address, UBYTE esc_code);
-void	A800_RUN (void);
-void	ESC (UBYTE esc_code);
+#define AKEY_0 0x32
+#define AKEY_1 0x1f
+#define AKEY_2 0x1e
+#define AKEY_3 0x1a
+#define AKEY_4 0x18
+#define AKEY_5 0x1d
+#define AKEY_6 0x1b
+#define AKEY_7 0x33
+#define AKEY_8 0x35
+#define AKEY_9 0x30
+
+#define AKEY_CTRL_0 (AKEY_CTRL | AKEY_0)
+#define AKEY_CTRL_1 (AKEY_CTRL | AKEY_1)
+#define AKEY_CTRL_2 (AKEY_CTRL | AKEY_2)
+#define AKEY_CTRL_3 (AKEY_CTRL | AKEY_3)
+#define AKEY_CTRL_4 (AKEY_CTRL | AKEY_4)
+#define AKEY_CTRL_5 (AKEY_CTRL | AKEY_5)
+#define AKEY_CTRL_6 (AKEY_CTRL | AKEY_6)
+#define AKEY_CTRL_7 (AKEY_CTRL | AKEY_7)
+#define AKEY_CTRL_8 (AKEY_CTRL | AKEY_8)
+#define AKEY_CTRL_9 (AKEY_CTRL | AKEY_9)
+
+#define AKEY_a 0x3f
+#define AKEY_b 0x15
+#define AKEY_c 0x12
+#define AKEY_d 0x3a
+#define AKEY_e 0x2a
+#define AKEY_f 0x38
+#define AKEY_g 0x3d
+#define AKEY_h 0x39
+#define AKEY_i 0x0d
+#define AKEY_j 0x01
+#define AKEY_k 0x05
+#define AKEY_l 0x00
+#define AKEY_m 0x25
+#define AKEY_n 0x23
+#define AKEY_o 0x08
+#define AKEY_p 0x0a
+#define AKEY_q 0x2f
+#define AKEY_r 0x28
+#define AKEY_s 0x3e
+#define AKEY_t 0x2d
+#define AKEY_u 0x0b
+#define AKEY_v 0x10
+#define AKEY_w 0x2e
+#define AKEY_x 0x16
+#define AKEY_y 0x2b
+#define AKEY_z 0x17
+
+#define AKEY_A (AKEY_SHFT | AKEY_a)
+#define AKEY_B (AKEY_SHFT | AKEY_b)
+#define AKEY_C (AKEY_SHFT | AKEY_c)
+#define AKEY_D (AKEY_SHFT | AKEY_d)
+#define AKEY_E (AKEY_SHFT | AKEY_e)
+#define AKEY_F (AKEY_SHFT | AKEY_f)
+#define AKEY_G (AKEY_SHFT | AKEY_g)
+#define AKEY_H (AKEY_SHFT | AKEY_h)
+#define AKEY_I (AKEY_SHFT | AKEY_i)
+#define AKEY_J (AKEY_SHFT | AKEY_j)
+#define AKEY_K (AKEY_SHFT | AKEY_k)
+#define AKEY_L (AKEY_SHFT | AKEY_l)
+#define AKEY_M (AKEY_SHFT | AKEY_m)
+#define AKEY_N (AKEY_SHFT | AKEY_n)
+#define AKEY_O (AKEY_SHFT | AKEY_o)
+#define AKEY_P (AKEY_SHFT | AKEY_p)
+#define AKEY_Q (AKEY_SHFT | AKEY_q)
+#define AKEY_R (AKEY_SHFT | AKEY_r)
+#define AKEY_S (AKEY_SHFT | AKEY_s)
+#define AKEY_T (AKEY_SHFT | AKEY_t)
+#define AKEY_U (AKEY_SHFT | AKEY_u)
+#define AKEY_V (AKEY_SHFT | AKEY_v)
+#define AKEY_W (AKEY_SHFT | AKEY_w)
+#define AKEY_X (AKEY_SHFT | AKEY_x)
+#define AKEY_Y (AKEY_SHFT | AKEY_y)
+#define AKEY_Z (AKEY_SHFT | AKEY_z)
+
+#define AKEY_CTRL_a (AKEY_CTRL | AKEY_a)
+#define AKEY_CTRL_b (AKEY_CTRL | AKEY_b)
+#define AKEY_CTRL_c (AKEY_CTRL | AKEY_c)
+#define AKEY_CTRL_d (AKEY_CTRL | AKEY_d)
+#define AKEY_CTRL_e (AKEY_CTRL | AKEY_e)
+#define AKEY_CTRL_f (AKEY_CTRL | AKEY_f)
+#define AKEY_CTRL_g (AKEY_CTRL | AKEY_g)
+#define AKEY_CTRL_h (AKEY_CTRL | AKEY_h)
+#define AKEY_CTRL_i (AKEY_CTRL | AKEY_i)
+#define AKEY_CTRL_j (AKEY_CTRL | AKEY_j)
+#define AKEY_CTRL_k (AKEY_CTRL | AKEY_k)
+#define AKEY_CTRL_l (AKEY_CTRL | AKEY_l)
+#define AKEY_CTRL_m (AKEY_CTRL | AKEY_m)
+#define AKEY_CTRL_n (AKEY_CTRL | AKEY_n)
+#define AKEY_CTRL_o (AKEY_CTRL | AKEY_o)
+#define AKEY_CTRL_p (AKEY_CTRL | AKEY_p)
+#define AKEY_CTRL_q (AKEY_CTRL | AKEY_q)
+#define AKEY_CTRL_r (AKEY_CTRL | AKEY_r)
+#define AKEY_CTRL_s (AKEY_CTRL | AKEY_s)
+#define AKEY_CTRL_t (AKEY_CTRL | AKEY_t)
+#define AKEY_CTRL_u (AKEY_CTRL | AKEY_u)
+#define AKEY_CTRL_v (AKEY_CTRL | AKEY_v)
+#define AKEY_CTRL_w (AKEY_CTRL | AKEY_w)
+#define AKEY_CTRL_x (AKEY_CTRL | AKEY_x)
+#define AKEY_CTRL_y (AKEY_CTRL | AKEY_y)
+#define AKEY_CTRL_z (AKEY_CTRL | AKEY_z)
+
+#define AKEY_CTRL_A (AKEY_CTRL | AKEY_A)
+#define AKEY_CTRL_B (AKEY_CTRL | AKEY_B)
+#define AKEY_CTRL_C (AKEY_CTRL | AKEY_C)
+#define AKEY_CTRL_D (AKEY_CTRL | AKEY_D)
+#define AKEY_CTRL_E (AKEY_CTRL | AKEY_E)
+#define AKEY_CTRL_F (AKEY_CTRL | AKEY_F)
+#define AKEY_CTRL_G (AKEY_CTRL | AKEY_G)
+#define AKEY_CTRL_H (AKEY_CTRL | AKEY_H)
+#define AKEY_CTRL_I (AKEY_CTRL | AKEY_I)
+#define AKEY_CTRL_J (AKEY_CTRL | AKEY_J)
+#define AKEY_CTRL_K (AKEY_CTRL | AKEY_K)
+#define AKEY_CTRL_L (AKEY_CTRL | AKEY_L)
+#define AKEY_CTRL_M (AKEY_CTRL | AKEY_M)
+#define AKEY_CTRL_N (AKEY_CTRL | AKEY_N)
+#define AKEY_CTRL_O (AKEY_CTRL | AKEY_O)
+#define AKEY_CTRL_P (AKEY_CTRL | AKEY_P)
+#define AKEY_CTRL_Q (AKEY_CTRL | AKEY_Q)
+#define AKEY_CTRL_R (AKEY_CTRL | AKEY_R)
+#define AKEY_CTRL_S (AKEY_CTRL | AKEY_S)
+#define AKEY_CTRL_T (AKEY_CTRL | AKEY_T)
+#define AKEY_CTRL_U (AKEY_CTRL | AKEY_U)
+#define AKEY_CTRL_V (AKEY_CTRL | AKEY_V)
+#define AKEY_CTRL_W (AKEY_CTRL | AKEY_W)
+#define AKEY_CTRL_X (AKEY_CTRL | AKEY_X)
+#define AKEY_CTRL_Y (AKEY_CTRL | AKEY_Y)
+#define AKEY_CTRL_Z (AKEY_CTRL | AKEY_Z)
+
+#define AKEY_HELP 0x11
+#define AKEY_DOWN 0x8f
+#define AKEY_LEFT 0x86
+#define AKEY_RIGHT 0x87
+#define AKEY_UP 0x8e
+#define AKEY_BACKSPACE 0x34
+#define AKEY_DELETE_CHAR 0xb4
+#define AKEY_DELETE_LINE 0x74
+#define AKEY_INSERT_CHAR 0xb7
+#define AKEY_INSERT_LINE 0x77
+#define AKEY_ESCAPE 0x1c
+#define AKEY_ATARI 0x27
+#define AKEY_CAPSLOCK 0x7c
+#define AKEY_CAPSTOGGLE 0x3c
+#define AKEY_TAB 0x2c
+#define AKEY_SETTAB 0x6c
+#define AKEY_CLRTAB 0xac
+#define AKEY_RETURN 0x0c
+#define AKEY_SPACE 0x21
+#define AKEY_EXCLAMATION 0x5f
+#define AKEY_DBLQUOTE 0x5e
+#define AKEY_HASH 0x5a
+#define AKEY_DOLLAR 0x58
+#define AKEY_PERCENT 0x5d
+#define AKEY_AMPERSAND 0x5b
+#define AKEY_QUOTE 0x73
+#define AKEY_AT 0x75
+#define AKEY_PARENLEFT 0x70
+#define AKEY_PARENRIGHT 0x72
+#define AKEY_LESS 0x36
+#define AKEY_GREATER 0x37
+#define AKEY_EQUAL 0x0f
+#define AKEY_QUESTION 0x66
+#define AKEY_MINUS 0x0e
+#define AKEY_PLUS 0x06
+#define AKEY_ASTERISK 0x07
+#define AKEY_SLASH 0x26
+#define AKEY_COLON 0x42
+#define AKEY_SEMICOLON 0x02
+#define AKEY_COMMA 0x20
+#define AKEY_FULLSTOP 0x22
+#define AKEY_UNDERSCORE 0x4e
+#define AKEY_BRACKETLEFT 0x60
+#define AKEY_BRACKETRIGHT 0x62
+#define AKEY_CIRCUMFLEX 0x47
+#define AKEY_BACKSLASH 0x46
+#define AKEY_BAR 0x4f
 
 #endif

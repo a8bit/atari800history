@@ -9,7 +9,8 @@ CPPFLAGS	= -DAMIGA -DGNU_C
 CFLAGS		= -c -O6
 LD		= gcc
 LDFLAGS		=
-LDLIBS		= -lamiga
+LDLIBS		= -lc -lamiga
+OBJ		= atari_amiga.o amiga_asm.o
 
 #
 # ==============================================
@@ -23,6 +24,21 @@ LDLIBS		= -lamiga
 #LD		= dcc
 #LDFLAGS		=
 #LDLIBS		=
+#OBJ		= atari_amiga.o amiga_asm.o
+
+#
+# ====================================================
+# Uncomment this section if you want the BASIC version
+# ====================================================
+#
+
+#CC		= gcc
+#CPPFLAGS	= -DBASIC
+#CFLAGS		= -c -O6
+#LD		= gcc
+#LDFLAGS		=
+#LDLIBS		=
+#OBJ		= atari_basic.o
 
 #
 # ===================================================
@@ -32,7 +48,12 @@ LDLIBS		= -lamiga
 # ===================================================
 #
 
-ATARI_LIBRARY	= object
+ATARI_LIBRARY	= /object
+ATARI_H1_DIR	= $(ATARI_LIBRARY)/H1
+ATARI_H2_DIR	= $(ATARI_LIBRARY)/H2
+ATARI_H3_DIR	= $(ATARI_LIBRARY)/H3
+ATARI_H4_DIR	= $(ATARI_LIBRARY)/H4
+
 
 #
 # ======================================================
@@ -40,17 +61,22 @@ ATARI_LIBRARY	= object
 # ======================================================
 #
 
-DOCS		=	BUGS CHANGES COPYING CREDITS INSTALL OVERVIEW README USAGE vmsbuild.com
-INCLUDES	=	Makefile system.h cpu.h atari.h atari_custom.h atari_h_device.h colours.h
+INCLUDES	=	Makefile cpu.h atari.h \
+			antic.h gtia.h pia.h pokey.h colours.h
 
-atari800	:	main.o atari.o cpu.o monitor.o atari_sio.o atari_h_device.o atari_custom.o atari_amiga.o $(DOCS)
-	$(LD) $(LDFLAGS) main.o atari.o cpu.o monitor.o atari_sio.o atari_h_device.o atari_custom.o atari_amiga.o $(LDLIBS) -o atari800
-
-main.o		:	main.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) main.c
+atari800	:	atari.o ffp.o cpu.o monitor.o atari_sio.o \
+			devices.o antic.o gtia.o pia.o pokey.o supercart.o \
+			$(OBJ)
+	$(LD) $(LDFLAGS) atari.o ffp.o cpu.o monitor.o atari_sio.o \
+			 devices.o antic.o gtia.o pia.o pokey.o supercart.o \
+			 $(OBJ) \
+			 $(LDLIBS) -o atari800
 
 atari.o		:	atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="$(ATARI_LIBRARY)" $(CFLAGS) atari.c
+
+ffp.o		:	ffp.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
 
 cpu.o		:	cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
@@ -61,11 +87,34 @@ monitor.o	:	monitor.c $(INCLUDES)
 atari_sio.o	:	atari_sio.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_sio.c
 
-atari_h_device.o:	atari_h_device.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari_h_device.c
+devices.o	:	devices.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) \
+		-DATARI_H1_DIR="$(ATARI_H1_DIR)" \
+		-DATARI_H2_DIR="$(ATARI_H2_DIR)" \
+		-DATARI_H3_DIR="$(ATARI_H3_DIR)" \
+		-DATARI_H4_DIR="$(ATARI_H4_DIR)" \
+		devices.c
 
-atari_custom.o	:	atari_custom.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari_custom.c
+antic.o		:	antic.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) antic.c
+
+gtia.o		:	gtia.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) gtia.c
+
+pia.o		:	pia.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pia.c
+
+pokey.o		:	pokey.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokey.c
+
+supercart.o	:	supercart.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
 
 atari_amiga.o	:	atari_amiga.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_amiga.c
+
+amiga_asm.o	:	amiga_asm.s
+	$(CC) -c amiga_asm.s
+
+atari_basic.o	:	atari_basic.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_basic.c

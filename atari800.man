@@ -1,11 +1,10 @@
-.TH ATARI800 1 "19 October 95"
+.TH ATARI800 1 "4 July 96"
 .SH NAME
-atari800 \- Atari 800 Emulator, Version 0.2.1
+atari800 \- Atari 800 Emulator, Version 0.4.5
 .SH SYNOPSIS
 \fBatari800\fP [options] [diskfiles...]
 .SH DESCRIPTION
-\fIatari800\fP emulates the Atari 800, Atari 800 XL and eventually the
-Atari 130 XE.
+\fIatari800\fP emulates the Atari 800, Atari 800 XL and Atari 130 XE.
 .SS Options
 .TP
 \fB-a
@@ -18,13 +17,31 @@ Use Atari OS/B.
 Emulate Atari 800 XL.
 .TP
 \fB-xe
-Emulate Atari 130 XE - Not currently implemented.
+Emulate Atari 130 XE - but Antic accesses the same bank the CPU is using.
+.TP
+\fB-5200
+Emulate Atari 5200 - Games controller emulation has not been implemented yet!
+.TP
+\fB-ffp
+Replace standard floating point with a set of fast floating point
+routines implemented within the emulator without using 6502 CPU
+emulation.
+.TP
+\fB-nopatch
+Normally the OS is patched giving very fast I/O. This options prevents
+the patch from being applied so that the OS accesses the serial port
+hardware directly. This option will probably never be needed since
+programs that access the serial hardware should work even if the OS
+has been patched.
 .TP
 \fB-rom
 The following file is a standard 8K ROM cartridge.
 .TP
 \fB-rom16
 The following file is a standard 16K ROM cartridge.
+.TP
+\fB-ags32
+The following file is a 32 ROM cartridge for the Atari 5200 Games System.
 .TP
 \fB-oss
 The following file is an OSS super-cartridge.
@@ -34,9 +51,6 @@ The following file is a DB super-cartridge.
 .TP
 \fB-c
 Enable RAM between $c000 and $d000.
-.TP
-\fB-h
-The following argument is used as the directory for the H: device.
 .TP
 \fB-v
 Print emulator version.
@@ -54,7 +68,10 @@ blank period. The default value is 4000.
 .SS SVGALIB Options
 .TP
 \fB-sound
-Enable sound using /dev/sequencer
+Enable sound using the Network Audio System.
+.TP
+\fB-interlace
+Enable screen interlace option
 .SS X Window Options
 .TP
 \fB-small
@@ -69,6 +86,9 @@ default.
 \fB-huge
 Runs the emulator in a huge window where each Atari 800 pixel is
 represented by a 3x3 X Window rectange.
+.TP
+\fB-sound
+Enable sound using the Network Audio System.
 .SS Amiga Options
 .TP
 \fB-ocs
@@ -125,6 +145,9 @@ Atari O/S B
 \fI/usr/local/lib/atari/atarixl.rom\fR
 Atari 800 XL O/S
 .TP
+\fI/usr/local/lib/atari/atari5200.rom\fR
+Atari 5200 O/S
+.TP
 \fI/usr/local/lib/atari/ataribas.rom\fR
 Atari Basic
 .SH BUGS
@@ -134,5 +157,3 @@ reason for this is unknown at the moment.
 Antic Modes 2, 3 and f display two true colours and not one colour with
 two luminances. Should this be called a bug or feature, and should
 it be corrected?
-
-Vertical Fine Scrolling has not been implemented yet.

@@ -16,6 +16,8 @@ BIN_PATH	= ${PREFIX}/bin
 LIB_PATH	= ${PREFIX}/lib
 MAN_PATH	= ${PREFIX}/man
 
+ATARI_LIBRARY	= ${LIB_PATH}/atari
+
 default :
 	@echo "To build the Atari 800 Emulator, type:"
 	@echo "make <version>"
@@ -251,7 +253,7 @@ configure.o	:	configure.c
 
 OBJECTS	=	atari.o \
 		ffp.o \
-		cpu.o \
+		i486.o \
 		monitor.o \
 		atari_sio.o \
 		devices.o \
@@ -260,18 +262,22 @@ OBJECTS	=	atari.o \
 		pokey.o \
 		pia.o \
 		supercart.o
+#		cpu.o \
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
 atari.o		:	atari.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
+	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="\"${ATARI_LIBRARY}\"" $(CFLAGS) atari.c
 
 ffp.o		:	ffp.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
 
 cpu.o		:	cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
+
+i486.o		:	i486.S
+	$(CC) -c i486.S
 
 monitor.o	:	monitor.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c

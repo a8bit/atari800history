@@ -1,0 +1,592 @@
+@Database
+
+@Rem
+@Rem ==============
+@Rem Atari800.guide
+@Rem ==============
+@Rem
+
+@Wordwrap
+
+
+
+@Rem
+@Rem ====
+@Rem Main
+@Rem ====
+@Rem
+
+@Node Main "Atari800e"
+@{b}Atari800 Emulator@{ub}
+
+Version 0.3.3 (Amiga revision 8)
+
+
+
+
+
+@{b}Introduction@{ub}
+-----
+Welcome to Atari800e - the Amiga port of a portable Atari 800 emulator.
+-----
+  @{" " Link SystemRequirements} @{b}SystemRequirements@{ub}
+  @{" " Link Installation} @{b}Installation@{ub}
+-----
+
+
+
+@{b}Legal Stuff@{ub}
+-----
+All the usual garbage you'd expect.
+-----
+  @{" " Link Credits/Main} @{b}Credits@{ub}   (see also @{"Acknowledgements" Link Acknowledgements})
+  @{" " Link Copying/Main} @{b}Distribution@{ub}
+  @{" " Link Acknowledgements} @{b}Acknowledgements@{ub}
+-----
+
+
+
+@{b}Menus@{ub}
+-----
+Regarding the menu structure of the Amiga version of the emulator.
+-----
+  @{" " Link AmigaMenu} @{b}Amiga Menu@{ub}
+  @{" " Link SystemMenu} @{b}System Menu@{ub}
+  @{" " Link ConsoleMenu} @{b}Console Menu@{ub}
+  @{" " Link PrefsMenu} @{b}Prefs Menu@{ub}
+-----
+
+
+
+@{b}Version History@{ub}
+-----
+This section details updates of relevance to the Amiga port only.
+-----
+  @{" " Link V0.1.2} @{b}Version 0.1.2 (Amiga V1)@{ub}
+  @{" " Link V0.1.6} @{b}Version 0.1.6 (Amiga V2)@{ub}
+  @{" " Link V0.1.9} @{b}Version 0.1.9 (Amiga V3)@{ub}
+  @{" " Link V0.2.0} @{b}Version 0.2.0 (Amiga V4)@{ub}
+  @{" " Link V0.2.1} @{b}Version 0.2.1 (Amiga V5)@{ub}
+  @{" " Link V0.2.2} @{b}Version 0.2.2 (Amiga V6)@{ub}
+  @{" " Link v0.2.3} @{b}Version 0.2.3 (Amiga V7)@{ub}
+  @{" " Link V0.3.1} @{b}Version 0.3.1@{ub}
+  @{" " Link V0.3.3} @{b}Version 0.3.3 (Amiga V8)@{ub}
+  ---
+  @{" " Link KnownBugs} @{b}Known Bugs@{ub}
+  ---
+  @{" " Link FutureDevelopments} @{b}Future Developments@{ub}
+-----
+
+
+
+@{b}Contacts@{ub}
+-----
+If you have any suggestions for improvements these are the people to contact.
+-----
+  @{" " Link ContactMain} @{b}Main Author@{ub}   (David Firth)
+  @{" " Link ContactAmiga} @{b}Amiga Port Author@{ub}   (Stephen A. Firth)
+-----
+
+
+
+@{b}Original Docs@{ub}
+-----
+These docs refer to other versions of the emulator as well as the Amiga port.
+-----
+  @{" " Link BUGS/Main} @{b}Bugs@{ub}
+  @{" " Link INSTALL/Main} @{b}Install@{ub}
+  @{" " Link OVERVIEW/Main} @{b}Overview@{ub}
+  @{" " Link README/Main} @{b}Read Me@{ub}
+  @{" " Link USAGE/Main} @{b}Usage@{ub}
+  @{" " Link CHANGES/Main} @{b}Changes@{ub}
+-----
+@Endnode
+
+
+
+@Rem
+@Rem ===================
+@Rem System Requirements
+@Rem ===================
+@Rem
+
+@Node SystemRequirements "Atari800e - System Requirements"
+@{b}System Requirements@{ub}
+
+
+
+One *VERY* fast Amiga
+
+At one point I did plan on putting support into the program for OCS and ECS users. However, not owning or even having access to one of these machines myself has meant that I have not been able to test it on these machines and being a relative newcomer to the Amiga means I do not know much about their requirements anyway. Unfortunately, no one has ever told me whether they have got it to compile on either of these machines and as such I have come to the rather reluctant decision to stop any attempt at supporting them in the future. Basically it comes down to this: if it works, fine. If not, tough!
+@Endnode
+
+
+
+@Rem
+@Rem ============
+@Rem Installation
+@Rem ============
+@Rem
+
+@Node Installation "Atari800e - Installation"
+@{b}Installation@{ub}
+
+
+
+@Endnode
+
+
+
+@Rem
+@Rem =====
+@Rem Menus
+@Rem =====
+@Rem
+
+@Node Menus "Atari800e - Menus"
+@{b}Menus@{ub}
+
+
+
+@{" " Link AmigaMenu} @{b}Amiga Menu@{ub}
+@{" " Link SystemMenu} @{b}System Menu@{ub}
+@{" " Link ConsoleMenu} @{b}Console Menu@{ub}
+@{" " Link PrefsMenu} @{b}Prefs Menu@{ub}
+@Endnode
+
+
+
+@Rem
+@Rem ==========
+@Rem Amiga Menu
+@Rem ==========
+@Rem
+
+@Node AmigaMenu "Atari800e - Amiga Menu"
+@{b}Amiga Menu@{ub}
+
+
+
+@{b}Iconify@{ub}
+Iconifies the emulator. Click on the Close Window icon in the Atari800e window to resume.
+
+@{b}Help@{ub}
+Displays this (useless!) file.
+
+@{b}About@{ub}
+Provides information regarding the current version of the emulator.
+
+@{b}Quit@{ub}
+Quits the program.
+@Endnode
+
+
+
+@Rem
+@Rem ===========
+@Rem System Menu
+@Rem ===========
+@Rem
+
+@Node SystemMenu "Atari800e - System Menu"
+@{b}System Menu@{ub}
+
+
+
+@{b}Boot Disk@{ub}
+
+@{b}Insert Disk@{ub}
+
+@{b}Eject Disk@{ub}
+
+@{b}Insert Cartridge@{ub}
+
+@{b}Remove Cartridge@{ub}
+
+@{b}Enable PILL@{ub}
+Enables the PILL mode.
+
+@{b}Atari 800 OS/A@{ub}
+Switches to OS/A.
+
+@{b}Atari 800 OS/B@{ub}
+Switches to OS/B.
+
+@{b}Atari XL@{ub}
+Switches to the Atari XL OS.
+
+@{b}Atari XE@{ub}
+Switches to the Atari XE OS. This mode provides 128k of memory.
+@Endnode
+
+
+
+@Rem
+@Rem ============
+@Rem Console Menu
+@Rem ============
+@Rem
+
+@Node ConsoleMenu "Atari800e - Console Menu"
+@{b}Console Menu@{ub}
+
+
+
+@{b}Option@{ub}
+Simulates the act of pressing the OPTION key on the Atari's keyboard.
+
+@{b}Select@{ub}
+Simulates the act of pressing the SELECT key on the Atari's keyboard.
+
+@{b}Start@{ub}
+Simulates the act of pressing the START key on the Atari's keyboard.
+
+@{b}Help@{ub}
+Simulates the act of pressing the HELP key on the Atari's keyboard.
+
+@{b}Break@{ub}
+Simulates the act of pressing the BREAK key on the Atari's keyboard.
+
+@{b}Reset@{ub}
+Simulates the act of pressing the RESET button on the Atari.
+
+@{b}Coldstart@{ub}
+Simulates the act of powering down and re-powering the Atari.
+@Endnode
+
+
+
+@Rem
+@Rem ==========
+@Rem Prefs Menu
+@Rem ==========
+@Rem
+
+@Node PrefsMenu "Atari800e - Prefs Menu"
+@{b}Prefs Menu@{ub}
+
+
+
+@{b}Controller@{ub}
+Enables you to select between Joystick or Paddle control for port 1. (Other ports not yet implemented)
+
+@{b}Display@{ub}
+Allows you to select either colour or greyscale rendering.
+
+@{b}Refresh@{ub}
+
+@{b}Countdown@{ub}
+
+@Endnode
+
+
+
+@Rem
+@Rem ===============
+@Rem Version History
+@Rem ===============
+@Rem
+
+@Node VersionHistory "Atari800e - Version History"
+@{b}Version History@{ub}
+
+
+
+@{" " Link V0.1.2} @{b}Version 0.1.2 (Amiga V1)@{ub}
+@{" " Link V0.1.6} @{b}Version 0.1.6 (Amiga V2)@{ub}
+@{" " Link V0.1.9} @{b}Version 0.1.9 (Amiga V3)@{ub}
+@{" " Link V0.2.0} @{b}Version 0.2.0 (Amiga V4)@{ub}
+@{" " Link V0.2.1} @{b}Version 0.2.1 (Amiga V5)@{ub}
+@{" " Link V0.2.2} @{b}Version 0.2.2 (Amiga V6)@{ub}
+@{" " Link v0.2.3} @{b}Version 0.2.3 (Amiga V7)@{ub}
+@{" " Link V0.3.1} @{b}Version 0.3.1@{ub}
+@{" " Link V0.3.3} @{b}Version 0.3.3 (Amiga V8)@{ub}
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.1.2
+@Rem ======
+@Rem
+
+@Node V0.1.2 "Atari800e - Version History/v0.1.2"
+@{b}Version History@{ub} v0.1.2 (Amiga V1)
+
+
+
+o First tantalizing steps to see if it would be easy to port the emulator to the Amiga and to find out just how fast it would be on an A1200. (Answer: SAD)
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.1.6
+@Rem ======
+@Rem
+
+@Node V0.1.6 "Atari800e - Version History/v0.1.6"
+@{b}Version History@{ub} v0.1.6 (Amiga V2)
+
+
+
+o Added graphical support for the AGA chipset.
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.1.9
+@Rem ======
+@Rem
+
+@Node V0.1.9 "Atari800e - Version History/v0.1.9"
+@{b}Version History@{ub} v0.1.9 (Amiga V3)
+
+
+
+o Now supports AGA graphics via -aga startup option. This option provides support for the Atari's full 256 colour palette. The emulator will default to this mode.
+
+o Should support ECS graphics via -ecs startup option. Unfortunately, I have not been able to test this on a real ECS based Amiga so I would appreciate it if someone would let me know whether it works or not. The only difference between this mode and the AGA mode is that the screen display is rendered with 32 pens as opposed to using the Atari's full 256 colour palette.
+
+o Should support OCS graphics via -ocs startup option. Unfortunately, I have not been able to test this on a real OCS based Amiga so I would appreciate it if someone would let me know whether it works or not. Of the three modes, this is the least likely to work. There is no real difference between this and the ECS mode, so I'm just hoping it does. However, certain operating system calls may not work, but without further details, I have no idea which these may be. Anyway, in this mode, the screen display should be rendered with 32 pens just like the ECS mode.
+
+o The emulator has been tested on an Amiga A1200 using the OCS, ECS and AGA chipset options on powerup. However, due to the fact that the A1200 uses Workbench 3.0, I have no idea whether it will work on real OCS and ECS based Amiga's. Sorry! I would appreciate it if someone would let me know whether it does work on these machines. Thanks!
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.2.0
+@Rem ======
+@Rem
+
+@Node V0.2.0 "Atari800e - Version History/v0.2.0"
+@{b}Version History@{ub} v0.2.0 (Amiga V4)
+
+
+
+o Hooks have been provided for sound support as required by v0.1.9. However, sound is not currently supported (And probably won't be for a while yet!). If anyone is interested in developing this area please feel free.
+
+o Upon compilation you will reveive one warning regarding the definition of CLOSE. A standard Amiga define is conflicting with one defined within the "atari.h" file. This is unlikely to be corrected. Apart from this one warning, there should now be no other warnings of any kind.
+
+o Thanks to a little experimentation you can now see the menus more clearly and the windows (all two of them!) have been given a much needed facelift.
+
+o -grey startup option added. In this mode you will get a grey scale screen display.
+
+o -colour startup option added. In AGA modes you will get the full 256 colour palette of the Atari. In OCS and ECS modes you will get the best representation the program can get using 32 pens. The emulator will default to this mode.
+
+o -wb startup option added. This option tells the emulator to make an attempt at opening a window on the Workbench screen in which it should render the display. At the moment this is at a prelimary stage of development. Setting this will automatically enable the ECS_ChipSet version. As yet, there is no specific AGA version that takes into account the AGA's increased colour palette. However, bearing in mind the amount of colour you can get on screen using the ECS engine, is there really any point?
+
+In this mode you may also quit the emulator by clicking the main windows close gadget.
+
+The advantage that this mode has over all over modes is that you get to see the whole screen without any of the edges cut off. The big disadvantage is that if the program currently being run on the emulator uses a lot of colours it may overwrite the last 4 colours that Workbench has defined. Without knowing how to find out the depth of the Workbench screen, I'm a bit stuck on this one.
+
+For the best results, use this mode on nothing less than a 16 colour screen.
+
+o -paddle startup option added. This option enables the mouse based paddle controller emulation.
+
+o -joystick startup option added. Enables the joystick controller emulation.
+
+The emulator will default to this mode.
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.2.1
+@Rem ======
+@Rem
+
+@Node V0.2.1 "Atari800e - Version History/v0.2.1"
+@{b}Version History@{ub} v0.2.1 (Amiga V5)
+
+
+
+o The Project menu has been renamed the Amiga menu.
+
+o A new menu named Disk has been added. This allows you to select a boot disk and allows you to insert a disk into a virtual drive or remove a disk from a virtualive without having to reboot.
+
+o The Help key is now active via the Console/Help menu-item. Please note: this menu-item will only be enabled if you run the emulator with either the -xl or -xe startup option.
+
+o Added images to gadgets.
+
+o The AGA Setup window has been updated.
+
+o The Prefs/Controller menu has been updated ready for future improvements regarding controllers.
+
+o Yeah, well... there should have been no more warnings but hadn't realized that not all of them were being reported. Sod it!
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.2.2
+@Rem ======
+@Rem
+
+@Node V0.2.2 "Atari800e - Version History/v0.2.2"
+@{b}Version History@{ub} v0.2.2 (Amiga V6)
+
+
+
+o Assembly routines for the AGA chipset added. (David Firth)
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.2.3
+@Rem ======
+@Rem
+
+@Node V0.2.3 "Atari800e - Version History/v0.2.3"
+@{b}Version History@{ub} v0.2.3 (Amiga V7)
+
+
+
+o DisplayScreen routine cleaned up.
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.3.1
+@Rem ======
+@Rem
+
+@Node V0.3.1 "Atari800e - Version History/v0.3.1"
+@{b}Version History@{ub} v0.3.1
+
+
+
+o Support added for printing on the Amiga. Not really part of the Amiga module hence no V number. (David Firth)
+@Endnode
+
+
+
+@Rem
+@Rem ======
+@Rem v0.3.3
+@Rem ======
+@Rem
+
+@Node V0.3.3 "Atari800e - Version History/v0.3.3"
+@{b}Version History@{ub} v0.3.3 (Amiga V8)
+
+
+
+Not touched this program for a long while now but here goes...
+
+o Disk menu renamed to System and extra items added to it.
+
+o Iconify menu-item now functional (sort of!).
+
+o Support for switching between Operating Systems available via System menu. Help menu-item in the Console menu will now become enabled/disabled dependent upon version of machine being emulated (400 and 800 did not possess HELP key whilst XLs and XEs did).
+
+o Amiga800.guide file finally incorporated. (Big bloomin deal!).
+
+o Menu support added to enable you to access cartridges (8k, 16k and OSS Supercarts).
+@Endnode
+
+
+
+@Rem
+@Rem ===================
+@Rem Future Developments
+@Rem ===================
+@Rem
+
+@Node FutureDevelopments "Atari800e - Future Developments"
+@{b}Future Developments@{ub}
+
+
+
+o Further GUI improvement with regards to the controller menu-item
+
+o Incorporation of sound (When fast enough (Long way off))
+
+o Speed improvements.
+
+o Addition of an S:Atari800e.config file.
+
+o Correcting all bugs. @{"Known Bugs" Link KnownBugs}
+@Endnode
+
+
+
+@Rem
+@Rem ================
+@Rem Acknowledgements
+@Rem ================
+@Rem
+
+@Node Acknowledgements "Atari800e - Acknowledgements"
+@{b}Acknowledgements@{ub}
+
+
+
+BELATED THANK YOU:
+
+Thanks must go to (some guy on a computer) going by the name (I presume!) of D. Dussia who told me about one stupid mistake I made regarding libraries. ie open v39 when pre-AGA machines don't have them (der, stooopid!). Also told me that the emulator would compile using SAS/C if you tell it to compile in FAR mode and that you define Dice_c. Unfortunately, not owning SAS/C, I'm not too sure what this means, but if you do then you're free to have a go.
+@Endnode
+
+
+
+@Rem
+@Rem ==========
+@Rem Known Bugs
+@Rem ==========
+@Rem
+
+@Node KnownBugs "Atari800e - Known Bugs"
+@{b}Known Bugs@{ub}
+
+
+
+o There is a problem with the file handling. For the moment you have to provide the full path to any file.
+@Endnode
+
+
+
+@Rem
+@Rem ============
+@Rem Contact Main
+@Rem ============
+@Rem
+
+@Node ContactMain "Atari800e - Contacts/Main Author"
+@{b}Contacts@{ub} Main Author
+
+
+
+The original version of the emulator was produced by David Firth. If you would like to contact him, either to provide suggestions or even to offer porting it to yet another machine, then you can e-mail him at:
+
+  david@signus.demon.co.uk
+@Endnode
+
+
+
+@Rem
+@Rem =============
+@Rem Contact Amiga
+@Rem =============
+@Rem
+
+@Node ContactAmiga "Atari800e - Contacts/Amiga Port Author"
+@{b}Contacts@{ub} Amiga Port Author
+
+
+
+The Amiga version of the emulator was originally ported to the Amiga by myself (Stephen A. Firth) as a favour to my brother (He wanted to know whether it really would be easy to port. It was). All I can say is that If you own another machine and would like to port it to that machine, go ahead! You can contact me via e-mail at:
+
+  stephen@signus.demon.co.uk
+@Endnode

@@ -1,3 +1,256 @@
+Changes in 0.5.0
+----------------
+
+- Simplified interface to CPU module.
+- DIRECT_VIDEO now works with PMG collision detection. This option increases
+  performance by about 28% but can result in different colours being displayed.
+  This is because this option relies on COLPF0, COLPF1, COLPF2, COLPF3 and
+  COLBK all having different values, hence the emulator sometimes modifies
+  the colours :-( This option can be enabled during the configuration phase.
+- Correction to ANTIC Mode 5 Vertical Scrolling.
+- Correction to PMG DMA Code - Demon Attack now works OK.
+- Added code to limit the emulator to 50fps - this will not have any
+  effect if your machine can't run the emulator greater than 50fps.
+  F10 in X11, XVIEW, MOTIF and SVGALIB versions toggles the limit on/off.
+  When the limit is off the emulator will go as fast as it can.
+- Path to directory containing the OS ROM images is now defined during
+  the configuration phase (Declaration of ATARI_LIBRARY has been removed
+  from the Makefile).
+- Correction to handling of PMG DMA - Pitfall II now Works.
+- The unused bits in PMBASE are now ignored correcting errors in Atari Chess
+  and Frogger.
+
+Changes in 0.4.5
+----------------
+
+- Added a compile time configuration option to control the default
+  screen refresh rate. In previous version of the emulator the default
+  rate has been 4 frame: draw 1 skip 3. From this version you will
+  be prompted for the default during the compile stage (except VMS and
+  AMIGA which still default to 4). A value of 1 is required for the
+  most accurate emulation. Values other than one can produce some
+  collision detection problems on a few programs (e.g. Burried Bucks).
+- Split Custom Chip code into seperate files.
+- Added 5200 Emulation Code - Runs program but needs modifications to
+  support 5200 controllers. The 2K OS ROM must be called "atari5200.rom"
+  and placed in the same directory as the other OS ROMS.
+- Linux Joystick enabled by configuration program. There are nolonger
+  any makefile targets containing "joystick".
+- Removed code relating to Emulated Operating System.
+- Added option that displays the number of Frames per Second. This option
+  is enabled within the configuration program and currently only works
+  with the XVIEW version.
+
+Changes in 0.4.4
+----------------
+
+- SpartaDOS 3.2 works for both Read and Write Access.
+- Alternate Reality "The City" now works.
+- Added interrupt timings for Invalid SIO commands.
+- Support for Direct Serial I/O Write and Put sectors commands.
+- Correction for Double Density ATR files.
+
+Changes in 0.4.3
+----------------
+
+- Corrected a Bug that prevented DOS 2.5 from copying files to/from H:
+- Re-instated F8 Disk Change function for non XVIEW/MOTIF/AMIGA Systems.
+
+Changes in 0.4.2
+----------------
+
+- Test code for faster screen generation, enabled by defining DIRECT_VIDEO
+  within "atari_custom.c". It needs a little more thought with respect to
+  collision detection, hence it is disabled by default.
+- Better PMG Priority Handling.
+- Tidied up code accessing hardware registers
+- Changed handling of B, D and I flags.
+- Changed handling of NMIs.
+
+Changes in 0.4.1
+----------------
+
+- Flashes background colour while performing direct Serial I/O
+- Minor optimisation to Player/Player collision detection
+- Minor changes in CPU emulation
+- Correction to new cartridge code causing it to fail under XL/XE
+  emulation (Thanks to Neil Shipp)
+- New targets in the Makefile for freebsd systems (Thanks to Ivo
+  van Poorten)
+
+Changes in 0.4.0
+----------------
+
+- Added MOTIF User Interface
+- Support for DEC-Windows under VMS (Thanks to Chris F Chiesa)
+- Removed dependency on 'ncycles' global variable.
+- Support for direct access to serial port hardware - The emulator will
+  now run Alternate Reality "The Dungeon" (I haven't tried the others)
+- Modified handling of XL/XE memory.
+- Fixed the GTIA modes which broke after X Window shared memory support
+  was added in version 0.3.0
+- Correction allowing Montezumas Revenge to work again.
+
+Changes in 0.3.3
+----------------
+
+- New System menu in XVIEW version allowing selection of operating
+  system etc.
+- Amiga: Iconify working.
+- Amiga: System menu contains options for Insert ROM, Remove ROM,
+  Enable PILL, Selection of Operating System and all previous disk
+  options.
+- Amiga: Help menu option is now working using Multiview.
+
+Changes in 0.3.2
+----------------
+
+- Modified BRK instruction to take account of the I flag. The BRK
+  instruction is ignored if the I flag is set.
+- Added all unofficial NOP opcodes.
+- New cartridge handling. The XVIEW version provides menu items
+  enabling the insertion and removal of cartridges.
+
+Changes in 0.3.1
+----------------
+
+- Defined PRINT_COMMAND in devices.c for Amiga
+- Minor optimisation to PMG handling
+- Modified DLI Handling and ScanLine processing
+
+Changes in 0.3.0
+----------------
+
+- Support for Atari 130XE memory banks (Antic currently accesses the
+  same bank as the CPU)
+- XVIEW Exit item on the Disk menu.
+- Printer device calls tmpnam() to allocate a temporary filename for
+  the spool file.
+- XView version didn't enable HELP key for XL and XE emulation.
+- X11 Backspace keys works in the same ways as the Delete key.
+  (Thanks to Cyrus Malek)
+- Reset and Coldstart now work during XL and XE emulation.
+- Added OK button to XVIEW controller and performance dialog boxes.
+- Optional support for X11 Shared Memory Images resulting in a 32%
+  speed improvement. This option can only be used in conjunction
+  with the small screen display. Type make by itself to obtain
+  the new list of targets. "-shm" target extension enables this
+  option.
+- Simple configuration program to avoid editing the Makefile as ofter.
+  make will invoke it the first time and afterwards "make config" can
+  be used. It currently handles the directories for the H: device, the
+  disk image directory for the XVIEW file chooser and the command used
+  to send a file to the printer. The print command should contain a %s
+  character sequence where a filename is expected (only the first %s
+  is relevant).
+
+Changes in 0.2.7
+----------------
+
+- Renamed atari_h_device.c to a more general devices.c
+- Emulator (private) opcode ESCRTS ($d2) added to support patching of OS.
+- Printer device supported via Unix lpr command.
+- Moved from RCS to CVS and added rcs Id keyword to all C files.
+- Emulated OS: Better handling of Keyboard and ATASCII to screen
+  code conversion. Editor uses LMARGN, RMARGN, ROWCRS and COLCRS.
+- Many other changes to EmuOS including implementation of SETVBV
+  COLDSV and WARMSV.
+- Detection of X11 server supporting the MIT Shared Memory Extension in
+  preperation for shared memory pixmaps.
+- Corrected bug in H: device (filename extraction routine).
+
+Changes in 0.2.6
+----------------
+
+- Corrected calculation of number of sectors and reading of double
+  density ATR files (Thanks to Preston Crow)
+- Correction for Linux ELF systems.
+- XVIEW and NAS work under Linux/ELF
+- Default directory for XVIEW Disk File Chooser is set within the
+  Makefile. By default it is pointing to /usr/local/lib/atari/DISKS
+- Corrected bug in Missile 0 to Playfield collision detection.
+- Corrected WSYNC bug (multiple stores to WSYNC during one scanline).
+  River Raid now runs correctly.
+- -emuos to enable emulated operating system. Users without the
+  necessary atari OS ROMs can use this option to boot disk images/ROMs.
+  Currently this is very experimental and runs very little without
+  problems. Defender runs perfectly but if you haven't got the OS it's
+  unlikely you'll be able to get this either!
+- H0: device accesses the current directory on your Unix Machine.
+- H1: through H4: can access four directories specified either within
+  the Makefile or via the -H1, -H2, -H3 and -H4 command line options.
+  By default they are set to /usr/local/lib/atari/Hx where x is 1, 2,
+  3 or 4.
+- H5: through H9: duplicate H0 through H4 but have automatic ATASCII
+  to ASCII translation. They are not suitable for binary files.
+- All files accessed via the H: device have Unix filenames consisting
+  entirely of lowercase letters.
+
+Changes in 0.2.5
+----------------
+
+- Network Audio System support on Unix Systems [incl. Linux]. Waveform
+  can be selected via the -sinewave or -squarewave options. At the
+  moment it doesn't support the Atari Distortion values and switches
+  channels using distortion off. This is available in XVIEW, X Window
+  and Linux SVGALIB versions. The Network Audio System is freely
+  available on the Internet - I used nas-1.2p2.tar.gz. Any Linux XVIEW
+  version do not work when built with the Network Audio System.
+  *** See BUGS file for more information ***
+- Support for /dev/sequencer removed since it didn't look like it
+  would ever produce satisfactory results.
+- Introduced -help option that lists all options available in the
+  emulator.
+- Added LAX unofficial opcodes
+- Corrected Vertical Fine scrolling in Antic Mode 7.
+- Enhanced DLIST command in "monitor.c" which now displays the display
+  list using mnemonics.
+- Updated VMS command file.
+
+Changes in 0.2.4
+----------------
+
+- Corrected mask in Atari800_GetByte() and Atari800_PutByte()
+- In Atari800_PutByte(), only switch on cartridge type when an
+  access is made to page $d5
+- Screen generation using word access where possible.
+- merged main.c with atari.c
+- Fixed SVGALIB Escape and cursor keys.
+- Emulated Floating Point Library which performs floating point
+  arithmetic directly on your host computer - bypasses 6502 CPU
+  emulation. Enabled by the -ffp option.
+
+Changes in 0.2.3
+----------------
+
+- ADC and SBC functions are nolonger implemented as functions.
+- 6502 PC, S, A, X, and Y register now handled using local
+  variables. Copied to global variables on exit from cpu and
+  restored on re-entry.
+- Took advantage of a GCC feature: goto array[opcode]. Other compilers
+  still use a switch statement.
+- Amiga: DisplayScreen() tidied up
+- Added DLIST command to monitor. This command shows the address of
+  the display list (from hardware registers).
+- Major recode of all Antic Graphics Modes. Now allows Horizontal and
+  Vertial fine scrolling.
+- Added an -interlace option to the SVGALIB version, giving a
+  performance increase of about 10%. You would use this option to
+  increase the speed of programs that must be run with a screen
+  refresh rate of 1 (e.g. Burried Bucks)
+- In the SVGALIB version, the F11 and F12 keys can be used to modify
+  the vertical positioning of the emulated screen. F11 moves the screen
+  down while F12 moves the screen up.
+- Corrected a BUG causing River Raid to have corrupt screen display.
+
+Changes in 0.2.2
+----------------
+
+- Made GetByte, GetWord and PutByte macros local to cpu.c
+- Added some 386 inline asm() for some 6502 addressing modes
+- Simplified Keyboard Handling
+- Assembly routines for Amiga AGA screen handling
+
 Changes in 0.2.1
 ----------------
 

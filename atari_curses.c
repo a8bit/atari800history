@@ -4,6 +4,8 @@
 #include	<curses.h>
 #endif
 
+static char *rcsid = "$Id: atari_curses.c,v 1.3 1996/04/28 20:14:57 david Exp $";
+
 #include	"cpu.h"
 #include	"atari.h"
 
@@ -69,55 +71,40 @@ void Atari_DisplayScreen ()
 
   consol = 7;
 
-  screenaddr = (GetByte (89) << 8) | GetByte (88);
+  screenaddr = (memory[89] << 8) | memory[88];
 
   for (ypos=0;ypos<24;ypos++)
     {
       for (xpos=0;xpos<40;xpos++)
 	{
-	  char	ch;
+	  int	ch;
 
-	  ch = GetByte (screenaddr);
+	  ch = memory[screenaddr];
 
 	  switch (ch & 0xe0)
 	    {
 	    case 0x00 :	/* Numbers + !"$% etc. */
 	      ch = 0x20 + ch;
-	      attroff (A_REVERSE);
-	      attroff (A_BOLD);
 	      break;
 	    case 0x20 :	/* Upper Case Characters */
 	      ch = 0x40 + (ch - 0x20);
-	      attroff (A_REVERSE);
-	      attroff (A_BOLD);
 	      break;
 	    case 0x40 :	/* Control Characters */
-	      attroff (A_REVERSE);
-	      attron (A_BOLD);
+	      ch = ch + A_BOLD;
 	      break;
 	    case 0x60 :	/* Lower Case Characters */
-	      attroff (A_REVERSE);
-	      attroff (A_BOLD);
 	      break;
 	    case 0x80 :	/* Number, !"$% etc. */
-	      ch = 0x20 + (ch & 0x7f);
-	      attron (A_REVERSE);
-	      attroff (A_BOLD);
+	      ch = 0x20 + (ch & 0x7f) + A_REVERSE;
 	      break;
 	    case 0xa0 :	/* Upper Case Characters */
-	      ch = 0x40 + ((ch & 0x7f) - 0x20);
-	      attron (A_REVERSE);
-	      attroff (A_BOLD);
+	      ch = 0x40 + ((ch & 0x7f) - 0x20) + A_REVERSE;
 	      break;
 	    case 0xc0 :	/* Control Characters */
-	      ch = ch & 0x7f;
-	      attron (A_REVERSE);
-	      attron (A_BOLD);
+	      ch = ch & 0x7f + A_REVERSE + A_BOLD;
 	      break;
 	    case 0xe0 :	/* Lower Case Characters */
-	      ch = ch & 0x7f;
-	      attron (A_REVERSE);
-	      attroff (A_BOLD);
+	      ch = ch & 0x7f + A_REVERSE;
 	      break;
 	    }
 
@@ -246,66 +233,281 @@ int Atari_Keyboard (void)
     case 0x1a :
       keycode = AKEY_CTRL_Z;
       break;
-    case '~' :
+    case '`' :
       keycode = AKEY_CAPSTOGGLE;
       break;
     case '!' :
+      keycode = AKEY_EXCLAMATION;
+      break;
     case '"' :
+      keycode = AKEY_DBLQUOTE;
+      break;
     case '#' :
+      keycode = AKEY_HASH;
+      break;
     case '$' :
+      keycode = AKEY_DOLLAR;
+      break;
     case '%' :
+      keycode = AKEY_PERCENT;
+      break;
     case '&' :
+      keycode = AKEY_AMPERSAND;
+      break;
     case '\'' :
+      keycode = AKEY_QUOTE;
+      break;
     case '@' :
+      keycode = AKEY_AT;
+      break;
     case '(' :
+      keycode = AKEY_PARENLEFT;
+      break;
     case ')' :
+      keycode = AKEY_PARENRIGHT;
+      break;
+    case '[' :
+      keycode = AKEY_BRACKETLEFT;
+      break;
+    case ']' :
+      keycode = AKEY_BRACKETRIGHT;
+      break;
     case '<' :
+      keycode = AKEY_LESS;
+      break;
     case '>' :
+      keycode = AKEY_GREATER;
+      break;
     case '=' :
+      keycode = AKEY_EQUAL;
+      break;
     case '?' :
+      keycode = AKEY_QUESTION;
+      break;
     case '-' :
+      keycode = AKEY_MINUS;
+      break;
     case '+' :
+      keycode = AKEY_PLUS;
+      break;
     case '*' :
+      keycode = AKEY_ASTERISK;
+      break;
     case '/' :
+      keycode = AKEY_SLASH;
+      break;
     case ':' :
+      keycode = AKEY_COLON;
+      break;
     case ';' :
+      keycode = AKEY_SEMICOLON;
+      break;
     case ',' :
+      keycode = AKEY_COMMA;
+      break;
     case '.' :
+      keycode = AKEY_FULLSTOP;
+      break;
     case '_' :
-    case '{' :
-    case '}' :
+      keycode = AKEY_UNDERSCORE;
+      break;
     case '^' :
+      keycode = AKEY_CIRCUMFLEX;
+      break;
     case '\\' :
+      keycode = AKEY_BACKSLASH;
+      break;
     case '|' :
+      keycode = AKEY_BAR;
+      break;
     case ' ' :
-    case '0' : case '1' : case '2' : case '3' : case '4' :
-    case '5' : case '6' : case '7' : case '8' : case '9' :
-    case 'a' : case 'A' :
-    case 'b' : case 'B' :
-    case 'c' : case 'C' :
-    case 'd' : case 'D' :
-    case 'e' : case 'E' :
-    case 'f' : case 'F' :
-    case 'g' : case 'G' :
-    case 'h' : case 'H' :
-    case 'i' : case 'I' :
-    case 'j' : case 'J' :
-    case 'k' : case 'K' :
-    case 'l' : case 'L' :
-    case 'm' : case 'M' :
-    case 'n' : case 'N' :
-    case 'o' : case 'O' :
-    case 'p' : case 'P' :
-    case 'q' : case 'Q' :
-    case 'r' : case 'R' :
-    case 's' : case 'S' :
-    case 't' : case 'T' :
-    case 'u' : case 'U' :
-    case 'v' : case 'V' :
-    case 'w' : case 'W' :
-    case 'x' : case 'X' :
-    case 'y' : case 'Y' :
-    case 'z' : case 'Z' :
+      keycode = AKEY_SPACE;
+      break;
+    case '0' :
+      keycode = AKEY_0;
+      break;
+    case '1' :
+      keycode = AKEY_1;
+      break;
+    case '2' :
+      keycode = AKEY_2;
+      break;
+    case '3' :
+      keycode = AKEY_3;
+      break;
+    case '4' :
+      keycode = AKEY_4;
+      break;
+    case '5' :
+      keycode = AKEY_5;
+      break;
+    case '6' :
+      keycode = AKEY_6;
+      break;
+    case '7' :
+      keycode = AKEY_7;
+      break;
+    case '8' :
+      keycode = AKEY_8;
+      break;
+    case '9' :
+      keycode = AKEY_9;
+      break;
+    case 'a' :
+      keycode = AKEY_a;
+      break;
+    case 'b' :
+      keycode = AKEY_b;
+      break;
+    case 'c' :
+      keycode = AKEY_c;
+      break;
+    case 'd' :
+      keycode = AKEY_d;
+      break;
+    case 'e' :
+      keycode = AKEY_e;
+      break;
+    case 'f' :
+      keycode = AKEY_f;
+      break;
+    case 'g' :
+      keycode = AKEY_g;
+      break;
+    case 'h' :
+      keycode = AKEY_h;
+      break;
+    case 'i' :
+      keycode = AKEY_i;
+      break;
+    case 'j' :
+      keycode = AKEY_j;
+      break;
+    case 'k' :
+      keycode = AKEY_k;
+      break;
+    case 'l' :
+      keycode = AKEY_l;
+      break;
+    case 'm' :
+      keycode = AKEY_m;
+      break;
+    case 'n' :
+      keycode = AKEY_n;
+      break;
+    case 'o' :
+      keycode = AKEY_o;
+      break;
+    case 'p' :
+      keycode = AKEY_p;
+      break;
+    case 'q' :
+      keycode = AKEY_q;
+      break;
+    case 'r' :
+      keycode = AKEY_r;
+      break;
+    case 's' :
+      keycode = AKEY_s;
+      break;
+    case 't' :
+      keycode = AKEY_t;
+      break;
+    case 'u' :
+      keycode = AKEY_u;
+      break;
+    case 'v' :
+      keycode = AKEY_v;
+      break;
+    case 'w' :
+      keycode = AKEY_w;
+      break;
+    case 'x' :
+      keycode = AKEY_x;
+      break;
+    case 'y' :
+      keycode = AKEY_y;
+      break;
+    case 'z' :
+      keycode = AKEY_z;
+      break;
+    case 'A' :
+      keycode = AKEY_A;
+      break;
+    case 'B' :
+      keycode = AKEY_B;
+      break;
+    case 'C' :
+      keycode = AKEY_C;
+      break;
+    case 'D' :
+      keycode = AKEY_D;
+      break;
+    case 'E' :
+      keycode = AKEY_E;
+      break;
+    case 'F' :
+      keycode = AKEY_F;
+      break;
+    case 'G' :
+      keycode = AKEY_G;
+      break;
+    case 'H' :
+      keycode = AKEY_H;
+      break;
+    case 'I' :
+      keycode = AKEY_I;
+      break;
+    case 'J' :
+      keycode = AKEY_J;
+      break;
+    case 'K' :
+      keycode = AKEY_K;
+      break;
+    case 'L' :
+      keycode = AKEY_L;
+      break;
+    case 'M' :
+      keycode = AKEY_M;
+      break;
+    case 'N' :
+      keycode = AKEY_N;
+      break;
+    case 'O' :
+      keycode = AKEY_O;
+      break;
+    case 'P' :
+      keycode = AKEY_P;
+      break;
+    case 'Q' :
+      keycode = AKEY_Q;
+      break;
+    case 'R' :
+      keycode = AKEY_R;
+      break;
+    case 'S' :
+      keycode = AKEY_S;
+      break;
+    case 'T' :
+      keycode = AKEY_T;
+      break;
+    case 'U' :
+      keycode = AKEY_U;
+      break;
+    case 'V' :
+      keycode = AKEY_V;
+      break;
+    case 'W' :
+      keycode = AKEY_W;
+      break;
+    case 'X' :
+      keycode = AKEY_X;
+      break;
+    case 'Y' :
+      keycode = AKEY_Y;
+      break;
+    case 'Z' :
+      keycode = AKEY_Z;
       break;
     case 0x1b :
       keycode = AKEY_ESCAPE;
@@ -356,6 +558,7 @@ int Atari_Keyboard (void)
 		case 8 :
 		case 127 :
 #else
+		case 127 :
 		case KEY_BACKSPACE :
 #endif
 		  keycode = AKEY_BACKSPACE;

@@ -5,9 +5,9 @@
  */
 
 /*
- * Revision     : v0.2.1
+ * Revision     : v0.3.3
  * Introduced   : NOT KNOWN (Before 2nd September 1995)
- * Last updated : 12th October 1995
+ * Last updated : 7th March 1996
  *
  *
  *
@@ -16,133 +16,7 @@
  * This file contains all the additional code required to get the Amiga
  * port of the Atari800 emulator up and running.
  *
- *
- *
- * Notes:
- *
- *
- *
- * v0.1.9 (I think!)
- *
- * o Now supports AGA graphics via -aga startup option. This option provides
- *   support for the Atari's full 256 colour palette.
- *     The emulator will default to this mode.
- *
- * o Should support ECS graphics via -ecs startup option. Unfortunately, I
- *   have not been able to test this on a real ECS based Amiga so I would
- *   appreciate it if someone would let me know whether it works or not.
- *     The only difference between this mode and the AGA mode is that
- *   the screen display is rendered with 32 pens as opposed to using the
- *   Atari's full 256 colour palette.
- *
- * o Should support OCS graphics via -ocs startup option. Unfortunately, I
- *   have not been able to test this on a real OCS based Amiga so I would
- *   appreciate it if someone would let me know whether it works or not. Of
- *   the three modes, this is the least likely to work. There is no real
- *   difference between this and the ECS mode, so I'm just hoping it does.
- *   However, certain operating system calls may not work, but without
- *   further details, I have no idea which these may be.
- *     Anyway, in this mode, the screen display should be rendered with 32
- *   pens just like the ECS mode.
- *
- * o The emulator has been tested on an Amiga A1200 using the OCS, ECS and
- *   AGA chipset options on powerup. However, due to the fact that the A1200
- *   uses Workbench 3.0, I have no idea whether it will work on real OCS and
- *   ECS based Amiga's. Sorry! I would appreciate it if someone would let me
- *   know whether it does work on these machines. Thanks!
- *
- *
- *
- * v0.2.0 (I think!)
- *
- * o Hooks have been provided for sound support as required by v0.1.9.
- *   However, sound is not currently supported (And probably won't be for a
- *   while yet!). If anyone is interested in developing this area please
- *   feel free.
- *
- * o Upon compilation you will reveive one warning regarding the definition
- *   of CLOSE. A standard Amiga define is conflicting with one defined
- *   within the "atari.h" file. This is unlikely to be corrected. Apart from
- *   this one warning, there should now be no other warnings of any kind.
- *
- * o Thanks to a little experimentation you can now see the menus more
- *   clearly and the windows (all two of them!) have been given a much
- *   needed facelift.
- *
- * o -grey startup option added. In this mode you will get a grey scale
- *   screen display.
- *
- * o -colour startup option added. In AGA modes you will get the full 256
- *   colour palette of the Atari. In OCS and ECS modes you will get the
- *   best representation the program can get using 32 pens.
- *     The emulator will default to this mode.
- *
- * o -wb startup option added. This option tells the emulator to make an
- *   attempt at opening a window on the Workbench screen in which it should
- *   render the display. At the moment this is at a prelimary stage of
- *   development. Setting this will automatically enable the ECS_ChipSet
- *   version. As yet, there is no specific AGA version that takes into
- *   account the AGA's increased colour palette. However, bearing in mind
- *   the amount of colour you can get on screen using the ECS engine, is
- *   there really any point?
- *     In this mode you may also quit the emulator by clicking the main
- *   windows close gadget.
- *     The advantage that this mode has over all over modes is that you get
- *   to see the whole screen without any of the edges cut off. The big
- *   disadvantage is that if the program currently being run on the emulator
- *   uses a lot of colours it may overwrite the last 4 colours that
- *   Workbench has defined. Without knowing how to find out the depth of the
- *   Workbench screen, I'm a bit stuck on this one.
- *     For the best results, use this mode on nothing less than a 16 colour
- *   screen.
- *
- * o -paddle startup option added. This option enables the mouse based
- *   paddle controller emulation.
- *
- * o -joystick startup option added. Enables the joystick controller
- *   emulation.
- *     The emulator will default to this mode.
- *
- *
- *
- * v0.2.1
- *
- * o The Project menu has been renamed the Amiga menu.
- *
- * o A new menu named Disk has been added. This allows you to select a boot
- *   disk and allows you to insert a disk into a virtual drive or remove a
- *   disk from a virtual drive without having to reboot.
- *
- * o The Help key is now active via the Console/Help menu-item. Please note:
- *   this menu-item will only be enabled if you run the emulator with
- *   either the -xl or -xe startup option.
- *
- * o Added images to gadgets.
- *
- * o The AGA Setup window has been updated.
- *
- * o The Prefs/Controller menu has been updated ready for future
- *   improvements regarding controllers.
- *
- *
- *
- * Future improvements:
- *
- * o Further GUI improvement with regards to the controller menu-item
- *
- * o Possible introduction of AmigaGuide documentation
- *
- *
- *
- * BELATED THANK YOU:
- *
- * Thanks must go to (some guy on a computer) going by the name (I presume!)
- * of D. Dussia who told me about one stupid mistake I made regarding
- * libraries. ie open v39 when pre-AGA machines don't have them (der,
- * stooopid!). Also told me that the emulator would compile using SAS/C if
- * you tell it to compile in FAR mode and that you define Dice_c.
- * Unfortunately, not owning SAS/C, I'm not too sure what this means, but if
- * you do then you're free to have a go.
+ * See "Atari800.guide" for info
  */
 
 
@@ -160,12 +34,12 @@
 #include <libraries/asl.h>
 #include <stdio.h>
 #include <string.h>
+#include <workbench/workbench.h>
+
+static char *rcsid = "$Id: atari_amiga.c,v 1.4 1996/06/30 23:30:22 david Exp $";
 
 #include "atari.h"
 #include "colours.h"
-#include "system.h"
-
-
 
 #define GAMEPORT0 0
 #define GAMEPORT1 1
@@ -197,6 +71,7 @@ static struct Window *WindowNotSupported = NULL;
 static struct Window *WindowSetup = NULL;
 static struct Window *WindowController = NULL;
 static struct Window *WindowYesNo = NULL;
+static struct Window *WindowIconified = NULL;
 
 int old_stick_0 = 0x1f;
 int old_stick_1 = 0x1f;
@@ -222,32 +97,49 @@ static int ScreenHeight;
 static int ScreenDepth;
 static int TotalColours;
 
+struct AppWindow *AppWindow = NULL;
+struct AppMenuItem *AppMenuItem = NULL;
+struct AppIcon *AppIcon = NULL;
+struct DiskObject *AppDiskObject = NULL;
+struct MsgPort *AppMessagePort = NULL;
+struct AppMessage *AppMessage = NULL;
+
 static struct Menu *menu_Project = NULL;
 static struct MenuItem *menu_Project00 = NULL;
 static struct MenuItem *menu_Project01 = NULL;
 static struct MenuItem *menu_Project02 = NULL;
 static struct MenuItem *menu_Project03 = NULL;
 
-static struct Menu *menu_Disk = NULL;
-static struct MenuItem *menu_Disk00 = NULL;
-static struct MenuItem *menu_Disk01 = NULL;
-static struct MenuItem *menu_Disk01s00 = NULL;
-static struct MenuItem *menu_Disk01s01 = NULL;
-static struct MenuItem *menu_Disk01s02 = NULL;
-static struct MenuItem *menu_Disk01s03 = NULL;
-static struct MenuItem *menu_Disk01s04 = NULL;
-static struct MenuItem *menu_Disk01s05 = NULL;
-static struct MenuItem *menu_Disk01s06 = NULL;
-static struct MenuItem *menu_Disk01s07 = NULL;
-static struct MenuItem *menu_Disk02 = NULL;
-static struct MenuItem *menu_Disk02s00 = NULL;
-static struct MenuItem *menu_Disk02s01 = NULL;
-static struct MenuItem *menu_Disk02s02 = NULL;
-static struct MenuItem *menu_Disk02s03 = NULL;
-static struct MenuItem *menu_Disk02s04 = NULL;
-static struct MenuItem *menu_Disk02s05 = NULL;
-static struct MenuItem *menu_Disk02s06 = NULL;
-static struct MenuItem *menu_Disk02s07 = NULL;
+static struct Menu *menu_System = NULL;
+static struct MenuItem *menu_System00 = NULL;
+static struct MenuItem *menu_System01 = NULL;
+static struct MenuItem *menu_System01s00 = NULL;
+static struct MenuItem *menu_System01s01 = NULL;
+static struct MenuItem *menu_System01s02 = NULL;
+static struct MenuItem *menu_System01s03 = NULL;
+static struct MenuItem *menu_System01s04 = NULL;
+static struct MenuItem *menu_System01s05 = NULL;
+static struct MenuItem *menu_System01s06 = NULL;
+static struct MenuItem *menu_System01s07 = NULL;
+static struct MenuItem *menu_System02 = NULL;
+static struct MenuItem *menu_System02s00 = NULL;
+static struct MenuItem *menu_System02s01 = NULL;
+static struct MenuItem *menu_System02s02 = NULL;
+static struct MenuItem *menu_System02s03 = NULL;
+static struct MenuItem *menu_System02s04 = NULL;
+static struct MenuItem *menu_System02s05 = NULL;
+static struct MenuItem *menu_System02s06 = NULL;
+static struct MenuItem *menu_System02s07 = NULL;
+static struct MenuItem *menu_System03 = NULL;
+static struct MenuItem *menu_System03s00 = NULL;
+static struct MenuItem *menu_System03s01 = NULL;
+static struct MenuItem *menu_System03s02 = NULL;
+static struct MenuItem *menu_System04 = NULL;
+static struct MenuItem *menu_System05 = NULL;
+static struct MenuItem *menu_System06 = NULL;
+static struct MenuItem *menu_System07 = NULL;
+static struct MenuItem *menu_System08 = NULL;
+static struct MenuItem *menu_System09 = NULL;
 
 static struct Menu *menu_Console = NULL;
 static struct MenuItem *menu_Console00 = NULL;
@@ -256,6 +148,7 @@ static struct MenuItem *menu_Console02 = NULL;
 static struct MenuItem *menu_Console03 = NULL;
 static struct MenuItem *menu_Console04 = NULL;
 static struct MenuItem *menu_Console05 = NULL;
+static struct MenuItem *menu_Console06 = NULL;
 
 static struct Menu *menu_Prefs = NULL;
 static struct MenuItem *menu_Prefs00 = NULL;
@@ -521,29 +414,6 @@ void Atari_Initialise (int *argc, char *argv[])
 	APTR Address;
 
 	int QuitRoutine;
-
-	/*
-	 * ===========
-	 * Screen Pens
-	 * ===========
-	 */
-
-	WORD ScreenPens[13] =
-	{
-		15, /* Unknown */
-		15, /* Unknown */
-		0, /* Windows titlebar text when inactive */
-		15, /* Windows bright edges */
-		0, /* Windows dark edges */
-		120, /* Windows titlebar when active */
-		0, /* Windows titlebar text when active */
-		4, /* Windows titlebar when inactive */
-		15, /* Unknown */
-		0, /* Menubar text */
-		15, /* Menubar */
-		0, /* Menubar base */
-		-1
-	};
 
 	/*
 	 * =========
@@ -830,171 +700,7 @@ void Atari_Initialise (int *argc, char *argv[])
 		DisplaySetupWindow ();
 	}
 
-	/*
-	 * =============
-	 * Create Screen
-	 * =============
-	 */
-
-	if (CustomScreen)
-	{
-		ScreenType = CUSTOMSCREEN;
-
-		ScreenWidth = ATARI_WIDTH - 64; /* ATARI_WIDTH + 8; */
-		ScreenHeight = ATARI_HEIGHT; /* ATARI_HEIGHT + 13; */
-
-		if (ChipSet == AGA_ChipSet)
-		{
-			ScreenDepth = 8;
-		}
-		else
-		{
-			ScreenDepth = 5;
-		}
-
-		NewScreen.LeftEdge = 0;
-		NewScreen.TopEdge = 0;
-		NewScreen.Width = ScreenWidth;
-		NewScreen.Height = ScreenHeight;
-		NewScreen.Depth = ScreenDepth;
-		NewScreen.DetailPen = 1;
-		NewScreen.BlockPen = 2; /* 2 */
-		NewScreen.ViewModes = NULL;
-		NewScreen.Type = CUSTOMSCREEN;
-		NewScreen.Font = NULL;
-		NewScreen.DefaultTitle = ATARI_TITLE;
-		NewScreen.Gadgets = NULL;
-		NewScreen.CustomBitMap = NULL;
-
-		ScreenMain = (struct Screen *) OpenScreenTags
-		(
-			&NewScreen,
-			SA_Left, 0,
-			SA_Top, 0,
-			SA_Width, ScreenWidth,
-			SA_Height, ScreenHeight,
-			SA_Depth, ScreenDepth,
-			SA_DetailPen, 1,
-			SA_BlockPen, 2, /* 2 */
-			SA_Pens, ScreenPens,
-			SA_Title, ATARI_TITLE,
-			SA_Type, CUSTOMSCREEN,
-/*
-			SA_Overscan, OSCAN_STANDARD,
-*/
-/*
-			SA_DisplayID, ScreenID,
-*/
-			SA_AutoScroll, TRUE,
-/*
-			SA_Interleaved, TRUE,
-*/
-			TAG_DONE
-		);
-
-		if (ChipSet == AGA_ChipSet)
-		{
-			TotalColours = 256;
-		}
-		else
-		{
-			TotalColours = 16;
-		}
-
-		for (i=0;i<TotalColours;i++)
-		{
-			int rgb = colortable[i];
-			int red;
-			int green;
-			int blue;
-
-			red = (rgb & 0x00ff0000) >> 20;
-			green = (rgb & 0x0000ff00) >> 12;
-			blue = (rgb & 0x000000ff) >> 4;
-
-			SetRGB4 (&ScreenMain->ViewPort, i, red, green, blue);
-		}
-
-		image_Button64.PlanePick = 9;
-		image_Button64.PlaneOnOff = (UBYTE) 6;
-		image_Button64Selected.PlanePick = 9;
-		image_Button64Selected.PlaneOnOff = (UBYTE) 6;
-		image_MutualGadget.PlanePick = 9;
-		image_MutualGadget.PlaneOnOff = (UBYTE) 6;
-		image_MutualGadgetSelected.PlanePick = 9;
-		image_MutualGadgetSelected.PlaneOnOff = (UBYTE) 6;
-	}
-	else
-	{
-		ScreenType = WBENCHSCREEN;
-
-		ScreenWidth = ATARI_WIDTH; /* ATARI_WIDTH + 8; */
-		ScreenHeight = ATARI_HEIGHT; /* ATARI_HEIGHT + 13; */
-	}
-
-	/*
-	 * =============
-	 * Create Window
-	 * =============
-	 */
-
-	NewWindow.DetailPen = 0;
-	NewWindow.BlockPen = 148;
-
-	if (CustomScreen)
-	{
-		NewWindow.LeftEdge = 0;
-		NewWindow.TopEdge = 0;
-		NewWindow.Width = ScreenWidth; /* ATARI_WIDTH + 8; */
-		NewWindow.Height = ScreenHeight; /* ATARI_HEIGHT + 13; */
-		NewWindow.IDCMPFlags = SELECTDOWN | SELECTUP | MOUSEBUTTONS | MOUSEMOVE | MENUPICK | MENUVERIFY | MOUSEBUTTONS | GADGETUP | RAWKEY | VANILLAKEY;
-
-		/*
-		 * If you use the ClickToFront commodity it might be a good idea to
-		 * enable the BACKDROP option in the NewWindow.Flags line below.
-		 */
-
-		NewWindow.Flags = /* BACKDROP | */ REPORTMOUSE | BORDERLESS | GIMMEZEROZERO | SMART_REFRESH | ACTIVATE;
-		NewWindow.Title = NULL;
-	}
-	else
-	{
-		NewWindow.LeftEdge = 0;
-		NewWindow.TopEdge = 11;
-		NewWindow.Width = ScreenWidth + 8; /* ATARI_WIDTH + 8; */
-		NewWindow.Height = ScreenHeight + 13; /* ATARI_HEIGHT + 13; */
-		NewWindow.IDCMPFlags = SELECTDOWN | SELECTUP | MOUSEBUTTONS | MOUSEMOVE | CLOSEWINDOW | MENUPICK | MENUVERIFY | MOUSEBUTTONS | GADGETUP | RAWKEY | VANILLAKEY;
-		NewWindow.Flags = REPORTMOUSE | WINDOWCLOSE | GIMMEZEROZERO | WINDOWDRAG | WINDOWDEPTH | SMART_REFRESH | ACTIVATE;
-		NewWindow.Title = ATARI_TITLE;
-	}
-
-	NewWindow.FirstGadget = NULL;
-	NewWindow.CheckMark = NULL;
-	NewWindow.Screen = ScreenMain;
-	NewWindow.Type = ScreenType;
-	NewWindow.BitMap = NULL;
-	NewWindow.MinWidth = 50;
-	NewWindow.MinHeight = 11;
-	NewWindow.MaxWidth = 1280;
-	NewWindow.MaxHeight = 512;
-
-	WindowMain = (struct Window*) OpenWindowTags
-	(
-		&NewWindow,
-		WA_NewLookMenus, TRUE,
-		WA_MenuHelp, TRUE,
-		WA_ScreenTitle, ATARI_TITLE,
-/*
-		WA_Zoom, Zoomdata,
-*/
-		TAG_DONE
-	);
-
-	if (!WindowMain)
-	{
-		printf ("Failed to create window\n");
-		Atari_Exit (0);
-	}
+	SetupDisplay ();
 
 	DisplayAboutWindow ();
 
@@ -1017,51 +723,75 @@ void Atari_Initialise (int *argc, char *argv[])
  * Setup Disk Menu
  */
 
-	menu_Disk00 = MakeMenuItem (0, 0, 88, 10, "Boot disk", NULL, NULL);
-	menu_Disk01 = MakeMenuItem (0, 10, 88, 10, "Insert disk", NULL, NULL);
-		menu_Disk01s00 = MakeMenuItem (72, 0, 80, 10, "Drive 1...", NULL, NULL);
-		menu_Disk01s01 = MakeMenuItem (72, 10, 80, 10, "Drive 2...", NULL, NULL);
-		menu_Disk01s02 = MakeMenuItem (72, 20, 80, 10, "Drive 3...", NULL, NULL);
-		menu_Disk01s03 = MakeMenuItem (72, 30, 80, 10, "Drive 4...", NULL, NULL);
-		menu_Disk01s04 = MakeMenuItem (72, 40, 80, 10, "Drive 5...", NULL, NULL);
-		menu_Disk01s05 = MakeMenuItem (72, 50, 80, 10, "Drive 6...", NULL, NULL);
-		menu_Disk01s06 = MakeMenuItem (72, 60, 80, 10, "Drive 7...", NULL, NULL);
-		menu_Disk01s07 = MakeMenuItem (72, 70, 80, 10, "Drive 8...", NULL, NULL);
+	menu_System00 = MakeMenuItem (0, 0, 144, 10, "Boot disk", NULL, NULL);
+	menu_System01 = MakeMenuItem (0, 10, 144, 10, "Insert disk      »", NULL, NULL);
+		menu_System01s00 = MakeMenuItem (128, 0, 80, 10, "Drive 1...", NULL, NULL);
+		menu_System01s01 = MakeMenuItem (128, 10, 80, 10, "Drive 2...", NULL, NULL);
+		menu_System01s02 = MakeMenuItem (128, 20, 80, 10, "Drive 3...", NULL, NULL);
+		menu_System01s03 = MakeMenuItem (128, 30, 80, 10, "Drive 4...", NULL, NULL);
+		menu_System01s04 = MakeMenuItem (128, 40, 80, 10, "Drive 5...", NULL, NULL);
+		menu_System01s05 = MakeMenuItem (128, 50, 80, 10, "Drive 6...", NULL, NULL);
+		menu_System01s06 = MakeMenuItem (128, 60, 80, 10, "Drive 7...", NULL, NULL);
+		menu_System01s07 = MakeMenuItem (128, 70, 80, 10, "Drive 8...", NULL, NULL);
 
-		menu_Disk01s00->NextItem = menu_Disk01s01;
-		menu_Disk01s01->NextItem = menu_Disk01s02;
-		menu_Disk01s02->NextItem = menu_Disk01s03;
-		menu_Disk01s03->NextItem = menu_Disk01s04;
-		menu_Disk01s04->NextItem = menu_Disk01s05;
-		menu_Disk01s05->NextItem = menu_Disk01s06;
-		menu_Disk01s06->NextItem = menu_Disk01s07;
+		menu_System01s00->NextItem = menu_System01s01;
+		menu_System01s01->NextItem = menu_System01s02;
+		menu_System01s02->NextItem = menu_System01s03;
+		menu_System01s03->NextItem = menu_System01s04;
+		menu_System01s04->NextItem = menu_System01s05;
+		menu_System01s05->NextItem = menu_System01s06;
+		menu_System01s06->NextItem = menu_System01s07;
 
-		menu_Disk01->SubItem = menu_Disk01s00;
+		menu_System01->SubItem = menu_System01s00;
 
-	menu_Disk02 = MakeMenuItem (0, 20, 88, 10, "Eject disk", NULL, NULL);
-		menu_Disk02s00 = MakeMenuItem (72, 0, 56, 10, "Drive 1", NULL, NULL);
-		menu_Disk02s01 = MakeMenuItem (72, 10, 56, 10, "Drive 2", NULL, NULL);
-		menu_Disk02s02 = MakeMenuItem (72, 20, 56, 10, "Drive 3", NULL, NULL);
-		menu_Disk02s03 = MakeMenuItem (72, 30, 56, 10, "Drive 4", NULL, NULL);
-		menu_Disk02s04 = MakeMenuItem (72, 40, 56, 10, "Drive 5", NULL, NULL);
-		menu_Disk02s05 = MakeMenuItem (72, 50, 56, 10, "Drive 6", NULL, NULL);
-		menu_Disk02s06 = MakeMenuItem (72, 60, 56, 10, "Drive 7", NULL, NULL);
-		menu_Disk02s07 = MakeMenuItem (72, 70, 56, 10, "Drive 8", NULL, NULL);
+	menu_System02 = MakeMenuItem (0, 20, 144, 10, "Eject disk       »", NULL, NULL);
+		menu_System02s00 = MakeMenuItem (128, 0, 56, 10, "Drive 1", NULL, NULL);
+		menu_System02s01 = MakeMenuItem (128, 10, 56, 10, "Drive 2", NULL, NULL);
+		menu_System02s02 = MakeMenuItem (128, 20, 56, 10, "Drive 3", NULL, NULL);
+		menu_System02s03 = MakeMenuItem (128, 30, 56, 10, "Drive 4", NULL, NULL);
+		menu_System02s04 = MakeMenuItem (128, 40, 56, 10, "Drive 5", NULL, NULL);
+		menu_System02s05 = MakeMenuItem (128, 50, 56, 10, "Drive 6", NULL, NULL);
+		menu_System02s06 = MakeMenuItem (128, 60, 56, 10, "Drive 7", NULL, NULL);
+		menu_System02s07 = MakeMenuItem (128, 70, 56, 10, "Drive 8", NULL, NULL);
 
-		menu_Disk02s00->NextItem = menu_Disk02s01;
-		menu_Disk02s01->NextItem = menu_Disk02s02;
-		menu_Disk02s02->NextItem = menu_Disk02s03;
-		menu_Disk02s03->NextItem = menu_Disk02s04;
-		menu_Disk02s04->NextItem = menu_Disk02s05;
-		menu_Disk02s05->NextItem = menu_Disk02s06;
-		menu_Disk02s06->NextItem = menu_Disk02s07;
+		menu_System02s00->NextItem = menu_System02s01;
+		menu_System02s01->NextItem = menu_System02s02;
+		menu_System02s02->NextItem = menu_System02s03;
+		menu_System02s03->NextItem = menu_System02s04;
+		menu_System02s04->NextItem = menu_System02s05;
+		menu_System02s05->NextItem = menu_System02s06;
+		menu_System02s06->NextItem = menu_System02s07;
 
-		menu_Disk02->SubItem = menu_Disk02s00;
+		menu_System02->SubItem = menu_System02s00;
 
-	menu_Disk00->NextItem = menu_Disk01;
-	menu_Disk01->NextItem = menu_Disk02;
+	menu_System03 = MakeMenuItem (0, 35, 144, 10, "Insert Cartridge »", NULL, NULL);
+		menu_System03s00 = MakeMenuItem (128, 0, 128, 10, "8K Cart...", NULL, NULL);
+		menu_System03s01 = MakeMenuItem (128, 10, 128, 10, "16K Cart...", NULL, NULL);
+		menu_System03s02 = MakeMenuItem (128, 20, 128, 10, "OSS SuperCart...", NULL, NULL);
 
-	menu_Disk = MakeMenu (48, 0, 40, "Disk", menu_Disk00);
+		menu_System03s00->NextItem = menu_System03s01;
+		menu_System03s01->NextItem = menu_System03s02;
+
+		menu_System03->SubItem = menu_System03s00;
+
+	menu_System04 = MakeMenuItem (0, 45, 144, 10, "Remove Cartridge", NULL, NULL);
+	menu_System05 = MakeMenuItem (0, 60, 144, 10, "Enable PIL", NULL, NULL);
+	menu_System06 = MakeMenuItem (0, 75, 144, 10, "Atari 800 OS/A", NULL, NULL);
+	menu_System07 = MakeMenuItem (0, 85, 144, 10, "Atari 800 OS/B", NULL, NULL);
+	menu_System08 = MakeMenuItem (0, 95, 144, 10, "Atari 800XL", NULL, NULL);
+	menu_System09 = MakeMenuItem (0, 105, 144, 10, "Atari 130XE", NULL, NULL);
+
+	menu_System00->NextItem = menu_System01;
+	menu_System01->NextItem = menu_System02;
+	menu_System02->NextItem = menu_System03;
+	menu_System03->NextItem = menu_System04;
+	menu_System04->NextItem = menu_System05;
+	menu_System05->NextItem = menu_System06;
+	menu_System06->NextItem = menu_System07;
+	menu_System07->NextItem = menu_System08;
+	menu_System08->NextItem = menu_System09;
+
+	menu_System = MakeMenu (48, 0, 56, "System", menu_System00);
 
 /*
  * Setup Console Menu
@@ -1077,16 +807,18 @@ void Atari_Initialise (int *argc, char *argv[])
 			menu_Console03->Flags = ITEMTEXT | HIGHCOMP;
 		}
 
-	menu_Console04 = MakeMenuItem	(0, 45, 80, 10, "Reset", NULL, NULL);
-	menu_Console05 = MakeMenuItem (0, 60, 80, 10, "Cold Start", NULL, NULL);
+	menu_Console04 = MakeMenuItem (0, 45, 80, 10, "Break", NULL, NULL);
+	menu_Console05 = MakeMenuItem	(0, 60, 80, 10, "Reset", NULL, NULL);
+	menu_Console06 = MakeMenuItem (0, 75, 80, 10, "Cold Start", NULL, NULL);
 
 	menu_Console00->NextItem = menu_Console01;
 	menu_Console01->NextItem = menu_Console02;
 	menu_Console02->NextItem = menu_Console03;
 	menu_Console03->NextItem = menu_Console04;
 	menu_Console04->NextItem = menu_Console05;
+	menu_Console05->NextItem = menu_Console06;
 
-	menu_Console = MakeMenu (88, 0, 64, "Console", menu_Console00);
+	menu_Console = MakeMenu (104, 0, 64, "Console", menu_Console00);
 
 /*
  * Setup Prefs Menu
@@ -1219,14 +951,14 @@ void Atari_Initialise (int *argc, char *argv[])
 	menu_Prefs01->NextItem = menu_Prefs02;
 	menu_Prefs02->NextItem = menu_Prefs03;
 
-	menu_Prefs = MakeMenu (152, 0, 48, "Prefs", menu_Prefs00);
+	menu_Prefs = MakeMenu (168, 0, 48, "Prefs", menu_Prefs00);
 
 /*
  * Link Menus
  */
 
-	menu_Project->NextMenu = menu_Disk;
-	menu_Disk->NextMenu = menu_Console;
+	menu_Project->NextMenu = menu_System;
+	menu_System->NextMenu = menu_Console;
 	menu_Console->NextMenu = menu_Prefs;
 
 	SetMenuStrip (WindowMain, menu_Project);
@@ -1372,32 +1104,77 @@ int Atari_Exit (int run_monitor)
 
 void Atari_DisplayScreen (UBYTE *screen)
 {
-	int ypos;
-	int	xpos;
-	int	tbit = 15;
-	UBYTE *scanline_ptr;
-
-	BYTE pens[256];
-	int pen;
-
-	int colourmask;
-
+/*
 	UWORD	*bitplane0;
 	UWORD	*bitplane1;
 	UWORD	*bitplane2;
 	UWORD	*bitplane3;
 	UWORD	*bitplane4;
-	UWORD	*bitplane5;
-	UWORD	*bitplane6;
-	UWORD	*bitplane7;
 
-	UWORD	word0, word1, word2, word3;
-	UWORD	word4, word5, word6, word7;
+	bitplane0 = WindowMain->RPort->BitMap->Planes[0];
+	word0 = *bitplane0;
+
+	bitplane1 = WindowMain->RPort->BitMap->Planes[1]; 
+	word1 = *bitplane1;
+
+	bitplane2 = WindowMain->RPort->BitMap->Planes[2];
+	word2 = *bitplane2;
+
+	bitplane3 = WindowMain->RPort->BitMap->Planes[3];
+	word3 = *bitplane3;
+
+	bitplane4 = WindowMain->RPort->BitMap->Planes[4];
+	word4 = *bitplane4;
+*/
 
 	consol = 7;
 
-	if (ChipSet == OCS_ChipSet || ChipSet == ECS_ChipSet)
+	if (ChipSet == AGA_ChipSet)
 	{
+		ULONG	*bitplane0;
+
+		bitplane0 = &data_Screen[0];
+
+		if (ColourEnabled)
+		  amiga_aga_colour (screen, bitplane0);
+		else
+		  amiga_aga_bw (screen, bitplane0);
+	}
+	else
+	{
+		ULONG	*bitplane0;
+		ULONG	*bitplane1;
+		ULONG	*bitplane2;
+		ULONG	*bitplane3;
+		ULONG	*bitplane4;
+
+		ULONG	word0, word1, word2, word3, word4;
+
+		int ypos;
+		int	xpos;
+		int	tbit = 31;
+		UBYTE *scanline_ptr;
+
+		BYTE pens[256];
+		int pen;
+
+		scanline_ptr = image_data;
+
+		bitplane0 = &data_Screen[0];
+		word0 = *bitplane0;
+
+		bitplane1 = &data_Screen[5760]; 
+		word1 = *bitplane1;
+
+		bitplane2 = &data_Screen[11520];
+		word2 = *bitplane2;
+
+		bitplane3 = &data_Screen[17280];
+		word3 = *bitplane3;
+
+		bitplane4 = &data_Screen[23040];
+		word4 = *bitplane4;
+
 		for (pen=0;pen<256;pen++)
 		{
 			pens[pen] = 0;
@@ -1409,110 +1186,7 @@ void Atari_DisplayScreen (UBYTE *screen)
 		{
 			pen = 1;
 		}
-	}
 
-	bitplane0 = &data_Screen[0];
-	word0 = *bitplane0;
-
-	bitplane1 = &data_Screen[5760]; 
-	word1 = *bitplane1;
-
-	bitplane2 = &data_Screen[11520];
-	word2 = *bitplane2;
-
-	bitplane3 = &data_Screen[17280];
-	word3 = *bitplane3;
-
-	bitplane4 = &data_Screen[23040];
-	word4 = *bitplane4;
-
-	if (ChipSet == AGA_ChipSet)
-	{
-		bitplane5 = &data_Screen[28800];
-		word5 = *bitplane5;
-
-		bitplane6 = &data_Screen[34560];
-		word6 = *bitplane6;
-
-		bitplane7 = &data_Screen[40320];
-		word7 = *bitplane7;
-	}
-
-	scanline_ptr = image_data;
-
-	if (ColourEnabled)
-	{
-		colourmask = 0xff;
-	}
-	else
-	{
-		colourmask = 0x0f;
-	}
-
-	if (ChipSet == AGA_ChipSet)
-	{
-		for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
-		{
-			for (xpos=0;xpos<ATARI_WIDTH;xpos++)
-			{
-				UBYTE	colour;
-
-				colour = *screen++ & colourmask;
-
-				if (colour != *scanline_ptr)
-				{
-					UWORD mask;
-					mask = ~(1 << tbit);
-
-					word0 = (word0 & mask) | (((colour) & 1) << tbit);
-					word1 = (word1 & mask) | (((colour >> 1) & 1) << tbit);
-					word2 = (word2 & mask) | (((colour >> 2) & 1) << tbit);
-					word3 = (word3 & mask) | (((colour >> 3) & 1) << tbit);
-					word4 = (word4 & mask) | (((colour >> 4) & 1) << tbit);
-					word5 = (word5 & mask) | (((colour >> 5) & 1) << tbit);
-					word6 = (word6 & mask) | (((colour >> 6) & 1) << tbit);
-					word7 = (word7 & mask) | (((colour >> 7) & 1) << tbit);
-
-					*scanline_ptr++ = colour;
-				}
-				else
-				{
-					scanline_ptr++;
-				}
-
-				if (--tbit == -1)
-				{
-					*bitplane0++ = word0;
-					word0 = *bitplane0;
-
-					*bitplane1++ = word1;
-					word1 = *bitplane1;
-
-					*bitplane2++ = word2;
-					word2 = *bitplane2;
-
-					*bitplane3++ = word3;
-					word3 = *bitplane3;
-
-					*bitplane4++ = word4;
-					word4 = *bitplane4;
-
-					*bitplane5++ = word5;
-					word5 = *bitplane5;
-
-					*bitplane6++ = word6;
-					word6 = *bitplane6;
-
-					*bitplane7++ = word7;
-					word7 = *bitplane7;
-
-					tbit = 15;
-				}
-			}
-		}
-	}
-	else
-	{
 		if (ColourEnabled)
 		{
 			for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
@@ -1550,7 +1224,8 @@ void Atari_DisplayScreen (UBYTE *screen)
 
 					if (colour != *scanline_ptr)
 					{
-						UWORD mask;
+						ULONG mask;
+
 						mask = ~(1 << tbit);
 
 						word0 = (word0 & mask) | (((colour) & 1) << tbit);
@@ -1583,7 +1258,7 @@ void Atari_DisplayScreen (UBYTE *screen)
 						*bitplane4++ = word4;
 						word4 = *bitplane4;
 
-						tbit = 15;
+						tbit = 31;
 					}
 				}
 			}
@@ -1600,7 +1275,8 @@ void Atari_DisplayScreen (UBYTE *screen)
 
 					if (colour != *scanline_ptr)
 					{
-						UWORD mask;
+						ULONG mask;
+
 						mask = ~(1 << tbit);
 
 						word0 = (word0 & mask) | (((colour) & 1) << tbit);
@@ -1633,7 +1309,7 @@ void Atari_DisplayScreen (UBYTE *screen)
 						*bitplane4++ = word4;
 						word4 = *bitplane4;
 
-						tbit = 15;
+						tbit = 31;
 					}
 				}
 			}
@@ -1659,9 +1335,9 @@ void Atari_DisplayScreen (UBYTE *screen)
  */
 
 /*
- * Revision     : v0.2.1a
+ * Revision     : v0.3.3
  * Introduced   : NOT KNOWN (Before 2nd September 1995)
- * Last updated : 24th September 1995
+ * Last updated : 7th March 1996
  *
  * Notes: Currently contains GUI monitoring code as well. At some time in
  * the future I intend on removing this from this code.
@@ -1740,16 +1416,16 @@ int Atari_Keyboard (void)
 				switch (keycode)
 				{
 					case 0x01 :
-						keycode = AKEY_CTRL_A;
+						keycode = AKEY_CTRL_a;
 						break;
 					case 0x02 :
-						keycode = AKEY_CTRL_B;
+						keycode = AKEY_CTRL_b;
 						break;
 					case 0x03 :
-						keycode = AKEY_CTRL_C;
+						keycode = AKEY_CTRL_c;
 						break;
 					case 0x04 :
-						keycode = AKEY_CTRL_D;
+						keycode = AKEY_CTRL_d;
 						break;
 					case 0x05 :
 						keycode = AKEY_CTRL_E;
@@ -1765,9 +1441,11 @@ int Atari_Keyboard (void)
 						keycode = AKEY_CTRL_H;
 						break;
 */
+/* TAB - see case '\t' :
 					case 0x09 :
 						keycode = AKEY_CTRL_I;
 						break;
+*/
 					case 0x0a :
 						keycode = AKEY_CTRL_J;
 						break;
@@ -1830,7 +1508,206 @@ int Atari_Keyboard (void)
 					case 0x1b :
 						keycode = AKEY_ESCAPE;
 						break;
+					case '0' :
+						keycode = AKEY_0;
+						break;
+					case '1' :
+						keycode = AKEY_1;
+						break;
+					case '2' :
+						keycode = AKEY_2;
+						break;
+					case '3' :
+						keycode = AKEY_3;
+						break;
+					case '4' :
+						keycode = AKEY_4;
+						break;
+					case '5' :
+						keycode = AKEY_5;
+						break;
+					case '6' :
+						keycode = AKEY_6;
+						break;
+					case '7' :
+						keycode = AKEY_7;
+						break;
+					case '8' :
+						keycode = AKEY_8;
+						break;
+					case '9' :
+						keycode = AKEY_9;
+						break;
+					case 'A' : case 'a' :
+						keycode = AKEY_a;
+						break;
+					case 'B' : case 'b' :
+						keycode = AKEY_b;
+						break;
+					case 'C' : case 'c' :
+						keycode = AKEY_c;
+						break;
+					case 'D' : case 'd' :
+						keycode = AKEY_d;
+						break;
+					case 'E' : case 'e' :
+						keycode = AKEY_e;
+						break;
+					case 'F' : case 'f' :
+						keycode = AKEY_f;
+						break;
+					case 'G' : case 'g' :
+						keycode = AKEY_g;
+						break;
+					case 'H' : case 'h' :
+						keycode = AKEY_h;
+						break;
+					case 'I' : case 'i' :
+						keycode = AKEY_i;
+						break;
+					case 'J' : case 'j' :
+						keycode = AKEY_j;
+						break;
+					case 'K' : case 'k' :
+						keycode = AKEY_k;
+						break;
+					case 'L' : case 'l' :
+						keycode = AKEY_l;
+						break;
+					case 'M' : case 'm' :
+						keycode = AKEY_m;
+						break;
+					case 'N' : case 'n' :
+						keycode = AKEY_n;
+						break;
+					case 'O' : case 'o' :
+						keycode = AKEY_o;
+						break;
+					case 'P' : case 'p' :
+						keycode = AKEY_p;
+						break;
+					case 'Q' : case 'q' :
+						keycode = AKEY_q;
+						break;
+					case 'R' : case 'r' :
+						keycode = AKEY_r;
+						break;
+					case 'S' : case 's' :
+						keycode = AKEY_s;
+						break;
+					case 'T' : case 't' :
+						keycode = AKEY_t;
+						break;
+					case 'U' : case 'u' :
+						keycode = AKEY_u;
+						break;
+					case 'V' : case 'v' :
+						keycode = AKEY_v;
+						break;
+					case 'W' : case 'w' :
+						keycode = AKEY_w;
+						break;
+					case 'X' : case 'x' :
+						keycode = AKEY_x;
+						break;
+					case 'Y' : case 'y' :
+						keycode = AKEY_y;
+						break;
+					case 'Z' : case 'z' :
+						keycode = AKEY_z;
+						break;
+					case ' ' :
+						keycode = AKEY_SPACE;
+						break;
+					case '\t' :
+						keycode = AKEY_TAB;
+						break;
+					case '!' :
+						keycode = AKEY_EXCLAMATION;
+						break;
+					case '"' :
+						keycode = AKEY_DBLQUOTE;
+						break;
+					case '#' :
+						keycode = AKEY_HASH;
+						break;
+					case '$' :
+						keycode = AKEY_DOLLAR;
+						break;
+					case '%' :
+						keycode = AKEY_PERCENT;
+						break;
+					case '&' :
+						keycode = AKEY_AMPERSAND;
+						break;
+					case '\'' :
+						keycode = AKEY_QUOTE;
+						break;
+					case '@' :
+						keycode = AKEY_AT;
+						break;
+					case '(' :
+						keycode = AKEY_PARENLEFT;
+						break;
+					case ')' :
+						keycode = AKEY_PARENRIGHT;
+						break;
+					case '<' :
+						keycode = AKEY_LESS;
+						break;
+					case '>' :
+						keycode = AKEY_GREATER;
+						break;
+					case '=' :
+						keycode = AKEY_EQUAL;
+						break;
+					case '?' :
+						keycode = AKEY_QUESTION;
+						break;
+					case '-' :
+						keycode = AKEY_MINUS;
+						break;
+					case '+' :
+						keycode = AKEY_PLUS;
+						break;
+					case '*' :
+						keycode = AKEY_ASTERISK;
+						break;
+					case '/' :
+						keycode = AKEY_SLASH;
+						break;
+					case ':' :
+						keycode = AKEY_COLON;
+						break;
+					case ';' :
+						keycode = AKEY_SEMICOLON;
+						break;
+					case ',' :
+						keycode = AKEY_COMMA;
+						break;
+					case '.' :
+						keycode = AKEY_FULLSTOP;
+						break;
+					case '_' :
+						keycode = AKEY_UNDERSCORE;
+						break;
+					case '[' :
+						keycode = AKEY_BRACKETLEFT;
+						break;
+					case ']' :
+						keycode = AKEY_BRACKETRIGHT;
+						break;
+					case '^' :
+						keycode = AKEY_CIRCUMFLEX;
+						break;
+					case '\\' :
+						keycode = AKEY_BACKSLASH;
+						break;
+					case '|' :
+						keycode = AKEY_BAR;
+						break;
 					default :
+						keycode = AKEY_NONE;
 						break;
 				}
 				break;
@@ -1923,10 +1800,12 @@ int Atari_Keyboard (void)
 						switch (Item)
 						{
 							case 0 :
+								Iconify ();
+/*
 								DisplayNotSupportedWindow ();
+*/
 								break;
 							case 1 :
-/*
 								SystemTags
 								(
 									"Run >Nil: <Nil: MultiView Atari800.guide",
@@ -1934,8 +1813,6 @@ int Atari_Keyboard (void)
 									SYS_Output, NULL,
 									TAG_DONE
 								);
-*/
-								DisplayNotSupportedWindow ();
 								break;
 							case 2 :
 								DisplayAboutWindow ();
@@ -2037,6 +1914,129 @@ int Atari_Keyboard (void)
 										break;
 								}
 								break;
+							case 3 :
+								switch (SubItem)
+								{
+									case 0 :
+										InsertROM (0);
+										break;
+									case 1 :
+										InsertROM (1);
+										break;
+									case 2 :
+										InsertROM (2);
+										break;
+									default :
+										break;
+								}
+								break;
+							case 4 :
+							  Remove_ROM ();
+							  Coldstart ();
+								break;
+							case 5 :
+							  EnablePILL ();
+							  Coldstart ();
+								break;
+							case 6 :
+								/*
+								 * Atari800 OS/A
+								 */
+
+								{
+									int status;
+
+									status = Initialise_AtariOSA ();
+									if (status)
+									{
+										if (machine == Atari)
+										{
+											menu_Console03->Flags = ITEMTEXT | HIGHCOMP;
+										}
+										else
+										{
+											menu_Console03->Flags = ITEMTEXT | ITEMENABLED | HIGHCOMP;
+										}
+									}
+									else
+									{
+									}
+								}
+								break;
+							case 7 :
+								/*
+								 * Atari800 OS/B
+								 */
+
+								{
+									int status;
+									status = Initialise_AtariOSB ();
+									if (status)
+									{
+										if (machine == Atari)
+										{
+											menu_Console03->Flags = ITEMTEXT | HIGHCOMP;
+										}
+										else
+										{
+											menu_Console03->Flags = ITEMTEXT | ITEMENABLED | HIGHCOMP;
+										}
+									}
+									else
+									{
+									}
+								}
+								break;
+							case 8 :
+								/*
+								 * Atari800 XL
+								 */
+
+								{
+									int status;
+
+									status = Initialise_AtariXL ();
+									if (status)
+									{
+										if (machine == Atari)
+										{
+											menu_Console03->Flags = ITEMTEXT | HIGHCOMP;
+										}
+										else
+										{
+											menu_Console03->Flags = ITEMTEXT | ITEMENABLED | HIGHCOMP;
+										}
+									}
+									else
+									{
+									}
+								}
+								break;
+							case 9 :
+								/*
+								 * Atari XE
+								 */
+
+								{
+									int status;
+
+									status = Initialise_AtariXE ();
+									if (status)
+									{
+										if (machine == Atari)
+										{
+											menu_Console03->Flags = ITEMTEXT | HIGHCOMP;
+										}
+										else
+										{
+											menu_Console03->Flags = ITEMTEXT | ITEMENABLED | HIGHCOMP;
+										}
+									}
+									else
+									{
+									}
+								}
+								break;
 							default :
 								break;
 						}
@@ -2060,12 +2060,15 @@ int Atari_Keyboard (void)
 								keycode = AKEY_HELP;
 								break;
 							case 4 :
+								keycode = AKEY_BREAK;
+								break;
+							case 5 :
 								if (DisplayYesNoWindow ())
 								{
 									keycode = AKEY_WARMSTART;
 								}
 								break;
-							case 5 :
+							case 6 :
 								if (DisplayYesNoWindow ())
 								{
 									keycode = AKEY_COLDSTART;
@@ -2492,9 +2495,9 @@ void Atari_AUDCTL (int byte)
  */
 
 /*
- * Revision     : v0.2.0
+ * Revision     : v0.3.3
  * Introduced   : 2nd September 1995
- * Last updated : 9th September 1995
+ * Last updated : 7th March 1996
  */
 
 void DisplayAboutWindow (void)
@@ -2575,7 +2578,7 @@ void DisplayAboutWindow (void)
 
 		ShowText (17, 7, WindowAbout, "Original program by");
 		ShowText (25, 9, WindowAbout, "David Firth");
-		ShowText (18, 12, WindowAbout, "Amiga Module V5 by");
+		ShowText (18, 12, WindowAbout, "Amiga Module V8 by");
 		ShowText (20, 14, WindowAbout, "Stephen A. Firth");
 	}
 
@@ -3594,7 +3597,14 @@ int InsertDisk (int Drive)
 
 			SIO_Dismount (Drive);
 
-			sprintf (Filename, "%s/%s", FileRequester->rf_Dir, FileRequester->rf_File);
+			if (FileRequester->rf_Dir)
+			{
+				sprintf (Filename, "%s/%s", FileRequester->rf_Dir, FileRequester->rf_File);
+			}
+			else
+			{
+				sprintf (Filename, "%s", FileRequester->rf_File);
+			}
 
 			if (!SIO_Mount (Drive, Filename))
 			{
@@ -3617,4 +3627,405 @@ int InsertDisk (int Drive)
 	}
 
 	return Success;
+}
+
+
+
+/*
+ * =========
+ * InsertROM
+ * =========
+ */
+
+/*
+ * Revision     : v0.3.3
+ * Introduced   : 10th March 1996
+ * Last updated : 10th March 1996
+ */
+
+int InsertROM (int CartType)
+
+{
+	struct FileRequester *FileRequester = NULL;
+	char Filename[256];
+	int Success = FALSE;
+
+	if (FileRequester = (struct FileRequester*) AllocAslRequestTags (ASL_FileRequest, TAG_DONE))
+	{
+		if (AslRequestTags (FileRequester,
+			ASLFR_Screen, ScreenMain,
+			ASLFR_TitleText, "Select file",
+			ASLFR_PositiveText, "Ok",
+			ASLFR_NegativeText, "Cancel",
+			TAG_DONE))
+		{
+			printf ("File selected: %s/%s\n", FileRequester->rf_Dir, FileRequester->rf_File);
+			printf ("Number of files : %d\n", FileRequester->fr_NumArgs);
+
+			if (FileRequester->rf_Dir)
+			{
+				sprintf (Filename, "%s/%s", FileRequester->rf_Dir, FileRequester->rf_File);
+			}
+			else
+			{
+				sprintf (Filename, "%s", FileRequester->rf_File);
+			}
+
+			if (CartType == 0)
+			{
+				Remove_ROM ();
+				if (Insert_8K_ROM(Filename))
+				{
+					Coldstart ();
+				}
+			}
+			else if (CartType == 1)
+			{
+				Remove_ROM ();
+				if (Insert_16K_ROM(Filename))
+				{
+					Coldstart ();
+				}
+			}
+			else if (CartType == 2)
+			{
+				Remove_ROM ();
+				if (Insert_OSS_ROM(Filename))
+				{
+					Coldstart ();
+				}
+			}
+		}
+		else
+		{
+			/*
+			 * Cancelled
+			 */
+		}
+	}
+	else
+	{
+		printf ("Unable to create requester\n");
+	}
+
+	return Success;
+}
+
+
+
+insert_rom_callback ()
+{
+/*
+  xv_set (chooser,
+	  FRAME_LABEL, "ROM Selector",
+	  FILE_CHOOSER_DIRECTORY, ATARI_ROM_DIR,
+	  FILE_CHOOSER_NOTIFY_FUNC, rom_change,
+	  XV_SHOW, TRUE,
+	  NULL);
+*/
+}
+
+
+
+/*
+ * ============
+ * SetupDisplay
+ * ============
+ */
+
+/*
+ * Revision     : v0.3.3
+ * Introduced   : 10th March 1996
+ * Last updated : 10th March 1996
+ */
+
+SetupDisplay ()
+{
+	struct NewWindow	NewWindow;
+	int i;
+
+	/*
+	 * ===========
+	 * Screen Pens
+	 * ===========
+	 */
+
+	WORD ScreenPens[13] =
+	{
+		15, /* Unknown */
+		15, /* Unknown */
+		0, /* Windows titlebar text when inactive */
+		15, /* Windows bright edges */
+		0, /* Windows dark edges */
+		120, /* Windows titlebar when active */
+		0, /* Windows titlebar text when active */
+		4, /* Windows titlebar when inactive */
+		15, /* Unknown */
+		0, /* Menubar text */
+		15, /* Menubar */
+		0, /* Menubar base */
+		-1
+	};
+
+	/*
+	 * =============
+	 * Create Screen
+	 * =============
+	 */
+
+	if (CustomScreen)
+	{
+		ScreenType = CUSTOMSCREEN;
+
+		ScreenWidth = ATARI_WIDTH - 64; /* ATARI_WIDTH + 8; */
+		ScreenHeight = ATARI_HEIGHT; /* ATARI_HEIGHT + 13; */
+
+		if (ChipSet == AGA_ChipSet)
+		{
+			ScreenDepth = 8;
+		}
+		else
+		{
+			ScreenDepth = 5;
+		}
+
+		NewScreen.LeftEdge = 0;
+		NewScreen.TopEdge = 0;
+		NewScreen.Width = ScreenWidth;
+		NewScreen.Height = ScreenHeight;
+		NewScreen.Depth = ScreenDepth;
+		NewScreen.DetailPen = 1;
+		NewScreen.BlockPen = 2; /* 2 */
+		NewScreen.ViewModes = NULL;
+		NewScreen.Type = CUSTOMSCREEN;
+		NewScreen.Font = NULL;
+		NewScreen.DefaultTitle = ATARI_TITLE;
+		NewScreen.Gadgets = NULL;
+		NewScreen.CustomBitMap = NULL;
+
+		ScreenMain = (struct Screen *) OpenScreenTags
+		(
+			&NewScreen,
+			SA_Left, 0,
+			SA_Top, 0,
+			SA_Width, ScreenWidth,
+			SA_Height, ScreenHeight,
+			SA_Depth, ScreenDepth,
+			SA_DetailPen, 1,
+			SA_BlockPen, 2, /* 2 */
+			SA_Pens, ScreenPens,
+			SA_Title, ATARI_TITLE,
+			SA_Type, CUSTOMSCREEN,
+/*
+			SA_Overscan, OSCAN_STANDARD,
+*/
+/*
+			SA_DisplayID, ScreenID,
+*/
+			SA_AutoScroll, TRUE,
+/*
+			SA_Interleaved, TRUE,
+*/
+			TAG_DONE
+		);
+
+		if (ChipSet == AGA_ChipSet)
+		{
+			TotalColours = 256;
+		}
+		else
+		{
+			TotalColours = 16;
+		}
+
+		for (i=0;i<TotalColours;i++)
+		{
+			int rgb = colortable[i];
+			int red;
+			int green;
+			int blue;
+
+			red = (rgb & 0x00ff0000) >> 20;
+			green = (rgb & 0x0000ff00) >> 12;
+			blue = (rgb & 0x000000ff) >> 4;
+
+			SetRGB4 (&ScreenMain->ViewPort, i, red, green, blue);
+		}
+
+		image_Button64.PlanePick = 9;
+		image_Button64.PlaneOnOff = (UBYTE) 6;
+		image_Button64Selected.PlanePick = 9;
+		image_Button64Selected.PlaneOnOff = (UBYTE) 6;
+		image_MutualGadget.PlanePick = 9;
+		image_MutualGadget.PlaneOnOff = (UBYTE) 6;
+		image_MutualGadgetSelected.PlanePick = 9;
+		image_MutualGadgetSelected.PlaneOnOff = (UBYTE) 6;
+	}
+	else
+	{
+		ScreenType = WBENCHSCREEN;
+
+		ScreenWidth = ATARI_WIDTH; /* ATARI_WIDTH + 8; */
+		ScreenHeight = ATARI_HEIGHT; /* ATARI_HEIGHT + 13; */
+	}
+
+	/*
+	 * =============
+	 * Create Window
+	 * =============
+	 */
+
+	NewWindow.DetailPen = 0;
+	NewWindow.BlockPen = 148;
+
+	if (CustomScreen)
+	{
+		NewWindow.LeftEdge = 0;
+		NewWindow.TopEdge = 0;
+		NewWindow.Width = ScreenWidth; /* ATARI_WIDTH + 8; */
+		NewWindow.Height = ScreenHeight; /* ATARI_HEIGHT + 13; */
+		NewWindow.IDCMPFlags = SELECTDOWN | SELECTUP | MOUSEBUTTONS | MOUSEMOVE | MENUPICK | MENUVERIFY | MOUSEBUTTONS | GADGETUP | RAWKEY | VANILLAKEY;
+
+		/*
+		 * If you use the ClickToFront commodity it might be a good idea to
+		 * enable the BACKDROP option in the NewWindow.Flags line below.
+		 */
+
+		NewWindow.Flags = /* BACKDROP | */ REPORTMOUSE | BORDERLESS | GIMMEZEROZERO | SMART_REFRESH | ACTIVATE;
+		NewWindow.Title = NULL;
+	}
+	else
+	{
+		NewWindow.LeftEdge = 0;
+		NewWindow.TopEdge = 11;
+		NewWindow.Width = ScreenWidth + 8; /* ATARI_WIDTH + 8; */
+		NewWindow.Height = ScreenHeight + 13; /* ATARI_HEIGHT + 13; */
+		NewWindow.IDCMPFlags = SELECTDOWN | SELECTUP | MOUSEBUTTONS | MOUSEMOVE | CLOSEWINDOW | MENUPICK | MENUVERIFY | MOUSEBUTTONS | GADGETUP | RAWKEY | VANILLAKEY;
+		NewWindow.Flags = REPORTMOUSE | WINDOWCLOSE | GIMMEZEROZERO | WINDOWDRAG | WINDOWDEPTH | SMART_REFRESH | ACTIVATE;
+		NewWindow.Title = ATARI_TITLE;
+	}
+
+	NewWindow.FirstGadget = NULL;
+	NewWindow.CheckMark = NULL;
+	NewWindow.Screen = ScreenMain;
+	NewWindow.Type = ScreenType;
+	NewWindow.BitMap = NULL;
+	NewWindow.MinWidth = 50;
+	NewWindow.MinHeight = 11;
+	NewWindow.MaxWidth = 1280;
+	NewWindow.MaxHeight = 512;
+
+	WindowMain = (struct Window*) OpenWindowTags
+	(
+		&NewWindow,
+		WA_NewLookMenus, TRUE,
+		WA_MenuHelp, TRUE,
+		WA_ScreenTitle, ATARI_TITLE,
+/*
+		WA_Zoom, Zoomdata,
+*/
+		TAG_DONE
+	);
+
+	if (!WindowMain)
+	{
+		printf ("Failed to create window\n");
+		Atari_Exit (0);
+	}
+}
+
+
+
+/*
+ * =======
+ * Iconify
+ * =======
+ */
+
+/*
+ * Revision     : v0.3.3
+ * Introduced   : 10th March 1996
+ * Last updated : 10th March 1996
+ */
+
+Iconify ()
+{
+	ULONG Class;
+	USHORT Code;
+	APTR Address;
+
+	struct IntuiMessage *IntuiMessage;
+
+	struct NewWindow	NewWindow;
+
+	int QuitRoutine;
+
+	ClearMenuStrip (WindowMain);
+
+	if (WindowMain)
+	{
+		CloseWindow (WindowMain);
+	}
+
+	if (ScreenMain)
+	{
+		CloseScreen (ScreenMain);
+	}
+
+	NewWindow.LeftEdge = 0;
+	NewWindow.TopEdge = 11;
+	NewWindow.Width = 112;
+	NewWindow.Height = 21;
+	NewWindow.DetailPen = 0;
+	NewWindow.BlockPen = 15;
+	NewWindow.IDCMPFlags = CLOSEWINDOW;
+	NewWindow.Flags = WINDOWCLOSE | WINDOWDRAG | ACTIVATE;
+	NewWindow.FirstGadget = NULL;
+	NewWindow.CheckMark = NULL;
+	NewWindow.Title = "Atari800e";
+	NewWindow.Screen = NULL;
+	NewWindow.Type = WBENCHSCREEN;
+	NewWindow.BitMap = NULL;
+	NewWindow.MinWidth = 92;
+	NewWindow.MinHeight = 21;
+	NewWindow.MaxWidth = 1280;
+	NewWindow.MaxHeight = 512;
+
+	WindowIconified = (struct Window*) OpenWindowTags
+	(
+		&NewWindow,
+		WA_NewLookMenus, TRUE,
+		WA_MenuHelp, TRUE,
+		WA_ScreenTitle, ATARI_TITLE,
+		TAG_DONE
+	);
+
+	QuitRoutine = FALSE;
+
+	while (QuitRoutine == FALSE)
+	{
+		while (IntuiMessage = (struct IntuiMessage*) GetMsg (WindowIconified->UserPort))
+		{
+			Class = IntuiMessage->Class;
+			Code = IntuiMessage->Code;
+			Address = IntuiMessage->IAddress;
+
+			ReplyMsg (IntuiMessage);
+
+			switch (Class)
+			{
+				case CLOSEWINDOW :
+					QuitRoutine = TRUE;
+					break;
+				default :
+					break;
+			}
+		}
+	}
+
+	CloseWindow (WindowIconified);
+
+	SetupDisplay ();
+
+	SetMenuStrip (WindowMain, menu_Project);
 }

@@ -1,24 +1,69 @@
 Installation of the Atari 800 Emulator
 --------------------------------------
 
-Firstly, I don't know the legal status of the Atari Operating System
-or Atari Basic. I suggest that you obtain the images from the PC Xformer
-package (do an archie search on xf25).
+Irrespective of whether you are going to compile the emulator yourself
+or install a pre-compiled binary version you must obtain a copy of the
+Operating System ROMs.
 
-The files you need are 'ataribas.rom', 'atarixl.rom' and 'atariosb.rom'.
-These files should be either placed under the directory defined by
-ATARI_LIBRARY in the Makefile or placed in a directory pointed to
-by the ATARI_LIBRARY environment variable at run time. If you obtain
-atariosa.rom it should be placed in the same directory.
+The ROMs images are distributed within the PC Xformer 2.5 package (other
+versions of this program do not contain the ROMs in a suitable format)
+which can be downloaded from:-
+
+Site:      ftp.doc.ic.ac.uk
+Directory: /computing/systems/atari/umich/8bit/Xf2
+File:      xf25.zip
+
+Note: Check your usual UMICH mirror first or do an archie search on
+      xf25
+
+An environment variable "ATARI_LIBRARY" must be created which points
+towards the directory that will contain the OS ROM images.
+
+Copy the *.rom files extracted from PC-Xformer into the directory
+specified by "ATARI_LIBRARY".
+
+If you are creating the ROM images yourself they should be called:-
+
+1. ataribas.rom (8192 bytes between $a000 and $bfff)
+2. atariosa.rom (10240 bytes between $d800 and $ffff)
+3. atariosb.rom (10240 bytes between $d800 and $ffff)
+4. atarixl.rom (16384 bytes between $c000 and $ffff)
+
+Note: If you are extracting the atarixl.rom you will find that the
+      ROM area under the custom chip ($d000 to $d7ff) are mapped
+      between $5000 and $57ff when bit 7 of PORTB is set to 1.
+
+      i.e. You should set bit 7 of PORTB and then dump the memory
+           out in the following order:- $c000 to $cfff, $5000 to $57ff
+           and finally $d800 to $ffff.
+
+You must have at least one of "atariosa.rom", "atariosb.rom" and
+"atarixl.rom". "ataribas.rom" is needed if you intend running
+basic programs (I would suggest you keep it just in case).
+
+If you have obtained a binary distribution you should be able to start
+it by executing the atari800 program.
 
 Note: for case sensitive systems make sure that the filenames and
       directory are all lowercase.
+
+5200 Emulation
+--------------
+
+If you can obtain a copy of the 2K Atari 5200 OS ROM it must be called
+"atari5200.rom" and placed in the directory specified by "ATARI_LIBRARY".
+
+Compiling the Emulator
+----------------------
+
+The emulator can be compiled for the following systems (and probably
+many others with a little work):-
 
 1. X Window Version (Including SUN OpenWindows) on a Unix Platform
 2. SVGALIB Version on Linux
 3. CURSES version for UNIX
 4. Graphical Version for the Amiga
-7. BASIC version (No Graphics). Should be straightforward to configure
+5. BASIC version (No Graphics). Should be straightforward to configure
    for any 32 bit environment supporting ANSI C.
 
    Note: I don't say 32 bit computer because certain operating systems
@@ -28,48 +73,29 @@ Note: for case sensitive systems make sure that the filenames and
 Building the Emulator on a Unix Platform
 ----------------------------------------
 
-The Makefile is setup so that the emulator will look for its ROM images
-from /usr/local/lib/atari. To specify another directory you will have
-to define a new value for ATARI_LIBRARY within the Makefile.
+1. Type "make" for a list of supported platforms.
+2. Select the most appropriate platform and type "make <platform>"
+   for instance if you want the linux svgalib version you would type
+   "make linux-svgalib"
+3. Install the emulator by typing "make install". If you are building
+   one of the linux svgalib versions then you should login as root
+   and type "make install-svgalib" this is because svgalib programs
+   need to be run setuid root.
 
-make basic
-make linux-svga
-make x11
-make linux-ncurses
+Building the Emulator for Curses
+--------------------------------
 
-Note: The linux-svgalib version must be either run as the root user or the
-      executable must be owned by root and have its setuid bit set.
-
-      To enable the program to be run by any user, login as root
-      and type:-
-
-	make install-svgalib
-
-	It is set up to install files in /usr/local/bin and the
-	man page in /usr/local/man/man1. Edit the makefile if
-	you want them elsewhere.
-
-CURSES version for UNIX
------------------------
-
-Uncomment the relevant section in the Makefile before typing make -
-If your using Linux make sure that you uncomment the NCURSES section.
-
-There are three different CURSES configurations stored within the
-Makefile. Please read them all and select the correct one. If you
-are using Solaris 2 make sure that you add -DSOLARIS2 (This fix
-may be required for other system as well - duplicate case values)
-
-Note: You must use a System V Cureses Library. BSD Curses is lacking
-      a few functions and will not work (nodelay, attron, attroff,
-      keypad and curs_set).
+Follow the instruction for Unix but note that you must be using the
+System V Curses Library. BSD Curses is lacking a few functions and
+will not work (nodelay, attron, attroff, keypad and curs_set).
 
 Building the Emulator for VAX/VMS
 ---------------------------------
 
 This version only support the BASIC text only mode. You will be
 able to run programs such as:- DOS 2.5, DOS XL, MAC65 (disk version),
-Atari Basic and similar programs.
+Atari Basic and similar programs. I have had reports that you can
+make the X11 version run under DEC-Windows with a little work.
 
 Note: I have not built this version for a while. Modifications may be
       required to vmsbuild.
@@ -87,12 +113,16 @@ atari800 :== $DISK$xxxx:[yyyy]atari800.exe
 Building the Emulator for the CBM Amiga
 ---------------------------------------
 
-Compiler: DICE C + GNU C (Lattice C Untried)
+Compiler: GNU C + DICE C (Lattice C Untried)
 
 There is a separate makefile provided for the Amiga - Makefile.amiga
 By default it is setup for use with GCC. If you are using Dice C you
 will need to comment out the GCC section and remove the comments from
-the Dice section.
+the Dice section. Unfortunately I don't use DICE C very often so if
+it no longer compiles please let me know.
+
+GNU C is available on AMINET under dev/gcc but needs about 6MB to
+compile the emulator.
 
 For GCC be sure that the C_INCLUDE_PATH environment variable is
 pointing to the location of the official Commodore include files
@@ -100,21 +130,3 @@ prior to compiling the emulator.
 
 For example:
 	setenv C_INCLUDE_PATH /path/of/cbm/includes
-
-By default the Operating System ROMs are expected to be installed in
-a directory called 'object' which is a subdirectory under your current
-directory. You will probably want to place these files in a more
-convienient location. Decide where you want to place the ROMs and
-edit the Makefile so that ATARI_LIBRARY points to the directory.
-
-If you are using DICE and dmake the Makefile should be renamed to
-DMakefile.
-
-Build the Emulator by typing "make" (GCC) or "dmake" (DICE)
-Make sure that the Operating System ROM images have been installed
-in the directory defined in ATARI_LIBRARY which is set within the
-Makefile.
-
-The emulator executable should be moved into a more convienient
-location. If your Amiga has the "man" utility you should copy
-the atari800 man page into the man(1) directory.

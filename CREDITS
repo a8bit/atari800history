@@ -17,6 +17,8 @@ Ivo van Poorten <ipoorten@cs.vu.nl>
 - Added X11 window Expose Event
 - Made hardware registers repeat within their page.
 - Control Characters in CURSES version
+- Makefile targets for freebsd systems
+- Modification to Curses character attributes handling (for freebsd)
 
 Stephen Firth <stephen@signus.demon.co.uk>
 
@@ -26,3 +28,22 @@ Rob Funk <rfunk@magnus.acs.ohio-state.edu>
 
 - Tidied up emulator abort code.
 - Case insensitive monitor commands.
+
+Preston F. Crow <preston.crow@dancer.dartmouth.edu>
+
+- Corrected calculation of ATR sectror count
+
+Cyrus Malek <Cyrus.Malek@amd.com>
+
+- Patch allowing the X11 Backspace key to work the same as the Delete
+  key.
+
+Chris F Chiesa <xetwnk@shell.portal.com>
+
+- Added code allowing emulator to run under DEC Windows.
+
+Neil Ship <nlshipp@dictator.uwaterloo.ca>
+
+- Correction to new cartridge code introduced in 0.4.0
+
+Sorry if I've forgotten anyone.
