@@ -11,6 +11,12 @@ static char *rcsid = "$Id: rt-config.c,v 1.4 1998/02/21 14:51:54 david Exp $";
 #include "prompts.h"
 #include "rt-config.h"
 
+#ifdef VGA
+  /*This procedure processes lines not recognized by RtConfigLoad.
+    Currently only DOS port support it.*/
+  extern int Atari_Configure(char* option,char *parameters);
+#endif
+
 char atari_osa_filename[MAX_FILENAME_LEN];
 char atari_osb_filename[MAX_FILENAME_LEN];
 char atari_xlxe_filename[MAX_FILENAME_LEN];
@@ -160,7 +166,12 @@ int RtConfigLoad(char *rtconfig_filename)
 						printf("Invalid TV Mode: %s\n", ptr);
 				}
 				else
+#ifdef VGA
+                                if (!Atari_Configure(string,ptr))
+					printf("Unrecognized variable or bad parameters: %s=%s\n", string,ptr);
+#else
 					printf("Unrecognized Variable: %s\n", string);
+#endif
 			}
 			else {
 				printf("Ignored Config Line: %s\n", string);
@@ -300,7 +311,13 @@ void RtConfigUpdate(void)
 	} while ((enable_c000_ram < 0) || (enable_c000_ram > 1));
 
 	do {
-		GetNumber("Enable SIO PATCH (Recommended) [%d] ",
+		GetNumber("Enable SIO PATCH (Recommended for speed) [%d] ",
 				  &enable_sio_patch);
 	} while ((enable_sio_patch < 0) || (enable_sio_patch > 1));
+#ifdef VGA
+	printf("Standard joysticks configuration selected.\n"
+			"Use joycfg.exe to change it. Press RETURN to continue ");
+	fflush(stdout);
+	getchar();
+#endif
 }

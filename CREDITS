@@ -128,6 +128,7 @@ Petr Sumbera <xsumbe00@stud.fee.vutbr.cz>
 Robert Golias <golias@informatics.muni.cz>
 - UI enhancements and DJGPP fixes
 - Monitor enhancements (esp. line assembler)
+- fullscreen in DOS port - 320x240 and 320x480 interlaced graphics
 
 Robert W. Brewer <rbrewer@Op.Net>
 - Voxware sound driver updated for POKEY v2.4
@@ -136,3 +137,6 @@ Michael Beck <beck@dresearch.de>
 - SIO2PC ATR patch
 - SIO Config patches (tested on real XF551)
 - monitor continues last command
+
+Preston Crow
+- UI enhancement (folders in disk management)

@@ -1,5 +1,66 @@
+Changes in 0.9.6
+----------------
+
+o DOS: keyboard and joystick handling changed a lot. Joysticks emulated
+  on keyboard can now be freely defined to (nearly) any key combinations
+  using comfortable JOYCFG.EXE tool. Besides, there are two modes of
+  keyboard: Joystick mode and Normal mode. In Joystick mode the keypresses
+  to joystick predefined keys are not passed to emulated environment.
+  You can switch between Joystick and Normal mode on-the-fly by pressing
+  the F7 key. <Golda>
+
+o Falcon: NOVA graphics extended: 336x240 or 672x480 (double size)
+
+o UI: the too fast autorepeat was fixed - by disabling the repeat altogether.
+
+o SIO: serious bug in CopyToMem fixed. No more rewritten ROM OS. <Jindrich>
+
+o ANTIC patch: no player DMA without missile DMA. <Perry>
+
+o SIO: missing 'else' in DIR routines. <Perry>
+
+o Allegro VGA: updated Makefile and fixed ShutdownVGA(). <Perry, Golda>
+
+o VCOUNT patch <suggested by Thor, but developed and tested by Perry>
+
+o PIA_Initialise() should initialise PORTA to 0.
+
+o PIA registers are mirrored not only in Atari800, but in XL/XE models
+  as well (thus addr&=0xff03). Bounty Bob runs now?
+
+o DOS: VESA2 mode support (about three times faster than X-mode). VESA2
+  also preserves the refresh rate. You can disable VESA2 modes by switch
+  -novesa. Also colour pallete initialisation is faster now. <Golda>
+
+o DOS: Atari_Set_LED function (use -DSET_LED to enable that). <Golda>
+
+o UI: the last ESC keypress is not passed to the emulated program anymore.
+  <Golda>
+
+o Monitor: pressing [Return/Enter] can be used for single stepping as well.
+  <Golda>
+
+o new routine for saving of screenshot in 336x240 size as PCX. So far used
+  in DOS and Falcon ports (press F10 to save current screen into a file).
+  <Golda>
+
+o the Atari keyboard should now react quickly enough. DOS port contains
+  keyboard buffer for last two keys. <Golda>
+
+o fix for initialisation of PORTA <David Firth>
+
+o DOS port: better joystick autodetection <Michael Beck>
+
+o several fixes for more ANSI like C code <various people>
+
+o ANTIC: fix for DLIST counter. <Thor, Perry>
+
+o ANTIC: several more hardware registers are unreadable. <Perry>
+
+
 Changes in 0.9.5
 ----------------
+
 o ANTIC: fix for scrolling of empty lines. <Perry>
 
 o CPU: little fix in remembering last N jumps. <Golda>
@@ -7,6 +68,7 @@ o CPU: little fix in remembering last N jumps. <Golda>
 o new command line option: '-basic' to override Hold_Option in cfg file
 
 o UI: you can now go into folders when selecting image in Disk Management
+  <Preston>
 
 o DOS port - finally full resolution 320x240, 320x480 interlaced. <Golda>
 

@@ -90,7 +90,8 @@ OBJECTS =       atari.o \
                 ui.o \
                 list.o \
                 pokeysnd.o \
-		sound_falcon.o
+		sound_falcon.o \
+		ataripcx.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -190,6 +191,9 @@ atari_amiga.o   :       atari_amiga.c $(INCLUDES)
 nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
+ataripcx.o	:	ataripcx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
+		
 clean   :
 	rm -f configure
 	rm -f config.h

@@ -322,6 +322,7 @@ void Device_HHOPEN(void)
 				fp[fid] = NULL;
 			}
 		}
+          else
 #else	/* WIN32 DIR code */
 		  fp[fid] = tmpfile ();
 	  if( fp[fid] )
@@ -361,9 +362,9 @@ void Device_HHOPEN(void)
 			  fp[fid] = NULL;
 		  }
 	  }
+	  else
 #endif /* Win32 */
 #endif /* DO_DIR */
-	  else
 		{
 			regY = 163;
 			SetN;

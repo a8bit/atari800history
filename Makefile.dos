@@ -1,7 +1,7 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-#CFLAGS		= -c -O2 -DGNU_C -DMONITOR_BREAK -DMONITOR_HINTS -DMONITOR_ASSEMBLER
-CFLAGS		= -c -O2 -DGNU_C
+#CFLAGS		= -c -O2 -DGNU_C -DMONITOR_BREAK -DMONITOR_HINTS -DMONITOR_ASSEMBLER -DSET_LED
+CFLAGS		= -c -O2 -DGNU_C 
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
@@ -28,7 +28,7 @@ pdcurses :
 	@echo Finished.
 
 vga :
-	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o"
+	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o vesa2.o"
 	@echo Finished.
 
 #
@@ -75,9 +75,10 @@ OBJECTS =       atari.o \
                 prompts.o \
                 rt-config.o \
                 ui.o \
-                list.o
+                list.o \
+                ataripcx.o
 
-atari800        :       $(OBJECTS) $(OBJ)
+atari800        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
 atari.o         :       atari.c $(INCLUDES)
@@ -146,6 +147,18 @@ atari_amiga.o   :       atari_amiga.c $(INCLUDES)
 nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
+vesa2.o		:	vesa2.c vesa2.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) vesa2.c
+
+ataripcx.o	:	ataripcx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
+	
+joycfg.exe	:	joycfg.o pcjoy.h
+	$(LD) $(LDFLAGS) joycfg.o -o joycfg.exe
+
+joycfg.o	:	joycfg.c pcjoy.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) joycfg.c	
+		
 clean   :
 	del configure.exe
 	del configure

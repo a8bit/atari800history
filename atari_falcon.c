@@ -74,8 +74,16 @@ static int screensaverval;		/* original value */
 static int NOVA = FALSE;
 static int HOST_WIDTH;
 static int HOST_HEIGHT;
-#define CENTER_X	((HOST_WIDTH - 336) / 2)
-#define CENTER_Y	((HOST_HEIGHT - 240) / 2)
+#define QUAD	1
+#ifndef QUAD
+#define EMUL_WIDTH	336
+#define EMUL_HEIGHT	240
+#else
+#define EMUL_WIDTH	2*336
+#define EMUL_HEIGHT	2*240
+#endif
+#define CENTER_X	((HOST_WIDTH - EMUL_WIDTH) / 2)
+#define CENTER_Y	((HOST_HEIGHT - EMUL_HEIGHT) / 2)
 #define CENTER		(CENTER_X + CENTER_Y * HOST_WIDTH)
 
 /* -------------------------------------------------------------------------- */
@@ -95,7 +103,7 @@ UBYTE *odkud, *kam;
 static int jen_nekdy = 0;
 static int resolution = 0;
 
-static int bgwin, win;
+static int bgwin;
 
 #ifdef CPUASS
 #include "cpu_asm.h"
@@ -259,11 +267,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		bgwin = wind_create(0,20,0,vdi[0],vdi[1]);
 		wind_open(bgwin,0,20,vdi[0],vdi[1]);
 
-//		v_clrwk(gl_vdi_handle);		/* clear whole screen */
-
-		win = wind_create(NAME,CENTER_X-2,CENTER_Y-22,336+4,240+24);
-		wind_set_str(win,2,"Atari800 emulator");
-		wind_open(win,CENTER_X-2,CENTER_Y-22,336+4,240+24);
+		v_clrwk(gl_vdi_handle);		/* clear whole screen */
 
 		wind_update(BEG_UPDATE);
 
@@ -281,8 +285,6 @@ void Atari_Initialise(int *argc, char *argv[])
 			exit(-1);
 		}
 
-		screensaverval = screensaver(0);	/* turn off screen saver */
-
 		/* uschovat stare barvy */
 		col_table = f030coltable_zaloha;
 		Supexec(get_colors_on_f030);
@@ -291,6 +293,8 @@ void Atari_Initialise(int *argc, char *argv[])
 		p_str_p = (ULONG *) stara_graf;
 		Supexec(save_r);
 	}
+
+	screensaverval = screensaver(0);	/* turn off screen saver */
 
 	Log_base = Logbase();
 	Phys_base = Physbase();
@@ -353,10 +357,9 @@ int Atari_Exit(int run_monitor)
 			vs_color(gl_vdi_handle, i, NOVAcoltable_zaloha[i]);
 		}
 		wind_update(END_UPDATE);
-		wind_close(win);
-		wind_delete(win);
 		wind_close(bgwin);
 		wind_delete(bgwin);
+
 		show_mouse();
 		exit_gem();
 	}
@@ -380,25 +383,59 @@ void Atari_DisplayScreen(UBYTE * screen)
 			UBYTE *ptr_dest = kam + CENTER;
 			int j;
 
-			for(j=0; j<240; j++) {
-				register cycles = 20;
-
+			for(j=0; j<ATARI_HEIGHT; j++) {
+#if 0	/* ASM */
+#ifdef QUAD
+				memcpy(ptr_dest, ptr_from, 336);
+				ptr_dest += HOST_WIDTH;
+#endif
+				memcpy(ptr_dest, ptr_from, 336);
 				ptr_from += ATARI_WIDTH;
 				ptr_dest += HOST_WIDTH;
-#if 1
-				memcpy(ptr_dest, ptr_from, 336);
 #else
-				__asm__ __volatile__("\n\t\
-				1:\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					dbra	%0,1b"
-					: "=d" (cycles)
-					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
-				);
-#endif
+				{
+					register cycles = 20;
+#ifdef QUAD
+					long tmp, tmp2;
+					cycles = 167;
+/*
+	movew d0,d1
+	swap d0
+	movew d1,d0
+	rorw #8,d0
+	rorl #8,d0
+*/
+					__asm__ __volatile__("\n\t\
+					1:\n\t\
+						movew	%3@+,%4\n\t\
+						movew	%4,%5\n\t\
+						swap	%4\n\t\
+						movew	%5,%4\n\t\
+						rorw	#8,%4\n\t\
+						rorl	#8,%4\n\t\
+						movel	%4,%2@+\n\t\
+
+						dbra	%0,1b"
+						: "=d" (cycles)
+						: "0" (cycles), "a" (ptr_dest), "a" (ptr_from), "d" (tmp), "d" (tmp2)
+					);
+					ptr_dest += HOST_WIDTH;	/* odd lines only */
+#else
+					__asm__ __volatile__("\n\t\
+					1:\n\t\
+						movel	%3@+,%2@+\n\t\
+						movel	%3@+,%2@+\n\t\
+						movel	%3@+,%2@+\n\t\
+						movel	%3@+,%2@+\n\t\
+						dbra	%0,1b"
+						: "=d" (cycles)
+						: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
+					);
+#endif	/* QUAD */
+				}
+				ptr_from += ATARI_WIDTH-336;
+				ptr_dest += HOST_WIDTH-EMUL_WIDTH;
+#endif	/* ASM */
 			}
 		}
 		else {
@@ -875,7 +912,7 @@ int Atari_Keyboard(void)
 				break;
 			case 0x40:			/* F6 - used to be PILL mode switch */
 				/* keycode = AKEY_PIL; */
-				keycode = AKEY_NONE;
+				keycode = AKEY_SCREENSHOT;
 				break;
 			case 0x41:			/* F7 */
 				keycode = AKEY_BREAK;

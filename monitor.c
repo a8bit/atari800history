@@ -30,6 +30,7 @@ extern int cycles[256];
 extern UBYTE memory[65536];
 
 extern int rom_inserted;
+extern UWORD dlist;
 
 #ifdef TRACE
 int tron = FALSE;
@@ -356,7 +357,8 @@ int ret_nesting=0;
 int monitor(void)
 {
 	UWORD addr;
-	char s[128], old_s[sizeof(s)];
+	char s[128];
+static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 	int p;
 
 	addr = 0;
@@ -534,7 +536,7 @@ int monitor(void)
 		}
 #endif
 		else if (strcmp(t, "DLIST") == 0) {
-			UWORD dlist = (DLISTH << 8) + DLISTL;
+			UWORD tdlist=dlist;
 			UWORD addr;
 			int done = FALSE;
 			int nlines = 0;
@@ -542,9 +544,9 @@ int monitor(void)
 			while (!done) {
 				UBYTE IR;
 
-				printf("%04x: ", dlist);
+				printf("%04x: ", tdlist);
 
-				IR = memory[dlist++];
+				IR = memory[tdlist++];
 
 				if (IR & 0x80)
 					printf("DLI ");
@@ -554,21 +556,21 @@ int monitor(void)
 					printf("%d BLANK", ((IR >> 4) & 0x07) + 1);
 					break;
 				case 0x01:
-					addr = memory[dlist] | (memory[dlist + 1] << 8);
+					addr = memory[tdlist] | (memory[tdlist + 1] << 8);
 					if (IR & 0x40) {
 						printf("JVB %04x ", addr);
-						dlist += 2;
+						tdlist += 2;
 						done = TRUE;
 					}
 					else {
 						printf("JMP %04x ", addr);
-						dlist = addr;
+						tdlist = addr;
 					}
 					break;
 				default:
 					if (IR & 0x40) {
-						addr = memory[dlist] | (memory[dlist + 1] << 8);
-						dlist += 2;
+						addr = memory[tdlist] | (memory[tdlist + 1] << 8);
+						tdlist += 2;
 						printf("LMS %04x ", addr);
 					}
 					if (IR & 0x20)
@@ -945,7 +947,7 @@ int monitor(void)
 		          return 1;
 		        }
 		}
-#endif MONITOR_BREAK
+#endif /* MONITOR_BREAK */
 		else if (strcmp(t, "D") == 0) {
 			UWORD addr1;
 			addr1 = addr;
@@ -955,7 +957,7 @@ int monitor(void)
 		else if (strcmp(t, "ANTIC") == 0) {
 			printf("DMACTL=%02x    CHACTL=%02x    DLISTL=%02x    "
 				   "DLISTH=%02x    HSCROL=%02x    VSCROL=%02x\n",
-				   DMACTL, CHACTL, DLISTL, DLISTH, HSCROL, VSCROL);
+				   DMACTL, CHACTL, (UBYTE)(dlist&0xff), (UBYTE)(dlist>>8), HSCROL, VSCROL);
 			printf("PMBASE=%02x    CHBASE=%02x    WSYNC= xx    "
 				   "VCOUNT=%02x    ypos=%3d\n",
 				   PMBASE, CHBASE, (ypos + 8) >> 1, ypos);

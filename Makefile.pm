@@ -80,9 +80,10 @@ OBJECTS =       atari.o \
                 ui.o \
                 list.o \
 		dossound.o \
-		pokeysnd.o
+		pokeysnd.o	\
+		ataripcx.o
 
-atari800.exe        :       $(OBJECTS) $(OBJ)
+atari800.exe        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(DJDIR)/lib/audiodjf.a $(LDLIBS) -o atari800.exe
 
 atari.o         :       atari.c $(INCLUDES)
@@ -147,6 +148,15 @@ atari_amiga.o   :       atari_amiga.c $(INCLUDES)
 
 nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
+
+ataripcx.o	:	ataripcx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
+		
+joycfg.exe	:	joycfg.o pcjoy.h
+	$(LD) $(LDFLAGS) joycfg.o -o joycfg.exe
+	
+joycfg.o	:	joycfg.c pcjoy.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) joycfg.c	
 
 clean   :
 	del configure.exe

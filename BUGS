@@ -3,12 +3,4 @@ Bugs and Known Problems
 
 1. Sound should be disabled before entering Monitor...
 
-2. There is incorrect VCOUNT emulation <Thor>
-
-3. there is also a bug in DL handling <Thor>
-
-4. keyboard repeat in UI is crazy fast, but just on some machines
-
-5. the last ESC press in UI is passed to the emulated environment
-
-6. keyboard in DOS port reacts too slowly
+2. DD XFD images stopped working and need to be fixed again.

@@ -237,32 +237,23 @@ DOS VGA Keyboard + Joystick & Paddle Controllers
 ================================================
 
 F1	Built in User Interface
-F2	Option
-F3	Select
-F4	Start
+F2	Option Key
+F3	Select Key
+F4	Start Key
 F5	Warm Reset
 Shft+F5	Cold Reset
-F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
-F7	Break Key (also mapped on End key)
+F6	PIL Mode (Atari800) / Help Key (XL/XE)
+F7	Switch between Emulated joysticks mode and Normal keyboard
 F8	Enter monitor
 F9	EXIT Emulator
-F10	HELP key (800XL/130XE)
+F10	Save Screenshot
 
 Control-C terminates the program; to type Control-c, type ALT-c instead.
 ` is used as the Atari-Invers key
 
-Control-numeric pad (2,4,6,8) move screen. Control-5 centers screen.
-
-Joystick 0 is operated by the numeric keypad (make sure that the numeric
-keypad has been enabled).
- 
-        7 8 9
-         \|/
-        4 5 6
-         /|\
-        1 2 3
- 
-        And 0 is the fire key.
+Joysticks can be either real one connected to game port, or old 8-bit
+digital CX-40 joysticks connected to parallel port or keyboard joysticks
+(try out JOYCFG.EXE).
  
 At the moment it is not possible to use a Paddle with this version.
 

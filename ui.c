@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>				/* for free() */
+#include <unistd.h>				/* for open() */
 #ifdef WIN32
 #include "winatari.h"
 #else
@@ -82,9 +83,8 @@ int GetKeyPress(UBYTE * screen)
 {
 	int keycode;
 
-#ifdef DJGPP
-	usleep(100000UL);		/* try to slow down the crazy autorepeat */
-#endif
+	while(Atari_Keyboard() != AKEY_NONE);	/* disable autorepeat */
+
 	do {
 #ifndef BASIC
 		Atari_DisplayScreen(screen);
@@ -459,7 +459,7 @@ List *GetDirectory(char *directory)
 			if (strcmp(entry->d_name,".")==0)
 				continue;
 
-			filename = strdup(entry->d_name);
+			filename = (char *)strdup(entry->d_name);
 			if (!filename) {
 				perror("strdup");
 				return NULL;
@@ -469,7 +469,7 @@ List *GetDirectory(char *directory)
 
 		closedir(dp);
 
-		ListSort(list, FilenameSort);
+		ListSort(list, (void *)FilenameSort);
 	}
 #endif
 	return list;
@@ -555,7 +555,7 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 					break;
 			}
 
-			ListFree(list, free);
+			ListFree(list, (void *)free);
 		}
 	} while (next_dir);
 	return flag;
@@ -943,6 +943,7 @@ void ui(UBYTE * screen)
 	}
 	/* Sound_Active(TRUE); */
 	ui_is_active = FALSE;
+	while(Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
 #ifdef WIN32
 	unAtariState &= ~ATARI_UI_ACTIVE;
 	hThread = 0L;

@@ -49,7 +49,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.5"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.6"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -99,7 +99,7 @@ enum ESCAPE {
 	ESC_HHWRIT = 0xc3,
 	ESC_HHSTAT = 0xc4,
 	ESC_HHSPEC = 0xc5,
-	ESC_HHINIT = 0xc6,
+	ESC_HHINIT = 0xc6
 };
 
 /*
@@ -131,6 +131,7 @@ enum ESCAPE {
 #define AKEY_BREAK -5
 #define AKEY_PIL -6
 #define AKEY_UI -7
+#define AKEY_SCREENSHOT -8
 
 #define AKEY_SHFT 0x40
 #define AKEY_CTRL 0x80

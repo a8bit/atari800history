@@ -34,7 +34,7 @@ static UBYTE PORTB_mask = 0xff;
 
 void PIA_Initialise(int *argc, char *argv[])
 {
-	PORTA = 0xff;
+	PORTA = 0x00;
 	PORTB = 0xff;
 }
 
@@ -42,8 +42,8 @@ UBYTE PIA_GetByte(UWORD addr)
 {
 	UBYTE byte = 0xff;
 
-	if (machine == Atari)
-		addr &= 0xff03;
+	addr &= 0xff03;		/* HW registers are mirrored */
+
 	switch (addr) {
 	case _PACTL:
 		byte = PACTL;
@@ -55,10 +55,6 @@ UBYTE PIA_GetByte(UWORD addr)
 #endif
 		break;
 	case _PORTA:
-	/*
-		byte = Atari_PORT(0);
-		byte &= PORTA_mask;
-	*/
 		if (!(PACTL & 0x04))
  			byte = ~PORTA_mask;
 		else
@@ -68,12 +64,11 @@ UBYTE PIA_GetByte(UWORD addr)
 		switch (machine) {
 		case Atari:
 			byte = Atari_PORT(1);
-			byte &= PORTB_mask;
+			/* byte &= PORTB_mask; - disabled by Golda - four joysticks didn't work */
 			break;
 		case AtariXL:
 		case AtariXE:
 		case Atari320XE:
-			/* byte = PORTB; */
 			byte = (PORTB & (~PORTB_mask)) | PORTB_mask;
 			break;
 		default:
@@ -90,8 +85,7 @@ UBYTE PIA_GetByte(UWORD addr)
 
 int PIA_PutByte(UWORD addr, UBYTE byte)
 {
-	if (machine == Atari)
-		addr &= 0xff03;
+	addr &= 0xff03;		/* HW registers are mirrored */
 
 	switch (addr) {
 	case _PACTL:

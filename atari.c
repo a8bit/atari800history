@@ -624,7 +624,7 @@ void Coldstart(void)
 	}
 	NMIEN = 0x00;
 	NMIST = 0x00;
-	PORTA = 0xff;
+	PORTA = 0x00;
 	if (mach_xlxe) {
 		selftest_enabled = TRUE;	/* necessary for init RAM */
 		PORTB = 0x00;			/* necessary for init RAM */
@@ -646,7 +646,7 @@ void Warmstart(void)
 
 	NMIEN = 0x00;
 	NMIST = 0x00;
-	PORTA = 0xff;
+	PORTA = 0x00;
 	PORTB = 0xff;
 	CPU_Reset();
 }
@@ -1656,7 +1656,7 @@ void Atari800_Hardware(void)
 	static ULONG nextclock = 0;	/* put here a non-zero value to enable speed regulator */
 #endif
 	static long emu_too_fast = 0;	/* automatically enable/disable snailmeter */
-	static Key_Held = FALSE;
+	static int last_key = -1;	/* no key is pressed */
 
 	nframes = 0;
 	gettimeofday(&tp, &tzp);
@@ -1699,14 +1699,17 @@ void Atari800_Hardware(void)
 			else
 				EnablePILL();
 			break;
+		case AKEY_SCREENSHOT:
+			Save_PCX(atari_screen);
+			break;
 		case AKEY_NONE:
-			Key_Held = FALSE;
+			last_key = -1;
 			break;
 		default:
-			if (Key_Held)
-				break;
+			if (keycode == last_key)
+				break;	
+			last_key = keycode;
 			KBCODE = keycode;
-			Key_Held = TRUE;
 			IRQST &= ~0x40;
 			if (IRQEN & 0x40) {
 				GenerateIRQ();

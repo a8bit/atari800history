@@ -710,7 +710,7 @@ boot_callback()
 
 	xv_set(chooser,
 		   FRAME_LABEL, "Disk Selector",
-		   FILE_CHOOSER_DIRECTORY, atari_disk_dir,
+		   FILE_CHOOSER_DIRECTORY, atari_disk_dirs[0],
 		   FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 		   XV_SHOW, TRUE,
 		   NULL);
@@ -722,7 +722,7 @@ insert_callback()
 
 	xv_set(chooser,
 		   FRAME_LABEL, "Disk Selector",
-		   FILE_CHOOSER_DIRECTORY, atari_disk_dir,
+		   FILE_CHOOSER_DIRECTORY, atari_disk_dirs[0],
 		   FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 		   XV_SHOW, TRUE,
 		   NULL);
@@ -2136,8 +2136,8 @@ void Atari_Initialise(int *argc, char *argv[])
 		XmStringFree(s_label);
 		XtAddCallback(togg_5200, XmNarmCallback, motif_select_rom, (XtPointer) 5);
 
-		tmpstr = (char *) XtMalloc(strlen(atari_disk_dir + 3));
-		strcpy(tmpstr, atari_disk_dir);
+		tmpstr = (char *) XtMalloc(strlen(atari_disk_dirs[0] + 3));
+		strcpy(tmpstr, atari_disk_dirs[0]);
 		strcat(tmpstr, "/*");
 		xmtmpstr = XmStringCreateSimple(tmpstr);
 		XmFileSelectionDoSearch(fsel_b, xmtmpstr);

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>		/* for rand() */
 #include <string.h>
 
 #define LCHOP 3	/* do not build lefmost 0..3 characters in wide mode */
@@ -29,14 +30,13 @@ static char *rcsid = "$Id: antic.c,v 1.18 1997/03/22 21:48:27 david Exp $";
 
 UBYTE CHACTL;
 UBYTE CHBASE;
-UBYTE DLISTH;
-UBYTE DLISTL;
 UBYTE DMACTL;
 UBYTE HSCROL;
 UBYTE NMIEN;
 UBYTE NMIST;
 UBYTE PMBASE;
 UBYTE VSCROL;
+UWORD dlist;
 
 #ifdef WIN32
 extern unsigned long	unMiscStates;
@@ -74,11 +74,12 @@ int ypos;
 #define CPUL	114				/* 114 CPU cycles for 1 screenline */
 #define DMAR	9				/* 9 cycles for DMA refresh */
 #define WSYNC	7				/* 7 cycles for wsync */
+#define VCOUNTDELAY 3 /*delay for VCOUNT change after wsync */
 #define BEGL	15				/* 15 cycles for begin of each screenline */
 
 /* Table of Antic "beglinecycles" from real atari */
 /* middle of sceenline */
-static realcyc[128] =
+static int realcyc[128] =
 {58, 58, 58, 0, 58, 58, 58, 0,	/* blank lines */
  58, 58, 58, 0, 58, 58, 58, 0,	/* --- */
  27, 23, 15, 0, 41, 37, 31, 0,	/* antic2, gr.0 */
@@ -99,7 +100,7 @@ static realcyc[128] =
 };
 
 /* Table of nlines for Antic modes */
-static an_nline[16] =
+static int an_nline[16] =
 {1, 1, 8, 10, 8, 16, 8, 16,
  8, 4, 4, 2, 1, 2, 1, 1};
 
@@ -1439,10 +1440,11 @@ void do_antic()
 		first_line_flag = 0;
 /* ^^^^ adjust for subsequent lines; */
 		wsync_halt = 0;
-		unc = GO(WSYNC + unc);
+		unc = GO(VCOUNTDELAY + unc);
+                ypos++;
+                unc = GO(WSYNC-VCOUNTDELAY + unc);
 /* ^^^^ part 4. */
 
-		ypos++;
 /*if (wsync_halt)
    {
    if (!(--wsync_halt))
@@ -1521,7 +1523,7 @@ int pmg_dma(void)
 
 void ANTIC_RunDisplayList(void)
 {
-	UWORD dlist;
+/*	UWORD dlist;  made a global */
 	int JVB;
 	int vscrol_flag;
 	int nlines;
@@ -1535,13 +1537,16 @@ void ANTIC_RunDisplayList(void)
 	 * when VCOUNT=4. This portion processes when VCOUNT=0, 1, 2 and 3
 	 */
 
-	for (ypos = 0; ypos < 8; ypos++) {
+	ypos=0;
+	while (ypos < 8) {
 #ifdef POKEY_UPDATE
 		pokey_update();
 #endif
 		unc = GO(CPUL - DMAR - WSYNC + unc);
 		wsync_halt = 0;
-		unc = GO(WSYNC + unc);
+		unc = GO(VCOUNTDELAY + unc);
+                ypos++;
+                unc = GO(WSYNC-VCOUNTDELAY + unc);
 		/* GO (114); */
 	}
 	NMIST = 0x00;				/* Reset VBLANK */
@@ -1551,7 +1556,7 @@ void ANTIC_RunDisplayList(void)
 	ypos = 8;
 	vscrol_flag = FALSE;
 
-	dlist = (DLISTH << 8) | DLISTL;
+	/*dlist = (DLISTH << 8) | DLISTL;*/
 	JVB = FALSE;
 
 	while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT + 8))) {
@@ -1596,12 +1601,12 @@ void ANTIC_RunDisplayList(void)
 			break;
 		case 0x01:
 			vscrol_flag=FALSE;
+			dlist = (memory[dlist + 1] << 8) | memory[dlist];
 			if (IR & 0x40) {
 				nlines = 0;
 				JVB = TRUE;
 			}
 			else {
-				dlist = (memory[dlist + 1] << 8) | memory[dlist];
 				normal_lastline = 0;
 				IR &= 0xf0;		/* important:must preserve DLI bit. */
 				/* maybe should just add 0x01 as a case in antic code? */
@@ -1762,7 +1767,7 @@ void ANTIC_RunDisplayList(void)
 		vskipbefore = 0;
 		vskipafter = 99;
 	}
-	IR = 0;
+        IR = 0;
 	normal_lastline = 0;
 	for (i = (ATARI_HEIGHT + 8 - ypos); i > 0; i--) {
 		firstlinecycles = nextlinecycles = DMAR;
@@ -1777,13 +1782,16 @@ void ANTIC_RunDisplayList(void)
 		NMI();
 	}
 
-	for (ypos = 248; ypos < (tv_mode == PAL ? 312 : 262); ypos++) {
+	ypos=248;
+	while (ypos < (tv_mode == PAL ? 312 : 262)) {
 #ifdef POKEY_UPDATE
 		pokey_update();
 #endif
-		unc = GO(CPUL - WSYNC + unc - DMAR);
+                unc = GO(CPUL - WSYNC + unc - DMAR);
 		wsync_halt = 0;
-		unc = GO(WSYNC + unc);
+		unc = GO(VCOUNTDELAY + unc);
+                ypos++;
+                unc = GO(WSYNC-VCOUNTDELAY + unc);
 	}
 }
 
@@ -1793,21 +1801,26 @@ UBYTE ANTIC_GetByte(UWORD addr)
 
 	addr &= 0xff0f;
 	switch (addr) {
-	case _CHBASE:
+	/*case _CHBASE:
 		byte = CHBASE;
 		break;
 	case _CHACTL:
 		byte = CHACTL;
 		break;
-	case _DLISTL:
-		byte = DLISTL;
+	neither of these reabable either
+	*/
+	/*case _DLISTL:
+		byte = (dlist&0xff);
 		break;
 	case _DLISTH:
-		byte = DLISTH;
+		byte = (dlist>>8);
 		break;
-	case _DMACTL:
+	neither of these are readable
+	*/
+	/*case _DMACTL:
 		byte = DMACTL;
 		break;
+	DMACTL is not readable*/
 	case _PENH:
 	case _PENV:
 		byte = 0x00;
@@ -1824,10 +1837,13 @@ UBYTE ANTIC_GetByte(UWORD addr)
 	case _NMIST:
 		byte = NMIST;
 		break;
-	case _WSYNC:
+/*	case _WSYNC:  */
 /*       wsync_halt++; */
-		byte = 0xff;			/* tested on real Atari !RS! */
-		break;
+/*		byte = 0xff;*/			/* tested on real Atari !RS! */
+/*		break;
+I eliminate this case as well since it is now redundant as 0xff is the
+default return value for unreadable registers !PM!
+*/
 	}
 
 	return byte;
@@ -1911,10 +1927,10 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 		}
 		break;
 	case _DLISTL:
-		DLISTL = byte;
+		dlist=(dlist&0xff00)|byte;
 		break;
 	case _DLISTH:
-		DLISTH = byte;
+		dlist=(dlist&0x00ff)|(byte<<8);
 		break;
 	case _DMACTL:
 		DMACTL = byte;
@@ -2029,7 +2045,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			break;
 		}
 
-		missile_dma_enabled = (DMACTL & 0x04);
+		missile_dma_enabled = (DMACTL & 0x0C); /* no player dma without missile */
 		player_dma_enabled = (DMACTL & 0x08);
 		singleline = (DMACTL & 0x10);
 		player_flickering = ((player_dma_enabled | player_gra_enabled) == 0x02);

@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.5
+Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.6
 --------------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -8,7 +8,7 @@ Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.5
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.9.5 of my Atari 800, 800XL, 130XE and 5200 emulator
+This is the version 0.9.6 of my Atari 800, 800XL, 130XE and 5200 emulator
 for Unix, Amiga, MS-DOS and Falcon. My main objective is to create a freely
 distributable portable emulator (i.e. with source code available). It can
 be configured to run in the following ways :-
@@ -20,6 +20,7 @@ be configured to run in the following ways :-
 	5. CBM Amiga
  	6. MS-DOS
 	7. Atari Falcon
+	8. MS-Windows
 
 The basic mode is only useful for running programs such as MAC65,
 Atari Basic etc. I have had this version running on Linux,
@@ -47,8 +48,8 @@ keyboard, one joystick connected to game port and up to three additional
 digital joysticks connected to parallel (printer) ports.
 
 The Atari Falcon030/040 version supports 320x240, 352x240 and also full
-384x240 graphics, sound (DMA 12.5 kHz) and up to two joysticks (old
-CX-40, Atari800 compatible - not the new paddle-like ones).
+384x240 graphics, NOVA graphics, sound (DMA 12.5 kHz) and up to two
+joysticks (old CX-40, Atari800 compatible - not the new paddle-like ones).
 
 From version 0.7.0 all versions supporting bitmapped graphics have
 a User Interface implemented on the emulators "screen". The User
@@ -113,4 +114,4 @@ o Real joystick support.
 o Paddle controller using X-Windows mouse position.
 
 o User Interface on all version supporting bitmapped graphics.
-  i.e. X11, SVGALIB, MS-DOS, Amiga and Falcon.
+  i.e. X11, SVGALIB, MS-DOS, Amiga, Falcon and MS-Windows.

@@ -98,7 +98,7 @@ extern UBYTE break_cim;
 extern int ret_nesting;
 #endif
 
-static UBYTE attrib[65536];
+UBYTE attrib[65536];
 #define	GetByte(addr)		((attrib[addr] == HARDWARE) ? Atari800_GetByte(addr) : memory[addr])
 #define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) if (Atari800_PutByte(addr,byte)) break;
 

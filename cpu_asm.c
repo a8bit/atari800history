@@ -1,6 +1,8 @@
 #include	<stdio.h>
 #include	<stdlib.h>
+#ifdef ATARIST
 #include	<osbind.h>
+#endif
 
 static char *rcsid = "$Id: cpu_asm.c,v 1.2 1998/02/21 15:02:46 david Exp $";
 

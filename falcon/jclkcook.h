@@ -1,13 +1,10 @@
 /* Joy Clocky CookieJar public interface header file */
 
 #define CLOCKY_IDENT		'JCLK'
-#define CLOCKY_VERSION		0x220
-
-#ifndef UBYTE
-#define UBYTE unsigned char;
-#endif
+#define CLOCKY_VERSION		0x230
 
 #ifdef CLOCKY_CONFIG
+#define UBYTE				unsigned char
 #define KBDLEN				384
 #define PRNTBLLEN			128
 #define DEADTBLLEN			30
@@ -40,8 +37,8 @@ struct	_jclkstruct {
 		unsigned Miscturb:1;	/* 12 */
 		unsigned Miscinv:1;		/* 11 */
 		unsigned Misctut:1;		/* 10 */
-
-		unsigned Unused2:2;		/* 8-9 */
+		unsigned MiscEng:1;		/* 9 */
+		unsigned Unused2:1;		/* 8 */
 
 		unsigned Saveron:1;		/* 7 */
 		unsigned SaveMod1:1;	/* 6 */

@@ -10,8 +10,6 @@
 /* PM Notes:
    note the versions in Thors emu are able to deal with ROM better than
    these ones.  These are only used for the 'fake' fast SIO replacement
-   Changed Setled to only under MOTIF consistantly (was #ifndef BASIC
-   in some places.)
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -226,19 +224,10 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 		if (sector < 4)
 			/* special case for first three sectors in ATR image */
 			size = 128;
-#if 0	/* PS code, not tested yet */
-		offset = (sector - 1) * size + 16;
-
-		if (atr_format[unit] == SIO2PC_ATR && sector >= 4)
-				/* SIO2PC stores first 3 sectors always in single density */
-				offset -= 3*(size - 128);
-		}
-#else
 		if (atr_format[unit] == SIO2PC_ATR && sector >= 4)
 			offset = (sector - 4) * size + 16 + 3*128;
 		else
 			offset = (sector - 1) * size + 16;
-#endif
 		break;
 	default:
 #ifdef WIN32
@@ -513,7 +502,7 @@ void SIO(void)
 	int realsize = 0;
 	int cmd = Peek(0x302);
 
-#ifdef MOTIF
+#ifdef SET_LED
 	Atari_Set_LED(1);
 #endif
 
@@ -615,7 +604,7 @@ void SIO(void)
 
 	Poke(0x0303, regY);
 
-#ifdef MOTIF
+#ifdef SET_LED
 	Atari_Set_LED(0);
 #endif
 
@@ -760,7 +749,7 @@ void SwitchCommandFrame(int onoff)
 		DataIndex = 0;
 		ExpectedBytes = 5;
 		TransferStatus = SIO_CommandFrame;
-#ifdef MOTIF
+#ifdef SET_LED
 		Atari_Set_LED(1);
 #endif
 		/* printf("Command frame expecting.\n"); */
@@ -909,7 +898,7 @@ int SIO_GetByte(void)
 			byte = DataBuffer[DataIndex++];
 			if (DataIndex >= ExpectedBytes) {
 				TransferStatus = SIO_NoFrame;
-#ifdef MOTIF
+#ifdef SET_LED
 				Atari_Set_LED(0);
 #endif
 				/* printf("Transfer complete.\n"); */
@@ -932,7 +921,7 @@ int SIO_GetByte(void)
 			byte = DataBuffer[DataIndex++];
 			if (DataIndex >= ExpectedBytes) {
 				TransferStatus = SIO_NoFrame;
-#ifdef MOTIF
+#ifdef SET_LED
 				Atari_Set_LED(0);
 #endif
 				/* printf("Write complete.\n"); */
@@ -950,7 +939,7 @@ int SIO_GetByte(void)
 #else
 			printf("Invalid read frame!\n");
 #endif
-#ifdef MOTIF
+#ifdef SET_LED
 			Atari_Set_LED(0);
 #endif
 			TransferStatus = SIO_NoFrame;
@@ -972,13 +961,14 @@ void CopyFromMem(ATPtr from, UBYTE * to, int size)
 	memcpy(to, from + memory, size);
 }
 
-
+extern UBYTE attrib[65536];
 void CopyToMem(UBYTE * from, ATPtr to, int size)
 {
 	int i;
 
 	for (i = 0; i < size; i++) {
-		Poke(to, *from);
+		if (!attrib[to])
+			Poke(to, *from);
 		from++, to++;
 	}
 }
