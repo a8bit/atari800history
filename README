@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.8
+Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.9
 --------------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -32,9 +32,11 @@ screen editing capability. Some computer don't seem to support curses
 fully - SunOS 4.1.3, VAX/VMS, LINUX (but ncurses is OK).
 
 The SVGALIB version runs at a reasonable speed. The screen dimensions
-are limited to 320x200 and is unable to display the overscan modes.
+are limited to 320x240
+/* and is unable to display the overscan modes.
 Instead SVGALIB displays the core 320x200 pixels. The area which is
 displayed can be modified using the F11 and F12 keys.
+*/
 
 The X-Windows version supports graphics and has an optional XVIEW
 user interface. The Linux X Window version can be built with

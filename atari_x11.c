@@ -63,6 +63,7 @@ static int motif_rom_sel = 1;
 #include "monitor.h"
 #include "sio.h"
 #include "nas.h"
+#include "sound.h"
 #include "platform.h"
 #include "rt-config.h"
 

@@ -25,8 +25,17 @@
 #define FALSE 0
 #define TRUE 1
 
+#define FILENAME_SIZE	32
+
 #if defined(VGA) || defined(ATARI)
 #define DOS_DRIVES
+#endif
+
+#ifdef __DJGPP__
+#include <dos.h>
+#endif
+#ifdef linux
+#include <time.h>
 #endif
 
 int ui_is_active = FALSE;
@@ -34,7 +43,10 @@ int ui_is_active = FALSE;
 int ReadAtariExe( char *filename );
 
 static int current_disk_directory = 0;
-static char curr_dir[MAX_FILENAME_LEN] = "";
+static char curr_disk_dir[MAX_FILENAME_LEN] = "";
+static char curr_cart_dir[MAX_FILENAME_LEN] = "";
+static char curr_exe_dir[MAX_FILENAME_LEN] = "";
+static char curr_state_dir[MAX_FILENAME_LEN] = "";
 static char charset[1024];
 
 #ifdef WIN32
@@ -89,16 +101,34 @@ unsigned char ascii_to_screen[128] =
 	0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f
 };
 
+
+#define KB_DELAY		15
+#define KB_AUTOREPEAT	3
+
 int GetKeyPress(UBYTE * screen)
 {
 	int keycode;
 
-	while (Atari_Keyboard() != AKEY_NONE);	/* disable autorepeat */
-
-	do {
 #ifndef BASIC
 		Atari_DisplayScreen(screen);
 #endif
+
+	while(1)
+	{
+		static int rep = KB_DELAY;
+		if (Atari_Keyboard() == AKEY_NONE) {
+			rep = KB_DELAY;
+			break;
+		}
+		if (rep == 0) {
+			rep = KB_AUTOREPEAT;
+			break;
+		}
+		rep--;
+		atari_sleep_ms(20);
+	}
+
+	do {
 #ifdef WIN32
 		while (!nKbBufferChars) {
 			SafeShowScreen();
@@ -797,9 +827,9 @@ void DiskManagement(UBYTE * screen)
 				char *pathname;
 
 /*              pathname=atari_disk_dirs[current_disk_directory]; */
-				if (curr_dir[0] == '\0')
-					strcpy(curr_dir, atari_disk_dirs[current_disk_directory]);
-				while (FileSelector(screen, curr_dir, filename)) {
+				if (curr_disk_dir[0] == '\0')
+					strcpy(curr_disk_dir, atari_disk_dirs[current_disk_directory]);
+				while (FileSelector(screen, curr_disk_dir, filename)) {
 					DIR *subdir;
 
 					subdir = opendir(filename);
@@ -855,7 +885,8 @@ void CartManagement(UBYTE * screen)
 	int done = FALSE;
 	int option = 2;
 
-	strcpy(curr_dir, atari_rom_dir);
+	if (!curr_cart_dir[0])
+	  strcpy(curr_cart_dir, atari_rom_dir);
 
 	while (!done) {
 		char filename[256];
@@ -868,7 +899,7 @@ void CartManagement(UBYTE * screen)
 		option = Select(screen, option, nitems, menu, nitems, 1, 1, 4, FALSE, &ascii);
 		switch (option) {
 		case 0:
-			if (FileSelector(screen, curr_dir, filename)) {
+			if (FileSelector(screen, curr_cart_dir, filename)) {
 				UBYTE image[32769];
 				int type = CART_UNKNOWN;
 				int nbytes;
@@ -925,13 +956,13 @@ void CartManagement(UBYTE * screen)
 					int checksum = 0;
 					int i;
 
-					char fname[33];
+					char fname[FILENAME_SIZE+1];
 
-					memcpy(fname, "                                ", 32);
+					memset(fname, ' ', FILENAME_SIZE);
 					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-					EditString(screen, 0x9a, 0x94, 32, fname, 4, 10);
-					fname[32] = '\0';
+					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
+					fname[FILENAME_SIZE] = '\0';
 					RemoveSpaces(fname);
 
 					for (i = 0; i < nbytes; i++)
@@ -965,14 +996,14 @@ void CartManagement(UBYTE * screen)
 			}
 			break;
 		case 1:
-			if (FileSelector(screen, curr_dir, filename)) {
+			if (FileSelector(screen, curr_cart_dir, filename)) {
 				int fd;
 
 				fd = open(filename, O_RDONLY | O_BINARY, 0777);
 				if (fd != -1) {
 					Header header;
 					UBYTE image[32769];
-					char fname[33];
+					char fname[FILENAME_SIZE+1];
 					int nbytes;
 
 					read(fd, &header, sizeof(header));
@@ -980,11 +1011,11 @@ void CartManagement(UBYTE * screen)
 
 					close(fd);
 
-					memcpy(fname, "                                ", 32);
+					memset(fname, ' ', FILENAME_SIZE);
 					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-					EditString(screen, 0x9a, 0x94, 32, fname, 4, 10);
-					fname[32] = '\0';
+					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
+					fname[FILENAME_SIZE] = '\0';
 					RemoveSpaces(fname);
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
@@ -998,7 +1029,7 @@ void CartManagement(UBYTE * screen)
 			}
 			break;
 		case 2:
-			if (FileSelector(screen, curr_dir, filename)) {
+			if (FileSelector(screen, curr_cart_dir, filename)) {
 				if (!Insert_Cartridge(filename)) {
 					const int nitems = 4;
 					static char *menu[4] =
@@ -1048,7 +1079,6 @@ void CartManagement(UBYTE * screen)
 			break;
 		}
 	}
-	curr_dir[0] = '\0';			/*force reload of DISK_DIR */
 }
 
 void AboutEmulator(UBYTE * screen)
@@ -1080,8 +1110,9 @@ int RunExe(UBYTE *screen)
 	char exename[MAX_FILENAME_LEN];
 	int ret = FALSE;
 
-	strcpy(curr_dir, atari_exe_dir);
-	if (FileSelector(screen, curr_dir, exename)) {
+	if (!curr_exe_dir[0])
+	  strcpy(curr_exe_dir, atari_exe_dir);
+	if (FileSelector(screen, curr_exe_dir, exename)) {
 		ret = ReadAtariExe(exename);
 		if (! ret) {
 			/* display log to a window */
@@ -1094,14 +1125,16 @@ int RunExe(UBYTE *screen)
 int SaveState(UBYTE *screen)
 {
 	char statename[MAX_FILENAME_LEN];
-	char fname[33];
+	char fname[FILENAME_SIZE+1];
 
-	memcpy(fname, "                                ", 32);
+	memset(fname, ' ', FILENAME_SIZE);
 	Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
 	Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-	EditString(screen, 0x9a, 0x94, 32, fname, 4, 10);
-	fname[32] = '\0';
+	EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
+	fname[FILENAME_SIZE] = '\0';
 	RemoveSpaces(fname);
+        if (!fname[0])
+          return 0;
 
 	strcpy(statename, atari_state_dir);
 	if (*statename) {
@@ -1123,8 +1156,9 @@ int LoadState(UBYTE *screen)
 	char statename[MAX_FILENAME_LEN];
 	int ret = FALSE;
 
-	strcpy(curr_dir, atari_state_dir);
-	if (FileSelector(screen, curr_dir, statename))
+	if (!curr_state_dir[0])
+	  strcpy(curr_state_dir, atari_state_dir);
+	if (FileSelector(screen, curr_state_dir, statename))
 		ret = ReadAtariState(statename, "rb");
 
 	return ret;

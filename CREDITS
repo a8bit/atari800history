@@ -178,3 +178,8 @@ Petr Mojzisek <mojzisek@bimbo.fjfi.cvut.cz>
 
 Krzysztof Nikiel <krzych00@priv7.onet.pl>
 - SaveINT() fix in state save code
+- Linux improvements (new svgalib keyboard input and screen output)
+- sound improvements (sound interpolation, configurable sound delay, 4 buffers)
+
+Jari Karppinen <jakarppi@mail.student.oulu.fi>
+- killed some warnings and bugs in source (like e.g. void main() in joycfg ;-)

@@ -489,7 +489,7 @@ void save_config()
   FILE *fr;
   FILE *fw;
   char string[256];
-  int i,no;
+  int i;
 
   if ((fr=fopen("atari800.cfg","r"))==NULL)
   {
@@ -524,7 +524,7 @@ void save_config()
     printf("Error when renaming atari800.tmp to atari800.cfg!\n");
 }
 /*------------------------------------------------------------------------*/
-void main(void)
+int main()
 {
   int ok;
 
@@ -541,5 +541,7 @@ void main(void)
   _setcursortype(_NORMALCURSOR);
 
   if (ok) save_config();
+
+  return 0;
 }
 

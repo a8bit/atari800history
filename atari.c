@@ -24,13 +24,13 @@
 int timesync = 1;
 #endif
 
+#define FALSE   0
+#define TRUE    1
+
 #ifdef AT_USE_ALLEGRO
 #include <allegro.h>
 static int i_love_bill = TRUE;	/* Perry, why this? */
 #endif
-
-#define FALSE   0
-#define TRUE    1
 
 #include "atari.h"
 #include "cpu.h"
@@ -918,6 +918,18 @@ void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 	}
 }
 #endif
+
+void atari_sleep_ms(ULONG miliseconds)
+{
+#ifdef POSIX
+	struct timespec t;
+	t.tv_sec = 0;
+	t.tv_nsec = miliseconds * 1E6UL;
+	nanosleep(&t, NULL);	/* POSIX  */
+#else
+	usleep(miliseconds * 1E3);
+#endif
+}
 
 void Atari800_Hardware(void)
 {

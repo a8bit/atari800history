@@ -10,14 +10,20 @@
 /* -------------------------------------------------------------------------- */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <dpmi.h>
 #include <go32.h>
 #include <pc.h>
 #include <sys/farptr.h>
 #include <dos.h>
+#include <string.h>
 #include "cpu.h"
 #include "colours.h"
 #include "ui.h"         /* for ui_is_active */
+#include "log.h"
+#include "sound_dos.h"
+#include "monitor.h"
 #include "pcjoy.h"
 
 #ifdef AT_USE_ALLEGRO
@@ -462,7 +468,7 @@ void key_delete(void)
 
 void SetupVgaEnvironment()
 {
-        int a, r, g, b, i;
+        int a, i; // r, g, b;
         union REGS rg;
         __dpmi_regs d_rg;
         UBYTE ctab[768];
@@ -579,7 +585,6 @@ void Atari_DisplayScreen(UBYTE * ascreen)
 
         UBYTE *scr_ptr;
         int ypos;
-        int x;
 #ifdef AT_USE_ALLEGRO_COUNTER
         static char speedmessage[200];
         extern int speed_count;
@@ -1008,9 +1013,8 @@ int Atari_Keyboard(void)
         int i;
         int keycode;
         int shift_mask;
-        static int stillpressed;        /* is 5200 button 2 still pressed */
-
 #ifdef AT_USE_ALLEGRO_JOY
+        static int stillpressed;        /* is 5200 button 2 still pressed */
         extern volatile int joy_left, joy_right, joy_up, joy_down;
         extern volatile int joy_b1, joy_b2, joy_b3, joy_b4;
 #endif

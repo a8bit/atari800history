@@ -18,6 +18,8 @@
 /*                                                                           */
 /* 05/01/98 - V1.3 - Added timeout handling and ResetDSP (by Robert Golias)  */
 /*                                                                           */
+/* 09/30/99 - Sound buffer divided into four parts (by Krzysztof Nikiel)     */
+/*                                                                           */
 /*****************************************************************************/
 /*                                                                           */
 /*                 License Information and Copyright Notice                  */
@@ -176,7 +178,6 @@ static void setNewIntVect(uint16 irq)
 
 #endif							/*  */
 	}
-
 	else {
 
 #ifdef DJGPP
@@ -229,7 +230,6 @@ static void setOldIntVect(uint16 irq)
 
 #endif							/*  */
 	}
-
 	else {
 
 #ifdef DJGPP
@@ -259,7 +259,7 @@ static void setOldIntVect(uint16 irq)
 
 static void dsp_out(uint16 port, uint8 val)
 {
-	uint32 timeout=60000;
+	uint32 timeout = 60000;
 	/* wait for buffer to be free */
 	while ((timeout--) && (inp(IOaddr + DSP_WRITE) & 0x80)) {
 
@@ -304,7 +304,6 @@ static uint8 dsp_in(uint16 port)
 		return (inp(port));
 
 	}
-
 	else {
 
 		return (0);
@@ -338,14 +337,11 @@ uint8 hextodec(char c)
 		retval = c - '0';
 
 	}
-
 	else if ((c >= 'A') && (c <= 'F')) {
 
 		retval = c - 'A' + 10;
 
 	}
-
-
 	return (retval);
 
 }
@@ -447,7 +443,6 @@ static uint8 getBlasterEnv(void)
 			}
 
 		}
-
 		else {
 
 			logErr("Unable to read Sound Blaster I/O address.\n");
@@ -468,7 +463,6 @@ static uint8 getBlasterEnv(void)
 				Irq = hextodec(ptr[1]) * 10 + hextodec(ptr[2]);
 
 			}
-
 			else {
 
 				/* else convert as a single hex digit */
@@ -528,7 +522,6 @@ static uint8 getBlasterEnv(void)
 			}
 
 		}
-
 		else {
 
 			logErr("Unable to read Sound Blaster IRQ.\n");
@@ -571,7 +564,6 @@ static uint8 getBlasterEnv(void)
 			}
 
 		}
-
 		else {
 
 			logErr("Unable to read Sound Blaster DMA setting.\n");
@@ -579,7 +571,6 @@ static uint8 getBlasterEnv(void)
 		}
 
 	}
-
 	else {
 
 		logErr("BLASTER enviroment variable not configured.");
@@ -664,7 +655,6 @@ void Set_master_volume(uint8 left, uint8 right)
 		outp(IOaddr + 0x05, ((left & 0xf) << 4) + (right & 0x0f));
 
 	}
-
 }
 
 
@@ -689,7 +679,6 @@ void Set_line_volume(uint8 left, uint8 right)
 		outp(IOaddr + 0x05, ((left & 0xf) << 4) + (right & 0x0f));
 
 	}
-
 }
 
 
@@ -714,7 +703,6 @@ void Set_FM_volume(uint8 left, uint8 right)
 		outp(IOaddr + 0x05, ((left & 0xf) << 4) + (right & 0x0f));
 
 	}
-
 }
 
 
@@ -794,8 +782,6 @@ uint8 ResetDSP(uint16 ioaddr)
 		Sb_init = 1;
 
 	}
-
-
 	return (Sb_init);
 
 }
@@ -823,8 +809,6 @@ uint8 OpenSB(uint16 playback_freq, uint16 buffer_size)
 		Sb_buf_size = buffer_size;
 
 	}
-
-
 	Playback_freq = playback_freq;
 
 
@@ -848,7 +832,6 @@ uint8 OpenSB(uint16 playback_freq, uint16 buffer_size)
 				outp(0xa1, inp(0xa1) & (~(1 << (Irq - 8))));
 
 			}
-
 			else {
 
 				outp(0x21, inp(0x21) & (~(1 << Irq)));
@@ -890,9 +873,7 @@ uint8 OpenSB(uint16 playback_freq, uint16 buffer_size)
 				CloseSB();
 
 			}
-
 		}
-
 		else {
 
 			logErr("Unable to initialize the Sound Card.\n");
@@ -901,8 +882,6 @@ uint8 OpenSB(uint16 playback_freq, uint16 buffer_size)
 
 
 	}
-
-
 	return (Sb_init);
 
 }
@@ -931,7 +910,7 @@ void CloseSB(void)
 
 		/* stop all DMA transfer */
 		Stop_audio_output();
-		ResetDSP(IOaddr); /*GOLDA CHANGED*/
+		ResetDSP(IOaddr);		/*GOLDA CHANGED */
 
 
 		/* turn the speaker off */
@@ -948,7 +927,6 @@ void CloseSB(void)
 			outp(0xa1, inp(0xa1) | (1 << (Irq - 8)));
 
 		}
-
 		else {
 
 			outp(0x21, inp(0x21) | (1 << Irq));
@@ -978,7 +956,6 @@ void CloseSB(void)
 
 #endif							/*  */
 		}
-
 	}
 }
 
@@ -1013,7 +990,6 @@ void Stop_audio_output(void)
 		dsp_out(IOaddr + DSP_WRITE, 0xd0);
 
 	}
-
 }
 
 
@@ -1140,13 +1116,12 @@ uint8 Start_audio_output(uint8 dma_mode,
 			dsp_out(IOaddr + DSP_WRITE, Count_high);
 
 		}
-
 		else {
 
 			/* reset the DMA counter */
 			DMAcount = 0;
 
-			ResetDSP(IOaddr); /*GOLDA CHANGED*/
+			ResetDSP(IOaddr);	/*GOLDA CHANGED */
 
 			/* set the auto-initialize buffer size */
 			dsp_out(IOaddr + DSP_WRITE, 0x48);
@@ -1184,15 +1159,12 @@ uint8 Start_audio_output(uint8 dma_mode,
 				Start_audio_output(STANDARD_DMA, fillBuffer);
 
 			}
-
 		}
 
 
 		ret_val = 0;
 
 	}
-
-
 	return (ret_val);
 
 }
@@ -1214,9 +1186,9 @@ static void newIntVect(void)
 static void interrupt newIntVect(void)
 #endif							/*  */
 {
-
 	uint16 addr;
-
+	static int lastfrag = 0;	/* last filled fragment */
+	int i;
 
 	if (DMAmode == STANDARD_DMA) {
 
@@ -1228,8 +1200,6 @@ static void interrupt newIntVect(void)
 		dsp_out(IOaddr + DSP_WRITE, Count_high);
 
 	}
-
-
 	DMAcount++;
 
 
@@ -1246,34 +1216,26 @@ static void interrupt newIntVect(void)
 	addr -= Sb_offset;			/* subtract the offset */
 
 
-	/* if we're currently playing the first half of the buffer */
-	if (addr < Sb_buf_size) {
+	for (i = 0; i < 4; i++) {
+		if (addr < ((i * Sb_buf_size) >> 1))
+			break;
+	}
+	/* i should contain currently played fragment */
 
-		/* reload the second half of the buffer */
-		FillBuffer(Sb_buffer + Sb_buf_size, Sb_buf_size);
-
-
+	/* fill two next fragments if empty */
+	i = (i + 2) & 3;
+	for (; lastfrag != i;) {
+		lastfrag = (lastfrag + 1) & 3;
+		FillBuffer(Sb_buffer + ((lastfrag * Sb_buf_size) >> 1),
+				   Sb_buf_size >> 1);
 #ifdef DJGPP
 		/* Copy data to DOS memory buffer */
-		dosmemput(Sb_buffer + Sb_buf_size, Sb_buf_size,
-				  (theDOSBufferSegment << 4) + Sb_buf_size);
+		dosmemput(Sb_buffer + ((lastfrag * Sb_buf_size) >> 1),
+				  Sb_buf_size >> 1,
+		   (theDOSBufferSegment << 4) + ((lastfrag * Sb_buf_size) >> 1));
 
 #endif							/*  */
 	}
-
-	else {
-
-		/* else reload the first half of the buffer */
-		FillBuffer(Sb_buffer, Sb_buf_size);
-
-
-#ifdef DJGPP
-		/* Copy data to DOS memory buffer */
-		dosmemput(Sb_buffer, Sb_buf_size, theDOSBufferSegment << 4);
-
-#endif							/*  */
-	}
-
 
 	/* indicate end of interrupt  */
 	outp(0x20, 0x20);
@@ -1284,5 +1246,4 @@ static void interrupt newIntVect(void)
 		outp(0xa0, 0x20);
 
 	}
-
 }

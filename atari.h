@@ -56,7 +56,7 @@ extern int verbose;
 #define TRUE	1
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9b"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9c"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -379,5 +379,6 @@ int Atari800_PutByte(UWORD addr, UBYTE byte);
 void AtariEscape(UBYTE esc_code);
 int Initialise_EmuOS(void);
 int Insert_Cartridge(char *filename);
+void atari_sleep_ms(ULONG miliseconds);
 
 #endif

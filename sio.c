@@ -299,7 +299,7 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 
 int SeekSector(int unit, int sector)
 {
-	int offset;
+	ULONG offset;
 	int size;
 
 	sprintf(sio_status, "%d: %d", unit + 1, sector);

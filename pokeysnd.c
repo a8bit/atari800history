@@ -20,6 +20,9 @@
 /*                        compile-time option.  Defaults to unsigned -       */
 /*                        define SIGNED_SAMPLES to create signed.            */
 /* 03/22/98 - Ron Fries - Added 'filter' support to channels 1 & 2.          */
+/* 09/29/99 - Krzysztof Nikiel - Changed Pokey_process main loop;            */
+/*                               added output interpolation to reduce        */
+/*                               DSP interference                            */
 /*                                                                           */
 /* V2.0 Detailed Changes                                                     */
 /* ---------------------                                                     */
@@ -202,6 +205,8 @@ static uint32 Samp_n_max,		/* Sample max.  For accuracy, it is *256 */
 static uint32 Base_mult[MAXPOKEYS];		/* selects either 64Khz or 15Khz clock mult */
 
 extern int atari_speaker;
+
+static uint16 last_val = 0;		/* last output value */
 
 /*****************************************************************************/
 /* In my routines, I treat the sample output as another divide by N counter  */
@@ -639,6 +644,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			count++;
 		} while (count < Num_pokeys);
 
+		/* if the next event is a channel change */
+		if (next_event != SAMPLE) {
+			/* shift the polynomial counters */
 
 		count = Num_pokeys;
 		do {
@@ -664,9 +672,6 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		   though. */
 		Poly_adjust += event_min;
 
-		/* if the next event is a channel change */
-		if (next_event != SAMPLE) {
-			/* shift the polynomial counters */
 			P4 = (P4 + Poly_adjust) % POLY4_SIZE;
 			P5 = (P5 + Poly_adjust) % POLY5_SIZE;
 			P9 = (P9 + Poly_adjust) % POLY9_SIZE;
@@ -769,26 +774,44 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		else {					/* otherwise we're processing a sample */
 			/* adjust the sample counter - note we're using the 24.8 integer
 			   which includes an 8 bit fraction for accuracy */
+
+			int iout;
+#ifndef NOSNDINTER
+			if (cur_val != last_val) {
+				if (*Samp_n_cnt < Samp_n_max) {		/* need interpolation */
+					iout = (cur_val * (*Samp_n_cnt) +
+							last_val * (Samp_n_max - *Samp_n_cnt))
+						/ Samp_n_max;
+				}
+				else
+					iout = cur_val;
+				last_val = cur_val;
+			}
+			else
+				iout = cur_val;
+#else
+			iout = cur_val;
+#endif
+
+#ifdef CLIP						/* if clipping is selected */
+			if (iout > SAMP_MAX) {	/* then check high limit */
+				*buffer++ = (uint8) SAMP_MAX;	/* and limit if greater */
+			}
+			else if (iout < SAMP_MIN) {		/* else check low limit */
+				*buffer++ = (uint8) SAMP_MIN;	/* and limit if less */
+			}
+			else {				/* otherwise use raw value */
+				*buffer++ = (uint8) iout;
+			}
+#else
+			*buffer++ = (uint8) iout;	/* clipping not selected, use value */
+#endif
+
 #ifdef POKEYSND_BIG_ENDIAN
 			*(Samp_n_cnt + 1) += Samp_n_max;
 #else
 			*Samp_n_cnt += Samp_n_max;
 #endif
-
-#ifdef CLIP						/* if clipping is selected */
-			if (cur_val > SAMP_MAX) {	/* then check high limit */
-				*buffer++ = (uint8) SAMP_MAX;	/* and limit if greater */
-			}
-			else if (cur_val < SAMP_MIN) {	/* else check low limit */
-				*buffer++ = (uint8) SAMP_MIN;	/* and limit if less */
-			}
-			else {				/* otherwise use raw value */
-				*buffer++ = (uint8) cur_val;
-			}
-#else
-			*buffer++ = (uint8) cur_val;	/* clipping not selected, use value */
-#endif
-
 			/* and indicate one less byte in the buffer */
 			n--;
 		}

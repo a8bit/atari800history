@@ -1,3 +1,84 @@
+Changes in 0.9.9c
+-----------------
+
++ New features for end users:
+  - keyboard autorepeat in UI
+  - separate current directories for operations in UI
+  - better Linux SVGA support (including new 320x240 graphics mode)
+  - new Linux SVGALIB keyboard handler
+  - better sound (interpolation, less system load, configurable sound delay)
+
+! coding style:
+  - please do not change indentation of a source file unless you rewrote major
+    part of it - this makes 'diff' impossible to use and causes hard time for
+    people tracking changes between versions
+  - use TABelators instead of spaces, if possible (set TAB size to 4 spaces)
+  - you can use 'indent -kr -nce -ts4 source.c' to format the source file
+  - if you're sending me diffs then please use diff -u (Unified), if possible
+
+List of changes for programmers:
+
+o TODO updated - volunteers, please read it.
+
+o created new function 'atari_sleep_ms(ULONG ms)' that should be used
+  everywhere in the emulator where you need to delay the execution for a while
+  in a portable manner. Right now used in ui.c for keyboard autorepeat.
+  #include "atari.h" for that.
+  Architectures without usleep() and nanosleep() will edit just this function
+  instead of polluting the whole source code by many #ifdefs.
+
+  Similar thing needs to be done in the syncing code for main emulator loop
+  in the atari.c.
+
+o removed ALL warnings during compilation on DOS and Linux, with help of
+  Jari Karppinen.
+  Atari800 for DOS is known to have problems compiling under latest DJGPP 2.02
+  and/or with latest Allegro 3.12. This will be fixed as soon as I download
+  the above mentioned dev tools.
+
+o ui.c: the keyboard repeat works on all platforms (thanks to 'atari_sleep_ms')
+        some array size hardcoded constants replaced by #define FILENAME_SIZE
+        memcpy(fname, ' ') and strcpy(fname, "  ") replaced by memset
+
+o pokey.c: ULONG DivNIRQ[], DivNMAX[], TimeBase replaced by 'unsigned int'.
+  This removed the warnings in Pokey[Read|Save]State(). It should not have any
+  negative effects on machines where sizeof(long int) = sizeof(int).
+  Linux-ia32, DOS/DJGPP and Atari Falcon/TT machines (all using GCC)
+  should be OK.
+  Is there an other computer/compiler with 16-bit ints or 64-bit longs that
+  runs Atari800? If yes, state saving/restoring will neither work there,
+  I think. And 16-bit ints would probably broke most of the emulator, anyway...
+
+
+Following changes in 0.9.9c done by Krzysztof Nikiel <krzych00@priv7.onet.pl>
+
+o new Makefile.linux (Makefile.unix still works for Linux)
+
+o pokeysnd.c: added sound interpolation to reduce dsp frequency interference
+  (now should work good even at low rates) and required main output loop
+  reorganization.
+
+o sound.c: added correct dsp device handling. Now shouldn't slow down
+  the emulation.
+  added option '-dsprate <rate>' and changed default rate to 22050 Hz (why?)
+  added option '-snddelay <miliseconds>' that allows tuning sound delay
+                according to interval betwen sound updates
+
+o sound_dos.c: buffersize increased from 400 to 440 bytes
+
+o sbdrv.c: divided sound buffer into four parts.
+
+o Linux svgalib: better utilized svgalib capabilities;
+  used mode 320x240x256;
+  removed vgagl dependency;
+  added status of disk LED;
+
+o ui.c : bug in SaveState - no terminating zero at end of string
+  separate current dirs for different operations
+  refresh screen bug in GetKeyPress
+  added keyboard autorepeat
+
+
 Changes in 0.9.9b
 -----------------
 

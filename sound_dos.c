@@ -2,6 +2,7 @@
 
 #include "pokeysnd.h"
 #include "sbdrv.h"
+#include "log.h"
 
 #define FALSE 0
 #define TRUE 1
@@ -9,14 +10,15 @@
 static sound_enabled = TRUE;
 
 int playback_freq = FREQ_17_APPROX / 28 / 3;
-int buffersize = 400;
+int buffersize = 440;
 int DMAmode = AUTO_DMA;
-
+/*
 static int AUDCTL = 0x00;
 static int AUDF[4] =
 {0, 0, 0, 0};
 static int AUDC[4] =
 {0, 0, 0, 0};
+*/
 
 void Sound_Initialise(int *argc, char *argv[])
 {
@@ -34,10 +36,12 @@ void Sound_Initialise(int *argc, char *argv[])
 	*argc = j;
 
 	if (sound_enabled) {
+/*
 		int channel;
 		int dspbits;
 		unsigned int formats;
 		int tmp;
+*/
 
 		if (!OpenSB(playback_freq, buffersize)) {
 			Aprint("Cannot init sound card\n");

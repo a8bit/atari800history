@@ -1,6 +1,16 @@
 This is a list of things that need to be done
 ---------------------------------------------
 
+o merge common parts of VGA, SVGALIB and AtariFalcon keyboard stuff into 
+  one source file named like atari_keyboard.c.
+
+o rewrite joycfg to use curses so it will be usable on all platforms.
+
+o simplify and correct synchronization code in main emulator loop - some
+  people still complain that the emulator is slower than the original Atari.
+
+o update atari_vga.c so it's compilable using latest GCC 2.95 and Allegro 3.12
+
 o The obsolete variable "countdown_rate" is still in use within
   "atari_amiga.c" this should be a trivial change, however I'm reluctant
   to do it without an Amiga to check it. I've left it defined in "atari.c"

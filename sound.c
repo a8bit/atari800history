@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <unistd.h>
+
 #ifndef AMIGA
 #include "config.h"
 #endif
@@ -9,42 +12,42 @@
 
 #include "pokeysnd.h"
 
-/* 0002 = 2 Fragments */
-/* 0007 = means each fragment is 2^2 or 128 bytes */
-/* See voxware docs in /usr/src/linux/drivers/sound for more info */
-
-#define FRAG_SPEC 0x0002000a
+#define FRAGSIZE	7
 
 #define FALSE 0
 #define TRUE 1
 
-static char dsp_buffer[44100];
-static int sndbufsize;
+#define DEFDSPRATE 22050
 
-static int gain = 8;
+static char *dspname = "/dev/dsp";
+static int dsprate = DEFDSPRATE;
+static int fragstofill = 0;
+static int snddelay = 40;		/* delay in milliseconds */
 
-static sound_enabled = TRUE;
+static int gain = 4;
+
+static int sound_enabled = TRUE;
 static int dsp_fd;
-
-static int dsp_sample_rate;
+/*
 static int dsp_sample_rate_divisor = 35;
 static int AUDCTL = 0x00;
-static int AUDF[4] =
-{0, 0, 0, 0};
-static int AUDC[4] =
-{0, 0, 0, 0};
-
+static int AUDF[4] = {0, 0, 0, 0};
+static int AUDC[4] = {0, 0, 0, 0};
+*/
 void Voxware_Initialise(int *argc, char *argv[])
 {
 	int i, j;
+	struct audio_buf_info abi;
 
 	for (i = j = 1; i < *argc; i++) {
 		if (strcmp(argv[i], "-sound") == 0)
 			sound_enabled = TRUE;
 		else if (strcmp(argv[i], "-nosound") == 0)
 			sound_enabled = FALSE;
-		else if (strcmp(argv[i], "-dsp_divisor") == 0)
-			sscanf(argv[++i], "%d", &dsp_sample_rate_divisor);
+		else if (strcmp(argv[i], "-dsprate") == 0)
+			sscanf(argv[++i], "%d", &dsprate);
+		else if (strcmp(argv[i], "-snddelay") == 0)
+			sscanf(argv[++i], "%d", &snddelay);
 		else
 			argv[j++] = argv[i];
 	}
@@ -52,51 +55,55 @@ void Voxware_Initialise(int *argc, char *argv[])
 	*argc = j;
 
 	if (sound_enabled) {
-		int channel;
-		int dspbits;
-		unsigned int formats;
-		int tmp;
-
-		dsp_fd = open("/dev/dsp", O_WRONLY, 0777);
-		if (dsp_fd == -1) {
-			perror("/dev/dsp");
-			exit(1);
+		if ((dsp_fd = open(dspname, O_WRONLY)) == -1) {
+			perror(dspname);
+			sound_enabled = 0;
+			return;
 		}
-		/*
-		 * Get sound formats
-		 */
 
-		ioctl(dsp_fd, SNDCTL_DSP_GETFMTS, &formats);
+		if (ioctl(dsp_fd, SNDCTL_DSP_SPEED, &dsprate)) {
+			fprintf(stderr, "%s: cannot set %d speed\n", dspname, dsprate);
+			close(dsp_fd);
+			sound_enabled = 0;
+			return;
+		}
 
-		/*
-		 * Set sound of sound fragment to special?
-		 */
+		i = AFMT_U8;
+		if (ioctl(dsp_fd, SNDCTL_DSP_SETFMT, &i)) {
+			fprintf(stderr, "%s: cannot set 8-bit sample\n", dspname);
+			close(dsp_fd);
+			sound_enabled = 0;
+			return;
+		}
 
-		tmp = FRAG_SPEC;
-		ioctl(dsp_fd, SNDCTL_DSP_SETFRAGMENT, &tmp);
+		fragstofill = ((dsprate * snddelay / 1000) >> FRAGSIZE) + 1;
+		if (fragstofill > 100)
+			fragstofill = 100;
 
-		/*
-		 * Get preferred buffer size
-		 */
+		/* fragments of size 2^FRAGSIZE bytes */
+		i = ((fragstofill + 1) << 16) | FRAGSIZE;
+		if (ioctl(dsp_fd, SNDCTL_DSP_SETFRAGMENT, &i)) {
+			fprintf(stderr, "%s: cannot set fragments\n", dspname);
+			close(dsp_fd);
+			sound_enabled = 0;
+			return;
+		}
 
-		ioctl(dsp_fd, SNDCTL_DSP_GETBLKSIZE, &sndbufsize);
+		if (ioctl(dsp_fd, SNDCTL_DSP_GETOSPACE, &abi)) {
+			fprintf(stderr, "%s: unable to get output space\n", dspname);
+			close(dsp_fd);
+			sound_enabled = 0;
+			return;
+		}
 
-		/*
-		 * Set to 8bit sound
-		 */
+		printf("%s: %d(%d) fragments(free) of %d bytes, %d bytes free\n",
+			   dspname,
+			   abi.fragstotal,
+			   abi.fragments,
+			   abi.fragsize,
+			   abi.bytes);
 
-		dspbits = 8;
-		ioctl(dsp_fd, SNDCTL_DSP_SAMPLESIZE, &dspbits);
-		ioctl(dsp_fd, SOUND_PCM_READ_BITS, &dspbits);
-
-		/*
-		 * Set sample rate
-		 */
-
-		ioctl(dsp_fd, SNDCTL_DSP_SPEED, &dsp_sample_rate);
-		ioctl(dsp_fd, SOUND_PCM_READ_RATE, &dsp_sample_rate);
-
-		Pokey_sound_init(FREQ_17_EXACT, dsp_sample_rate, 1);
+		Pokey_sound_init(FREQ_17_EXACT, dsprate, 1);
 	}
 }
 
@@ -108,33 +115,40 @@ void Voxware_Exit(void)
 
 void Voxware_UpdateSound(void)
 {
-	if (sound_enabled) {
-		sndbufsize = dsp_sample_rate / dsp_sample_rate_divisor;
+	int i;
+	struct audio_buf_info abi;
+	char dsp_buffer[1 << FRAGSIZE];
 
-		Pokey_process(dsp_buffer, sndbufsize);
-		/*
-		 * Send sound buffer to DSP device
-		 */
+	if (!sound_enabled)
+		return;
 
-		write(dsp_fd, dsp_buffer, sndbufsize);
+	if (ioctl(dsp_fd, SNDCTL_DSP_GETOSPACE, &abi))
+		return;
+		
+	i = abi.fragstotal - abi.fragments;
+
+	/* we need fragstofill fragments to be filled */
+	for (; i < fragstofill; i++) {
+		Pokey_process(dsp_buffer, sizeof(dsp_buffer));
+		write(dsp_fd, dsp_buffer, sizeof(dsp_buffer));
 	}
 }
 
 void Atari_AUDC(int channel, int byte)
 {
 	channel--;
-	Update_pokey_sound(/* 0xd201 */ 1 + channel + channel, byte, 0, gain);
+	Update_pokey_sound( /* 0xd201 */ 1 + channel + channel, byte, 0, gain);
 }
 
 void Atari_AUDF(int channel, int byte)
 {
 	channel--;
-	Update_pokey_sound(/* 0xd200 */ 0 + channel + channel, byte, 0, gain);
+	Update_pokey_sound( /* 0xd200 */ 0 + channel + channel, byte, 0, gain);
 }
 
 void Atari_AUDCTL(int byte)
 {
-	Update_pokey_sound(/* 0xd208 */ 8, byte, 0, gain);
+	Update_pokey_sound( /* 0xd208 */ 8, byte, 0, gain);
 }
 
 #else

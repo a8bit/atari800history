@@ -35,8 +35,8 @@ int DELAYED_XMTDONE_IRQ;
 UBYTE AUDF[4];    /* AUDFx (D200, D202, D204, D206) */
 UBYTE AUDC[4];    /* AUDCx (D201, D203, D205, D207) */
 UBYTE AUDCTL;     /* AUDCTL (D208) */   
-ULONG DivNIRQ[4], DivNMax[4];
-ULONG TimeBase = DIV_64;
+unsigned int /* ULONG */ DivNIRQ[4], DivNMax[4];
+unsigned int /* ULONG */ TimeBase = DIV_64;
 
 UBYTE POKEY_GetByte(UWORD addr)
 {
@@ -442,8 +442,6 @@ void POKEYStateSave( void )
 	SaveUBYTE( &AUDC[0], 4 );
 	SaveUBYTE( &AUDCTL, 1 );
 
-	/* This needs to be examined, since SaveINT will only work for
-	   ULONGS if sizeof( ULONG ) == 4 */
 	SaveINT( &DivNIRQ[0], 4);
 	SaveINT( &DivNMax[0], 4);
 	SaveINT( &TimeBase, 1 );
@@ -466,8 +464,6 @@ void POKEYStateRead( void )
 	ReadUBYTE( &AUDC[0], 4 );
 	ReadUBYTE( &AUDCTL, 1 );
 
-	/* This needs to be examined, since ReadINT will only work for
-	   ULONGS if sizeof( ULONG ) == 4 */
 	ReadINT( &DivNIRQ[0], 4);
 	ReadINT( &DivNMax[0], 4);
 	ReadINT( &TimeBase, 1 );
