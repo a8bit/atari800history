@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Clean ups and optimizations:                     */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 15th May 2000                      */
+/* Last changes: 20th May 2000                      */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -77,16 +77,15 @@ extern UBYTE missile_gra_enabled;
 extern UBYTE player_flickering;
 extern UBYTE missile_flickering;
 
-static int global_hposp[4];
-static int global_hposm[4];
+static UBYTE *hposp_ptr[4];
+static UBYTE *hposm_ptr[4];
+static UBYTE hposp_skip[4];
 
-static int global_sizep[4] =
-{2, 2, 2, 2};
-static int global_sizem[4] =
-{2, 2, 2, 2};
+static ULONG grafp_lookup[4][256];
+static ULONG *grafp_ptr[4];
+static int global_sizem[4];
 
-static UBYTE PM_Width[4] =
-{1, 2, 1, 4};
+static UBYTE PM_Width[4] = {1, 2, 1, 4};
 
 /* Meaning of bits in pm_scanline:
 bit 0 - Player 0
@@ -171,10 +170,30 @@ void setup_gtia9_11(void) {
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
-	PRIOR = 0x00;
+	int i;
+	for (i = 0; i < 256; i++) {
+		int tmp = i + 0x100;
+		ULONG grafp1 = 0;
+		ULONG grafp2 = 0;
+		ULONG grafp4 = 0;
+		do {
+			grafp1 <<= 1;
+			grafp2 <<= 2;
+			grafp4 <<= 4;
+			if (tmp & 1) {
+				grafp1++;
+				grafp2 += 3;
+				grafp4 += 15;
+			}
+			tmp >>= 1;
+		} while (tmp != 1);
+		grafp_lookup[2][i] = grafp_lookup[0][i] = grafp1;
+		grafp_lookup[1][i] = grafp2;
+		grafp_lookup[3][i] = grafp4;
+	}
 	memset(cl_lookup, COLOUR_BLACK, sizeof(cl_lookup));
-	lookup_gtia9[0] = 0;
-	setup_gtia9_11();
+	for (i = 0; i < 32; i++)
+		GTIA_PutByte(i, 0);
 }
 
 /* Prepare PMG scanline ---------------------------------------------------- */
@@ -189,24 +208,20 @@ void new_pm_scanline(void)
 
 /* Draw Players */
 
-#define DO_PLAYER(n)	if (GRAFP##n) {				\
-	UBYTE grafp = GRAFP##n;							\
-	int sizep = global_sizep[n];					\
-	unsigned hposp = global_hposp[n];				\
-	pm_dirty = TRUE;								\
-	do {											\
-		if (grafp & 0x80) {							\
-			int j = sizep;							\
-			do {									\
-				if (hposp < ATARI_WIDTH / 2)		\
-					P##n##PL |= pm_scanline[hposp] |= 1 << n;	\
-				hposp++;							\
-			} while (--j);							\
-		}											\
-		else										\
-			hposp += sizep;							\
-		grafp <<= 1;								\
-	} while (grafp);								\
+#define DO_PLAYER(n)	if (GRAFP##n) {						\
+	ULONG grafp = grafp_ptr[n][GRAFP##n] >> hposp_skip[n];	\
+	if (grafp) {											\
+		UBYTE *ptr = hposp_ptr[n];							\
+		if (ptr < pm_scanline + ATARI_WIDTH / 2 - 2) {		\
+			pm_dirty = TRUE;								\
+			do {											\
+				if (grafp & 1)								\
+					P##n##PL |= *ptr |= 1 << n;				\
+				ptr++;										\
+				grafp >>= 1;								\
+			} while (grafp && ptr < pm_scanline + ATARI_WIDTH / 2 - 2);	\
+		}													\
+	}														\
 }
 
 	DO_PLAYER(0)
@@ -218,18 +233,23 @@ void new_pm_scanline(void)
 
 #define DO_MISSILE(n,p,m,r,l)	if (GRAFM & m) {	\
 	int j = global_sizem[n];						\
-	unsigned hposm = global_hposm[n];				\
+	UBYTE *ptr = hposm_ptr[n];						\
 	if (GRAFM & r) {								\
 		if (GRAFM & l)								\
 			j <<= 1;								\
 	}												\
 	else											\
-		hposm += j;									\
-	do {											\
-		if (hposm < ATARI_WIDTH / 2)				\
-			M##n##PL |= pm_scanline[hposm] |= p;	\
-		hposm++;									\
-	} while (--j);									\
+		ptr += j;									\
+	if (ptr < pm_scanline + 2) {					\
+		j += ptr - pm_scanline - 2;					\
+		ptr = pm_scanline + 2;						\
+	}												\
+	else if (ptr + j > pm_scanline + ATARI_WIDTH / 2 - 2)	\
+		j = pm_scanline + ATARI_WIDTH / 2 - 2 - ptr;		\
+	if (j > 0)										\
+		do											\
+			M##n##PL |= *ptr++ |= p;				\
+		while (--j);								\
 }
 
 	if (GRAFM) {
@@ -789,36 +809,40 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _HPOSM0:
 		HPOSM0 = byte;
-		global_hposm[0] = byte - 0x20;
+		hposm_ptr[0] = pm_scanline + byte - 0x20;
 		break;
 	case _HPOSM1:
 		HPOSM1 = byte;
-		global_hposm[1] = byte - 0x20;
+		hposm_ptr[1] = pm_scanline + byte - 0x20;
 		break;
 	case _HPOSM2:
 		HPOSM2 = byte;
-		global_hposm[2] = byte - 0x20;
+		hposm_ptr[2] = pm_scanline + byte - 0x20;
 		break;
 	case _HPOSM3:
 		HPOSM3 = byte;
-		global_hposm[3] = byte - 0x20;
+		hposm_ptr[3] = pm_scanline + byte - 0x20;
 		break;
-	case _HPOSP0:
-		HPOSP0 = byte;
-		global_hposp[0] = byte - 0x20;
-		break;
-	case _HPOSP1:
-		HPOSP1 = byte;
-		global_hposp[1] = byte - 0x20;
-		break;
-	case _HPOSP2:
-		HPOSP2 = byte;
-		global_hposp[2] = byte - 0x20;
-		break;
-	case _HPOSP3:
-		HPOSP3 = byte;
-		global_hposp[3] = byte - 0x20;
-		break;
+
+#define DO_HPOSP(n)	case _HPOSP##n:							\
+	HPOSP##n = byte;										\
+	if (byte >= 0x22) {										\
+		hposp_ptr[n] = pm_scanline + byte - 0x20;			\
+		hposp_skip[n] = 0;									\
+	}														\
+	else if (byte > 2) {									\
+		hposp_ptr[n] = pm_scanline + 2;						\
+		hposp_skip[n] = 0x22 - byte;						\
+	}														\
+	else													\
+		hposp_ptr[n] = pm_scanline + ATARI_WIDTH / 2 - 2;	\
+	break;
+
+	DO_HPOSP(0)
+	DO_HPOSP(1)
+	DO_HPOSP(2)
+	DO_HPOSP(3)
+
 	case _SIZEM:
 		SIZEM = byte;
 		global_sizem[0] = PM_Width[byte & 0x03];
@@ -828,24 +852,24 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _SIZEP0:
 		SIZEP0 = byte;
-		global_sizep[0] = PM_Width[byte & 0x03];
+		grafp_ptr[0] = grafp_lookup[byte & 3];
 		break;
 	case _SIZEP1:
 		SIZEP1 = byte;
-		global_sizep[1] = PM_Width[byte & 0x03];
+		grafp_ptr[1] = grafp_lookup[byte & 3];
 		break;
 	case _SIZEP2:
 		SIZEP2 = byte;
-		global_sizep[2] = PM_Width[byte & 0x03];
+		grafp_ptr[2] = grafp_lookup[byte & 3];
 		break;
 	case _SIZEP3:
 		SIZEP3 = byte;
-		global_sizep[3] = PM_Width[byte & 0x03];
+		grafp_ptr[3] = grafp_lookup[byte & 3];
 		break;
 	case _PRIOR:
 		set_prior(byte);
 		PRIOR = byte;
-		if (PRIOR & 0x40)
+		if (byte & 0x40)
 			setup_gtia9_11();
 		break;
 	case _VDELAY:
@@ -993,5 +1017,4 @@ void GTIAStateRead( void )
 	GTIA_PutByte(_COLBK, COLBK);
 	GTIA_PutByte(_PRIOR, PRIOR);
 	GTIA_PutByte(_GRACTL, GRACTL);
-	pm_dirty = TRUE;
 }

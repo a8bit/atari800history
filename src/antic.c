@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Correct timing, internal memory and other fixes: */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 18th May 2000                      */
+/* Last changes: 20th May 2000                      */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -686,12 +686,6 @@ void ANTIC_Initialise(int *argc, char *argv[])
 	hires_lum(0x00) = hires_lum(0x40) = hires_lum(0x80) = hires_lum(0xc0) = 0;
 #endif
 	init_pm_lookup();
-	pm_lookup_ptr = pm_lookup_table[0];
-
-	player_dma_enabled = missile_dma_enabled = 0;
-	player_gra_enabled = missile_gra_enabled = 0;
-	player_flickering = missile_flickering = 0;
-	GRAFP0 = GRAFP1 = GRAFP2 = GRAFP3 = GRAFM = 0;
 }
 
 void ANTIC_Reset(void) {

@@ -1,5 +1,15 @@
-Changes in 1.0.0
------------------
+Changes in 1.0.1  - 2000/05/25
+----------------
+
+o ANTIC&GTIA: another PMG speed optimization <Piotr>
+
+o cpu_m68k.s: updated to reflect recent Piotr's changes <Gerhard>
+
+o CPU: 6 undocumented instructions fixed  <Matt>
+
+
+Changes in 1.0.0  - 2000/05/22
+----------------
 
 o Atari Falcon
 - makes use of draw_display which greatly improves playability

@@ -1,6 +1,6 @@
 /*	CPU.C
  *	Original Author : David Firth
- *	Last changes    : 25th April 2000, Piotr Fusik (Fox)
+ *	Last changes    : 24th May 2000, Matthew Conte
  */
 /*
 	Compilation options
@@ -1189,13 +1189,30 @@ void GO(int limit)
 
 	OPCODE(6b)				/* ARR #ab [unofficial - Acc AND Data, ROR result] */
 		/* It does some 'BCD fixup' if D flag is set - should be fixed (Fox) */
-		data = (A & dGetByte(PC++)) | (C << 8);
-		if (C)
-			Z = N = A = (data >> 1) | 0x80;
+		/* MPC 05/24/00 */
+		data = A & dGetByte(PC++);
+		if (regP & D_FLAG)
+		{
+			UWORD temp;
+			Z = N = temp = (data >> 1) | (C << 7);
+			V = ((temp ^ data) & 0x40) >> 6;
+			if (((data & 0x0F) + (data & 0x01)) > 5)
+				temp = (temp & 0xF0) | ((temp + 0x6) & 0x0F);
+			if (((data & 0xF0) + (data & 0x10)) > 0x50)
+			{
+				temp = (temp & 0x0F) | ((temp + 0x60) & 0xF0);
+				C = 1;
+			}
+			else
+				C = 0;
+			A = (UBYTE) temp;
+		}
 		else
-			Z = N = A = (data >> 1);
-		C = (A & 0x40) >> 6;			/* C = A'6 */
-		V = ((A >> 6) ^ (A >> 5)) & 1;	/* V = A'6 ^ A'5 */
+		{
+			Z = N = A = (data >> 1) | (C << 7);
+			C = (A & 0x40) >> 6;
+			V = ((A >> 6) ^ (A >> 5)) & 1;
+		}
 		DONE
 
 	OPCODE(6c)				/* JMP (abcd) */
@@ -1352,10 +1369,10 @@ void GO(int limit)
 		Z = N = A = X;
 		DONE
 
-	OPCODE(8b)				/* ANE #ab [unofficial - A AND X AND (Mem OR $EF) to Acc] (Fox) */
+	OPCODE(8b)				/* ANE #ab [unofficial - (A OR $EE) AND X AND Mem to Acc] (Fox) */
 		data = dGetByte(PC++);
-		N = Z = A & X & data;
-		A &= X & (data | 0xef);
+		/* MPC 05/24/00 */
+		N = Z = A = (A | 0xee) & X & data;
 		DONE
 
 	OPCODE(8c)				/* STY abcd */
@@ -1445,7 +1462,8 @@ void GO(int limit)
 		/* Seems to be stable */
 		addr = dGetWord(PC);
 		PC += 2;
-		data = Y & (addr >> 8);
+		/* MPC 05/24/00 */
+		data = Y & ((UBYTE) ((addr >> 8) + 1));
 		addr += X;
 		PutByte(addr, data);
 		DONE
@@ -1459,7 +1477,8 @@ void GO(int limit)
 		/* Seems to be stable */
 		addr = dGetWord(PC);
 		PC += 2;
-		data = X & (addr >> 8);
+		/* MPC 05/24/00 */
+		data = X & ((UBYTE) ((addr >> 8) + 1));
 		addr += Y;
 		PutByte(addr, data);
 		DONE
@@ -1522,8 +1541,9 @@ void GO(int limit)
 		Z = N = X = A;
 		DONE
 
-	OPCODE(ab)				/* ANX #ab [unofficial - AND #ab, then TAX] */
-		Z = N = X = A &= dGetByte(PC++);
+	OPCODE(ab)				/* ANX #ab [unofficial - (A OR $EE) AND #ab, then TAX] */
+		/* MPC 05/24/00 */
+		Z = N = X = A = ((A | 0xee) & dGetByte(PC++));
 		DONE
 
 	OPCODE(ac)				/* LDY abcd */
@@ -1690,6 +1710,9 @@ void GO(int limit)
 		data = dGetByte(PC++);
 		C = X >= data;
 		Z = N = X - data;
+		/* MPC 05/24/00 */
+		X -= data;
+		Z = N = X;
 		DONE
 
 	OPCODE(cc)				/* CPY abcd */
