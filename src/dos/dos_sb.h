@@ -20,43 +20,11 @@
 ** dos_sb.h
 **
 ** DOS Sound Blaster header file
-** $Id: dos_sb.h,v 1.2 2000/05/14 19:11:56 matt Exp $
+** $Id: dos_sb.h,v 1.7 2000/08/11 01:40:33 matt Exp $
 */
 
 #ifndef _DOS_SB_H_
 #define _DOS_SB_H_
-
-/* These should be changed depending on the platform */
-#ifndef  int8
-#define  int8     char
-#endif
-#ifndef  int16
-#define  int16    short
-#endif
-#ifndef  int32
-#define  int32    int
-#endif
-
-#ifndef  uint8
-#define  uint8    unsigned char
-#endif
-#ifndef  uint16
-#define  uint16   unsigned short
-#endif
-#ifndef  uint32
-#define  uint32   unsigned int
-#endif
-
-#ifndef  boolean
-#define  boolean  int8
-#endif
-
-#ifndef  TRUE
-#define  TRUE     1
-#endif
-#ifndef  FALSE
-#define  FALSE    0
-#endif
 
 typedef void (*sbmix_t)(void *buffer, int size);
 
@@ -64,12 +32,10 @@ typedef void (*sbmix_t)(void *buffer, int size);
 extern "C" {
 #endif /* __cplusplus */
 
-extern boolean sb_init(int *sample_rate, int *bps, int *buf_size, boolean *stereo);
+extern int  sb_init(int *sample_rate, int *bps, int *buf_size, int *stereo);
 extern void sb_shutdown(void);
-extern int sb_startoutput(sbmix_t fillbuf);
+extern int  sb_startoutput(sbmix_t fillbuf);
 extern void sb_stopoutput(void);
-
-/* in case we *really* need to change the sample rate during playback */
 extern void sb_setrate(int rate);
 
 #ifdef __cplusplus
@@ -78,3 +44,18 @@ extern void sb_setrate(int rate);
 
 #endif /* _DOS_SB_H_ */
 
+/*
+** $Log: dos_sb.h,v $
+** Revision 1.7  2000/08/11 01:40:33  matt
+** major rewrite - far cleaner, and fixed an SB detection reboot bug =(
+**
+** Revision 1.6  2000/07/17 01:52:30  matt
+** made sure last line of all source files is a newline
+**
+** Revision 1.5  2000/07/10 13:52:21  matt
+** oops...  boolean was inappropriately typed
+**
+** Revision 1.4  2000/06/09 15:12:27  matt
+** initial revision
+**
+*/

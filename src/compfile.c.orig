@@ -32,7 +32,7 @@
 #define MAX_PATH 128
 #endif
 
-extern int SIO_Mount(int diskno, const char *filename, int b_open_readonly );
+extern int SIO_Mount(int diskno, char *filename);
 extern void Set_Temp_File( int diskno );
 extern void SIO_Dismount(int diskno);
 
@@ -109,7 +109,7 @@ static void show_file_error( FILE *stream )
 /* Opens a ZLIB compressed (gzip) file, creates a temporary filename, and decompresses
    the contents of the .gz file to the temporary file name. Note that *outfilename is
    actually blank coming in and is filled in with whatever tmpnam returns */
-int openzlib(int diskno, const char *infilename, char *outfilename )
+int openzlib(int diskno, char *infilename, char *outfilename )
 {
 #ifndef ZLIB_CAPABLE
 	Aprint( "This executable cannot decompress ZLIB files" );
@@ -198,7 +198,7 @@ int openzlib(int diskno, const char *infilename, char *outfilename )
 #endif	/* ZLIB_CAPABLE */
 }
 
-int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
+int dcmtoatr(FILE *fin, FILE *fout, char *input, char *output )
 {
 	int archivetype;	/* Block type for first block */
 	int blocktype;		/* Current block type */
@@ -331,7 +331,7 @@ int dcmtoatr(FILE *fin, FILE *fout, const char *input, char *output )
 
 /* Opens a DCM file and decodes it to a temporary file, then returns the
    file handle for the temporary file and its name. */
-int opendcm( int diskno, const char *infilename, char *outfilename )
+int opendcm( int diskno, char *infilename, char *outfilename )
 {
 	FILE	*infile, *outfile;
 	int	fd = -1;

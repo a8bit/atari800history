@@ -438,7 +438,6 @@ int main(int argc, char **argv)
 		default_tv_mode = 2;
 	}
 
-	Palette_Initialise(&argc, argv);
 	Device_Initialise(&argc, argv);
 	SIO_Initialise (&argc, argv);
 	Atari_Initialise(&argc, argv);	/* Platform Specific Initialisation */

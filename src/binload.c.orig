@@ -41,10 +41,7 @@ void BIN_loader_cont(void)
 	if (bin_fd < 0)
 		return;
 	if (start_binloading)
-	{
 		dPutByte(0x244, 0);
-		dPutByte(0x09, 1);
-	}
 	else
 		regS += 2;	/* pop ESC code */
 
@@ -93,7 +90,6 @@ void BIN_loader_cont(void)
 	dPutByte(0x0100 + regS, regS + 1);	/* low */
 	regS--;
 	regPC = dGetByte(0x2e2) | (dGetByte(0x2e3) << 8);
-	SetC;
 }
 
 /* Fake boot sector to call BIN_loader_cont at boot time */

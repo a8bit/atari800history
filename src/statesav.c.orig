@@ -17,7 +17,7 @@
 #include "zlib.h"
 #endif
 
-#define SAVE_VERSION_NUMBER	3
+#define SAVE_VERSION_NUMBER	2
 
 #ifndef TRUE
 #define TRUE	1
@@ -409,7 +409,7 @@ int ReadAtariState( char *filename, const char *mode )
 		return FALSE;
 	}
 
-	if( StateVersion != SAVE_VERSION_NUMBER)
+	if( StateVersion > SAVE_VERSION_NUMBER || StateVersion == 1 )
 	{
 		Aprint( "Cannot read this state file because it is an incompatible version." );
 		result = GZCLOSE( StateFile );

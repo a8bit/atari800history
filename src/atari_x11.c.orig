@@ -215,7 +215,6 @@ extern double fps;
 extern int nframes;
 
 static int autorepeat=1;
-static int last_focus=FocusOut;
 
 void autorepeat_get( ovid )
 { XKeyboardState kstat;
@@ -254,14 +253,11 @@ int GetKeyCode(XEvent * event)
 #endif
 		break;
 	case FocusIn:
-		/* sometimes 2 FocusIn occur with fvwm2 (when switching virt. desktops) */
-		if (last_focus == FocusOut) autorepeat_get();
+		autorepeat_get();
 		autorepeat_off();
-		last_focus = FocusIn;
 		break;
 	case FocusOut:
 		autorepeat_restore();
-		last_focus = FocusOut;
 		break;
 	case VisibilityNotify:
 		if( ((XVisibilityEvent*)event)->state==VisibilityFullyObscured )

@@ -40,8 +40,15 @@ void Voxware_Initialise(int *argc, char *argv[])
 			sscanf(argv[++i], "%d", &dsprate);
 		else if (strcmp(argv[i], "-snddelay") == 0)
 			sscanf(argv[++i], "%d", &snddelay);
-		else
+		else {
+			if (strcmp(argv[i], "-help") == 0) {
+				printf("\t-sound                    enable sound");
+				printf("\t-nosound                  disable sound");
+				printf("\t-dsprate <rate>           set dsp rate");
+				printf("\t-snddelay <milliseconds>  set sound delay");
+			}
 			argv[j++] = argv[i];
+		}
 	}
 
 	*argc = j;

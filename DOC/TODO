@@ -1,16 +1,19 @@
 This is a list of things that need to be done
 ---------------------------------------------
+o sound recording: make use of new sndsave.[ch] module (replace the
+  code in X11)
+
+o make the new function Rotate_Disks in sio.c available from UI
+
+o allow user to choose whether open a disk image read-only or not
+  (third parameter in SIO_Mount)
+
 o merge common parts of VGA, SVGALIB and AtariFalcon keyboard stuff
   into one source file named like atari_keyboard.c.
 
 o similarly create common sound.[ch] routines
 
-o sound recording should store the sound in the .WAV format and should
-  be available on all platforms (not only X11)
-
-o finally merge the ALLEGRO and plain DOS versions - digital sound is in
-  the plain DOS now so just take the joystick and sound card initialization
-  from ALLEGRO and you're done
+o finally merge sound_dos and dossound (the goal is to remove dossound)
 
 o rewrite joycfg to use curses so it will be usable on all platforms.
 

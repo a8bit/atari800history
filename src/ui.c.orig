@@ -49,7 +49,9 @@ static char curr_state_dir[MAX_FILENAME_LEN] = "";
 static char charset[1024];
 
 #ifdef WIN32
-extern unsigned long ulAtariState;
+extern int iKbBuffer[KEYBOARD_BUFFER_SIZE];
+extern int nKbBufferChars;
+extern ULONG unAtariState;
 extern void SafeShowScreen(void);
 extern HWND MainhWnd;
 unsigned long hThread = 0L;
@@ -142,6 +144,17 @@ int GetKeyPress(UBYTE * screen)
 	}
 
 	do {
+#ifdef WIN32
+		while (!nKbBufferChars) {
+			SafeShowScreen();
+			SleepEx(100, TRUE);
+		}
+		if (!(unAtariState & ATARI_RUNNING) || !hThread) {
+			hThread = 0L;
+/*          ExitThread( 0 ); */
+			_endthread();
+		}
+#endif							/* WIN32 */
 		keycode = Atari_Keyboard();
 	} while (keycode == AKEY_NONE);
 
@@ -677,7 +690,7 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 	List *list;
 	int flag = FALSE;
 	int next_dir;
-#ifndef WIN32
+
 	do {
 #ifdef __DJGPP__
 		char helpdir[MAX_FILENAME_LEN];
@@ -835,7 +848,6 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 			ListFree(list, (void *) free);
 		}
 	} while (next_dir);
-#endif /* WIN32 */
 	return flag;
 }
 
@@ -845,7 +857,7 @@ void DiskManagement(UBYTE * screen)
 	int done = FALSE;
 	int dsknum = 0;
 	int i;
-#ifndef WIN32
+
 	for (i = 0; i < 8; ++i)
 		menu[i] = sio_filename[i];
 
@@ -880,7 +892,7 @@ void DiskManagement(UBYTE * screen)
 					subdir = opendir(filename);
 					if (!subdir) {	/* A file was selected */
 						SIO_Dismount(dsknum + 1);
-						SIO_Mount(dsknum + 1, filename, FALSE);
+						SIO_Mount(dsknum + 1, filename);
 						break;
 					}
 					else {		/* A directory was selected */
@@ -899,7 +911,6 @@ void DiskManagement(UBYTE * screen)
 		else
 			done = TRUE;
 	}
-#endif
 }
 
 void CartManagement(UBYTE * screen)
@@ -1229,7 +1240,7 @@ void ui(UBYTE *screen)
 
 	ui_is_active = TRUE;
 #ifdef WIN32
-	ulAtariState |= ATARI_UI_ACTIVE;
+	unAtariState |= ATARI_UI_ACTIVE;
 #endif
 	/* Sound_Active(FALSE); */
 	if (!initialised) {
@@ -1369,8 +1380,15 @@ void ui(UBYTE *screen)
 			}
 			/* if 'quit' typed in monitor, exit emulator */
 		case MENU_EXIT:
+#ifdef WIN32
+			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
+			hThread = 0L;
+			/* ExitThread(0); */
+			_endthread();
+#else
 			Atari800_Exit(0);
 			exit(0);
+#endif
 		}
 	}
 #ifdef CURSES
@@ -1383,9 +1401,10 @@ void ui(UBYTE *screen)
 	ui_is_active = FALSE;
 	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
 #ifdef WIN32
-	ulAtariState &= ~ATARI_UI_ACTIVE;
+	unAtariState &= ~ATARI_UI_ACTIVE;
 	hThread = 0L;
 	/* ExitThread(0); */
+	_endthread();
 #endif
 }
 
@@ -1446,8 +1465,3 @@ int CrashMenu(UBYTE *screen)
 	return FALSE;
 }
 #endif
-
-void ReadCharacterSet( void )
-{
-	get_charset(charset);
-}

@@ -95,13 +95,8 @@ static int vgamouse_stick;
 static int vgamouse_strig;
 #endif
 
-// cursor keys joystick
-static int ctrig;
-static int cstick;
-// analog joystick
-static int atrig;
-static int astick;
-
+static int trig0;
+static int stick0;
 static int consol;
 
 extern int TRIG_auto[4];		/* autofire */
@@ -176,14 +171,14 @@ int Atari_Keyboard(void)
         {
           /* fire */
 #ifdef USE_CURSORBLOCK
-          ctrig = (kbhits[joydefs[0]] ? 0 : 1) & (kbhits[SCANCODE_LEFTCONTROL] ? 0 : 1);
+          trig0 = (kbhits[joydefs[0]] ? 0 : 1) & (kbhits[SCANCODE_LEFTCONTROL] ? 0 : 1);
 #else
-          ctrig = kbhits[joydefs[0]] ? 0 : 1;
+          trig0 = kbhits[joydefs[0]] ? 0 : 1;
 #endif
-          cstick |= 0xf;
+          stick0 |= 0xf;
           for (i = 1; i < sizeof(joydefs) / sizeof(joydefs[0]); i++)
             if (kbhits[joydefs[i]])
-              cstick &= joymask[i];
+              stick0 &= joymask[i];
         }
 
         consol = (consol & ~7)
@@ -523,10 +518,8 @@ void Atari_Initialise(int *argc, char *argv[])
                 vga_setpalette(i, red, green, blue);
 	}
 
-	ctrig = 1;
-	cstick = 15;
-	atrig = 1;
-	astick = 15;
+	trig0 = 1;
+	stick0 = 15;
 	consol = 7;
 }
 
@@ -658,7 +651,7 @@ void read_joystick(int js, int centre_x, int centre_y)
 	const int threshold = 50;
 	int status;
 
-	astick = 0x0f;
+	stick0 = 0x0f;
 
 	status = read(js, &js_data, JS_RETURN);
 	if (status != JS_RETURN) {
@@ -666,13 +659,13 @@ void read_joystick(int js, int centre_x, int centre_y)
 		exit(1);
 	}
 	if (js_data.x < (centre_x - threshold))
-		astick &= 0xfb;
+		stick0 &= 0xfb;
 	if (js_data.x > (centre_x + threshold))
-		astick &= 0xf7;
+		stick0 &= 0xf7;
 	if (js_data.y < (centre_y - threshold))
-		astick &= 0xfe;
+		stick0 &= 0xfe;
 	if (js_data.y > (centre_y + threshold))
-		astick &= 0xfd;
+		stick0 &= 0xfd;
 }
 #endif
 
@@ -680,18 +673,15 @@ void read_joystick(int js, int centre_x, int centre_y)
 int Atari_PORT(int num)
 {
 	if (num == 0) {
-	  
-//sorry, no time for this now 
-//
-//#ifdef JOYMOUSE
-//		stick0 = vgamouse_stick;
-//#endif
+#ifdef JOYMOUSE
+		stick0 = vgamouse_stick;
+#endif
 
 #ifdef LINUX_JOYSTICK
                 if (js0 != -1)
 		read_joystick(js0, js0_centre_x, js0_centre_y);
 #endif
-		return (astick << 4) | cstick;
+		return 0xf0 | stick0;
 	}
 	else
 		return 0xff;
@@ -700,13 +690,10 @@ int Atari_PORT(int num)
 
 int Atari_TRIG(int num)
 {
-	if (num == 1) {
-
-//sorry, no time for this now 
-//	  
-//#ifdef JOYMOUSE
-//		trig0 = vgamouse_strig;
-//#endif
+	if (num == 0) {
+#ifdef JOYMOUSE
+		trig0 = vgamouse_strig;
+#endif
 
 #ifdef LINUX_JOYSTICK
                 if (js0 != -1) {
@@ -718,10 +705,9 @@ int Atari_TRIG(int num)
 			exit(1);
 		}
 		if (js_data.buttons & 0x01)
-			atrig = 0;
+			trig0 = 0;
 		else
-			atrig = 1;
-		}
+			trig0 = 1;
 /*
 		if (js_data.buttons & 0x02)
 			special_keycode = ' ';
@@ -729,18 +715,12 @@ int Atari_TRIG(int num)
 /*
    trig0 = (js_data.buttons & 0x0f) ? 0 : 1;
  */
-		return atrig;
-#endif
-		return 1;
                 }
-        if (num==0)		
-	{
-#ifdef USE_CURSORBLOCK
-		return ctrig;
-#endif	
-		return 1;
+#endif
+		return trig0;
 	}
-	return 1;
+	else
+		return 1;
 }
 
 int Atari_POT(int num)

@@ -89,7 +89,7 @@ x_Skip_Reset:
 
 	movw $0x3d4, %dx
 	xorl %esi, %esi
-	movw $3, %ecx
+	movw $3, %cx
 	cmpb $5, %bl
 	jbe x_CRT1
 	movw $10, %cx

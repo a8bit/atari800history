@@ -1,3 +1,69 @@
+Changes in 1.0.5  - 2000/10/02
+----------------
+
+o possibility to set color saturation
+  Now you can set black level, white level, color intensity and even color
+  shift if you prefer artificial palettes.
+  Added config option allows to select whether include existing palettes
+  into binary. By default artificial palette is generated (by surprise it
+  doesn't look very bad)
+  New options are:
+  -black  <black level>
+  -white  <white level>
+  -colors  <color intensity>
+  -colshift  <color shift>
+  -realpal <use real palette>
+  -oldpal <use old default palette>
+  -foxpal <use Fox's palette>
+
+  Krzysztof
+
+o sound.c got -help <Krzysztof>
+
+o bug causing vesa modes not to be detected correctly fixed. <Krzysztof>
+
+o sound_dos.c compiler warnings fixed
+
+o ui.c - reading of root dirs corrected <Krzysztof>
+
+o pokey.c - better reading of saved pokey state <Krzysztof>
+
+o statesav.c - strict version check and version increased to 3 <Krzysztof>
+
+o binload.c - C flag and boot flag are set now (some programs need it)
+  <Krzysztof>
+
+o joystick autofire emulation (dos and svgalib only). F11 key switches
+  between three modes: normal, autofire when fire pressed and autofire
+  all the time. It can be quite useful for some games >:) <Krzysztof>
+
+o gtia.c fix - pm_scanline was too short when HSCROL was used.
+  'mountain king' game suffered from this bug. <Krzysztof>
+
+o atari_x11.c - small fix for keyrepeat (fvwm2, switching back to the
+  screen 2 FocusIn requests are generated). <Christian Groessler>
+
+o DOS SoundBlaster driver updated. <Matt>
+  The new SB code is very clean, and should fix the problem that one person
+  had with no sound being generated.
+
+  If  Atari800 enables near pointers (via __djgpp_enable_nearptr()), you may
+  want to define DJGPP_USE_NEARPTR; it will make the SB driver a bit faster,
+  as it can avoid an extra buffer copy to the low DOS area.
+
+o vga_asm.s patched to quell a compiler warning. <Matt>
+
+o sio.c - new routine to rotate disks and slight parameter change in SIO_Mount
+  that allows a disk to be opened read only even if it is a read/write image.
+  <Rich>
+
+o sndsave.[ch] (new module) - writes out .WAV files of arbitrary bitrate.
+  <Rich>
+
+o linux joystick patch - both keyboard emulation and real joystick can be used
+  for multiplayer games now. <Jacek>
+
+
 Changes in 1.0.4  - 2000/06/30
 ----------------
 

@@ -38,7 +38,6 @@ by configure's build-in test.
 ?ZLIB_CAPABLE		Enable compressed state files (you'll need ZLIB for this)
 ?(ALLEGRO)NEW_ALLEGRO312	Update source for newer Allegro lib v3.12
 ?(SVGALIB)USE_CURSORBLOCK	Use cursor keys/Ctrl for keyboard joystick
-?()COMPILED_PALETTE	Compile internal palettes
 ?UNALIGNED_LONG_OK
 ?ATARI800_BIG_ENDIAN
 ?ATARI800_64_BIT

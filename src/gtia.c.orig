@@ -102,7 +102,7 @@ bit 6 - Missile 2
 bit 7 - Missile 3
 */
 
-UBYTE pm_scanline[ATARI_WIDTH / 2 + 8];	/* there's a byte for every *pair* of pixels */
+UBYTE pm_scanline[ATARI_WIDTH / 2];	/* there's a byte for every *pair* of pixels */
 UBYTE pm_dirty = TRUE;
 
 #define C_PM0	0x01

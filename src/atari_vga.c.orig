@@ -63,8 +63,6 @@ static int stick2;
 static int trig3;
 static int stick3;
 
-extern int TRIG_auto[4];		/* autofire */
-
 /*stick & trig values for analog joystick*/
 static int astick;
 static int atrig;
@@ -1294,15 +1292,6 @@ int Atari_Keyboard(void)
         case 0x43:                                      /* F9 */
                 keycode = AKEY_EXIT;
                 break;
-		case 0x57:					/* F11 */
-		 		keycode = AKEY_NONE;
-				for(i = 0; i < 4; i++)
-				{
-		 		  if (++TRIG_auto[i] > 2)
-		 		    TRIG_auto[i] = 0;
-		 		}
-		 		raw_key = 0;	/* aviod continuous change */
-		 		break;
         case 0x01:
                 keycode |= AKEY_ESCAPE;
                 break;

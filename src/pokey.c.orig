@@ -460,8 +460,6 @@ void POKEYStateSave( void )
 
 void POKEYStateRead( void )
 {
-        int i;
-
 	ReadUBYTE( &KBCODE, 1 );
 	ReadUBYTE( &IRQST, 1 );
 	ReadUBYTE( &IRQEN, 1 );
@@ -476,12 +474,6 @@ void POKEYStateRead( void )
 	ReadUBYTE( &AUDF[0], 4 );
 	ReadUBYTE( &AUDC[0], 4 );
 	ReadUBYTE( &AUDCTL, 1 );
-        for (i = 0; i < 4; i++)
-        {
-                POKEY_PutByte(_AUDF1 + i * 2, AUDF[i]);
-                POKEY_PutByte(_AUDC1 + i * 2, AUDC[i]);
-        }
-        POKEY_PutByte(_AUDCTL, AUDCTL);
 
 	ReadINT((int *)&DivNIRQ[0], 4);
 	ReadINT((int *)&DivNMax[0], 4);

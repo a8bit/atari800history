@@ -74,9 +74,9 @@ int DataIndex = 0;
 int TransferStatus = 0;
 int ExpectedBytes = 0;
 
-extern int opendcm( int diskno, const char *infilename, char *outfilename );
+extern int opendcm( int diskno, char *infilename, char *outfilename );
 #ifdef ZLIB_CAPABLE
-extern int openzlib(int diskno, const char *infilename, char *outfilename );
+extern int openzlib(int diskno, char *infilename, char *outfilename );
 #endif
 
 void SIO_Initialise(int *argc, char *argv[])
@@ -127,13 +127,12 @@ void Set_Temp_File( int diskno )
 	strcpy( tmp_filename[ diskno ], sio_filename[ diskno ] );
 }
 
-int SIO_Mount(int diskno, const char *filename, int b_open_readonly)
+int SIO_Mount(int diskno, char *filename)
 {
 	char	upperfile[ FILENAME_LEN ];
 	struct ATR_Header header;
 	int fd, i;
 
-	fd = -1;
 	memset( upperfile, 0, FILENAME_LEN );
 	for( i=0; i < (int)strlen( filename ); i++ )
 		upperfile[i] = toupper( filename[i] );
@@ -157,10 +156,7 @@ int SIO_Mount(int diskno, const char *filename, int b_open_readonly)
 		drive_status[ diskno -1 ] = ReadOnly;
 		fd = openzlib( diskno, filename, tmp_filename[ diskno - 1] );
 		if( fd == -1 )
-		{
 			istmpfile[ diskno - 1] = 0;
-			drive_status[ diskno - 1] = NoDisk;
-		}
 	}	
 #endif /* ZLIB_CAPABLE */
 	else /* Normal ATR, XFD disk */
@@ -168,13 +164,9 @@ int SIO_Mount(int diskno, const char *filename, int b_open_readonly)
 		drive_status[diskno - 1] = ReadWrite;
 		strcpy(sio_filename[diskno - 1], "Empty");
 
-		if( b_open_readonly == FALSE )
-		{
 		fd = open(filename, O_RDWR | O_BINARY, 0777);
-		}
-		if ( b_open_readonly == TRUE || fd == -1) 
-		{
-			fd = open(filename, O_RDONLY | O_BINARY, 0755);
+		if (fd == -1) {
+			fd = open(filename, O_RDONLY | O_BINARY, 0777);
 			drive_status[diskno - 1] = ReadOnly;
 		}
 	}
@@ -1013,44 +1005,4 @@ int SIO_GetByte(void)
 	}
 
 	return byte;
-}
-
-int Rotate_Disks( void )
-{
-	char	tmp_filenames[MAX_DRIVES][ FILENAME_LEN ];
-	int		i;
-	int		bSuccess = TRUE;
-
-	for( i=0; i < MAX_DRIVES; i++ )
-	{
-		strcpy( tmp_filenames[i], sio_filename[i] );
-	}
-
-	for( i=0; i < MAX_DRIVES; i++ )
-	{
-		SIO_Dismount( i + 1 );
-	}
-
-	for( i=1; i < MAX_DRIVES; i++ )
-	{
-		if( strcmp( tmp_filenames[i], "None" ) && strcmp( tmp_filenames[i], "Off" ) && strcmp( tmp_filenames[i], "Empty" ) )
-		{
-			if( SIO_Mount( i, tmp_filenames[i], FALSE ) == FALSE ) /* Note that this is NOT i-1 because SIO_Mount is 1 indexed */
-				bSuccess = FALSE;
-		}
-	}
-
-	i = MAX_DRIVES-1;
-	while( (i > -1) && (!strcmp( tmp_filenames[i], "None" ) || !strcmp( tmp_filenames[i], "Off" ) || !strcmp( tmp_filenames[i], "Empty")) )
-	{
-		i--;
-	}
-
-	if( i > -1 )
-	{
-		if( SIO_Mount( i+1, tmp_filenames[0], FALSE ) == FALSE )
-			bSuccess = FALSE;
-	}
-
-	return bSuccess;
 }

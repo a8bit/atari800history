@@ -12,7 +12,7 @@ static int sound_enabled = TRUE;
 
 int playback_freq = FREQ_17_APPROX / 28 / 3;
 int buffersize = 440;
-boolean stereo = FALSE;
+int stereo = FALSE;
 int bps = 8;
 
 void Sound_Initialise(int *argc, char *argv[])
@@ -21,7 +21,6 @@ void Sound_Initialise(int *argc, char *argv[])
 
 #ifdef STEREO
 	stereo = TRUE;
-//        buffersize <<= 1;
 #endif
 
 	for (i = j = 1; i < *argc; i++) {
@@ -40,7 +39,7 @@ void Sound_Initialise(int *argc, char *argv[])
 	*argc = j;
 
 	if (sound_enabled) {
-		if (FALSE == sb_init(&playback_freq, &bps, &buffersize, &stereo)) {
+		if (sb_init(&playback_freq, &bps, &buffersize, &stereo) < 0) {
 			Aprint("Cannot init sound card\n");
 			sound_enabled = FALSE;
 		}
