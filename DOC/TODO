@@ -1,0 +1,22 @@
+This is a list of things that need to be done
+---------------------------------------------
+o merge common parts of VGA, SVGALIB and AtariFalcon keyboard stuff
+  into one source file named like atari_keyboard.c.
+
+o similarly create common sound.[ch] routines
+
+o sound recording should store the sound in the .WAV format and should
+  be available on all platforms (not only X11)
+
+o finally merge the ALLEGRO and plain DOS versions - digital sound is in
+  the plain DOS now so just take the joystick and sound card initialization
+  from ALLEGRO and you're done
+
+o rewrite joycfg to use curses so it will be usable on all platforms.
+
+o simplify and correct synchronization code in main emulator loop - some
+  people still complain that the emulator is slower than the original Atari.
+
+o update the m68k assembler version of cpu.c
+
+o clean up the source and start using GNU autoconfig stuff
