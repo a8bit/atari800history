@@ -16,6 +16,7 @@
 #include "cpu.h"
 #include "colours.h"
 #include "config.h"
+#include "cflib.h"
 
 /* -------------------------------------------------------------------------- */
 
@@ -71,6 +72,11 @@ int screensaver(int on)
 static int screensaverval;		/* original value */
 
 static int NOVA = FALSE;
+static int HOST_WIDTH;
+static int HOST_HEIGHT;
+#define CENTER_X	((HOST_WIDTH - 336) / 2)
+#define CENTER_Y	((HOST_HEIGHT - 240) / 2)
+#define CENTER		(CENTER_X + CENTER_Y * HOST_WIDTH)
 
 /* -------------------------------------------------------------------------- */
 
@@ -88,6 +94,8 @@ short screenh = ATARI_HEIGHT;
 UBYTE *odkud, *kam;
 static int jen_nekdy = 0;
 static int resolution = 0;
+
+static int bgwin, win;
 
 #ifdef CPUASS
 #include "cpu_asm.h"
@@ -131,6 +139,8 @@ extern ULONG *p_str_p;
 ULONG f030coltable[256];
 ULONG f030coltable_zaloha[256];
 ULONG *col_table;
+int NOVAcoltable[256][3];
+int NOVAcoltable_zaloha[256][3];
 
 void get_colors_on_f030(void)
 {
@@ -154,12 +164,6 @@ void set_colors_on_f030(void)
 
 void SetupFalconEnvironment(void)
 {
-	long int a, r, g, b;
-	/* vypni kurzor */
-	Cursconf(0, 0);
-
-	NOVA = get_cookie('NOVA', &a);
-
 	if (! NOVA) {
 		/* switch to new graphics mode 384x240x256 */
 #define DELKA_VIDEORAM	(384UL*256UL)
@@ -193,12 +197,6 @@ void SetupFalconEnvironment(void)
 		}
 
 		/* nastav nove barvy */
-		for (a = 0; a < 256; a++) {
-			r = (colortable[a] >> 18) & 0x3f;
-			g = (colortable[a] >> 10) & 0x3f;
-			b = (colortable[a] >> 2) & 0x3f;
-			f030coltable[a] = (r << 26) | (g << 18) | (b << 2);
-		}
 		col_table = f030coltable;
 		Supexec(set_colors_on_f030);
 	}
@@ -236,30 +234,70 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	*argc = j;
 
-	if (!get_cookie('_VDO', &val))
-		val = 0;
-
-	if (val != 0x30000) {
-		printf("This Atari800 emulator requires Falcon video hardware\n");
-		exit(-1);
+	/* recalculate color tables */
+	for (i = 0; i < 256; i++) {
+		int r = (colortable[i] >> 18) & 0x3f;
+		int g = (colortable[i] >> 10) & 0x3f;
+		int b = (colortable[i] >> 2) & 0x3f;
+		f030coltable[i] = (r << 26) | (g << 18) | (b << 2);
+		NOVAcoltable[i][0] = r * 1000 / 64;
+		NOVAcoltable[i][1] = g * 1000 / 64;
+		NOVAcoltable[i][2] = b * 1000 / 64;
 	}
+
+	NOVA = get_cookie('NOVA', &i);
+
+	if (NOVA) {
+		int vdi[57];
+		init_app(NULL, -1);		/* fills gl_vdi_handle */
+		vq_extnd(gl_vdi_handle, 0, &vdi);
+		HOST_WIDTH = vdi[0] + 1;
+		HOST_HEIGHT = vdi[1] + 1;
+
+		hide_mouse();
+
+		bgwin = wind_create(0,20,0,vdi[0],vdi[1]);
+		wind_open(bgwin,0,20,vdi[0],vdi[1]);
+
+//		v_clrwk(gl_vdi_handle);		/* clear whole screen */
+
+		win = wind_create(NAME,CENTER_X-2,CENTER_Y-22,336+4,240+24);
+		wind_set_str(win,2,"Atari800 emulator");
+		wind_open(win,CENTER_X-2,CENTER_Y-22,336+4,240+24);
+
+		wind_update(BEG_UPDATE);
+
+		for(i=0; i<256; i++) {
+			vq_color(gl_vdi_handle, i, 1, NOVAcoltable_zaloha[i]);
+			vs_color(gl_vdi_handle, i, NOVAcoltable[i]);
+		}
+	}
+	else {
+		if (!get_cookie('_VDO', &val))
+			val = 0;
+
+		if (val != 0x30000) {
+			printf("This Atari800 emulator requires Falcon video hardware\n");
+			exit(-1);
+		}
+
+		screensaverval = screensaver(0);	/* turn off screen saver */
+
+		/* uschovat stare barvy */
+		col_table = f030coltable_zaloha;
+		Supexec(get_colors_on_f030);
+
+		/* uschovej starou grafiku */
+		p_str_p = (ULONG *) stara_graf;
+		Supexec(save_r);
+	}
+
+	Log_base = Logbase();
+	Phys_base = Physbase();
 
 #ifdef DMASOUND
 	Sound_Initialise(argc, argv);
 #endif
-
-	screensaverval = screensaver(0);	/* turn off screen saver */
-
-	/* uschovat stare barvy */
-	col_table = f030coltable_zaloha;
-	Supexec(get_colors_on_f030);
-
-	/* uschovej starou grafiku */
-	p_str_p = (ULONG *) stara_graf;
-	Supexec(save_r);
-
-	Log_base = Logbase();
-	Phys_base = Physbase();
 
 	key_tab = Keytbl(-1, -1, -1);
 	consol = 7;
@@ -290,12 +328,6 @@ int Atari_Exit(int run_monitor)
 	/* joystick disable */
 	Bconout(4, 8);
 
-	/* zapni kurzor */
-	Cursconf(1, 0);
-
-	/* smaz obraz */
-	printf("\33E");
-
 #ifdef BACKUP_MSG
 	if (*backup_msg_buf) {		/* print the buffer */
 		puts(backup_msg_buf);
@@ -314,7 +346,23 @@ int Atari_Exit(int run_monitor)
 	Sound_Exit();
 #endif
 
-	screensaver(screensaverval);
+	if (NOVA) {
+		int i;
+
+		for(i=0; i<256; i++) {
+			vs_color(gl_vdi_handle, i, NOVAcoltable_zaloha[i]);
+		}
+		wind_update(END_UPDATE);
+		wind_close(win);
+		wind_delete(win);
+		wind_close(bgwin);
+		wind_delete(bgwin);
+		show_mouse();
+		exit_gem();
+	}
+	else {
+		screensaver(screensaverval);
+	}
 
 	return 0;
 }
@@ -328,9 +376,30 @@ void Atari_DisplayScreen(UBYTE * screen)
 		odkud = screen;
 		kam = Logbase();
 		if (NOVA) {
+			UBYTE *ptr_from = screen + 24;
+			UBYTE *ptr_dest = kam + CENTER;
 			int j;
-			for(j=0; j<240; j++)
-				memcpy(kam + j*896, screen + j*384 + 24, 336);
+
+			for(j=0; j<240; j++) {
+				register cycles = 20;
+
+				ptr_from += ATARI_WIDTH;
+				ptr_dest += HOST_WIDTH;
+#if 1
+				memcpy(ptr_dest, ptr_from, 336);
+#else
+				__asm__ __volatile__("\n\t\
+				1:\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					dbra	%0,1b"
+					: "=d" (cycles)
+					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
+				);
+#endif
+			}
 		}
 		else {
 			switch (resolution) {

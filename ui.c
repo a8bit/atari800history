@@ -14,6 +14,7 @@
 #define FALSE 0
 #define TRUE 1
 
+static int current_disk_directory = 0;
 static char charset[8192];
 extern UBYTE atarixl_os[16384];
 extern unsigned char ascii_to_screen[128];
@@ -258,10 +259,24 @@ int Select(UBYTE * screen,
 		case 0x1c:				/* Up */
 			if (row > 0)
 				row--;
+			else
+				/*GOLDA CHANGED */ if (column > 0) {
+				column--;
+				row = nrows - 1;
+			}
+			else if (scrollable)
+				return index + nitems + (nrows - 1);
 			break;
 		case 0x1d:				/* Down */
 			if (row < (nrows - 1))
 				row++;
+			else
+				/*GOLDA CHANGED */ if (column < (ncolumns - 1)) {
+				row = 0;
+				column++;
+			}
+			else if (scrollable)
+				return index + nitems * 2 - (nrows - 1);
 			break;
 		case 0x1e:				/* Left */
 			if (column > 0)
@@ -278,6 +293,7 @@ int Select(UBYTE * screen,
 		case 0x20:				/* Space */
 		case 0x7e:				/* Backspace */
 		case 0x7f:				/* Tab */
+			return -2;			/*GOLDA CHANGED */
 		case 0x9b:				/* Select */
 			return index;
 		case 0x1b:				/* Cancel */
@@ -398,71 +414,85 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 {
 	List *list;
 	int flag = FALSE;
+	int next_dir;
 
-	list = GetDirectory(directory);
-	if (list) {
-		char *filename;
-		int nitems = 0;
-		int item = 0;
-		int done = FALSE;
-		int offset = 0;
-		int nfiles = 0;
+	do {
+		next_dir = FALSE;
+		list = GetDirectory(directory);
+		if (list) {
+			char *filename;
+			int nitems = 0;
+			int item = 0;
+			int done = FALSE;
+			int offset = 0;
+			int nfiles = 0;
 
 #define NROWS 19
 #define NCOLUMNS 2
 #define MAX_FILES (NROWS * NCOLUMNS)
 
-		char *files[MAX_FILES];
-
-		ListReset(list);
-		while (ListTraverse(list, (void *) &filename))
-			nfiles++;
-
-		while (!done) {
-			int ascii;
+			char *files[MAX_FILES];
 
 			ListReset(list);
-			for (nitems = 0; nitems < offset; nitems++)
-				ListTraverse(list, (void *) &filename);
+			while (ListTraverse(list, (void *) &filename))
+				nfiles++;
 
-			for (nitems = 0; nitems < MAX_FILES; nitems++) {
-				if (ListTraverse(list, (void *) &filename)) {
-					files[nitems] = filename;
+			while (!done) {
+				int ascii;
+
+				ListReset(list);
+				for (nitems = 0; nitems < offset; nitems++)
+					ListTraverse(list, (void *) &filename);
+
+				for (nitems = 0; nitems < MAX_FILES; nitems++) {
+					if (ListTraverse(list, (void *) &filename)) {
+						files[nitems] = filename;
+					}
+					else
+						break;
+				}
+
+				ClearScreen(screen);
+				TitleScreen(screen, "Select File");
+				Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
+
+				if (item < 0)
+					item = 0;
+				else if (item >= nitems)
+					item = nitems - 1;
+				item = Select(screen, item, nitems, files, NROWS, NCOLUMNS, 1, 4, TRUE, &ascii);
+				if (item >= (nitems * 2 + NROWS)) {		/* Scroll Right */
+					if ((offset + NROWS + NROWS) < nfiles)
+						offset += NROWS;
+					item = item % nitems;
+				}
+				else if (item >= nitems) {	/* Scroll Left */
+					if ((offset - NROWS) >= 0)
+						offset -= NROWS;
+					item = item % nitems;
+				}
+				else if (item == -2) {	/* Next directory */
+					current_disk_directory = (current_disk_directory + 1) % disk_directories;
+					directory = atari_disk_dirs[current_disk_directory];
+					next_dir = TRUE;
+					break;
+				}
+				else if (item != -1) {
+#ifndef BACK_SLASH
+					sprintf(full_filename, "%s/%s", directory, files[item]);
+#else							/* DOS, TOS fs */
+					sprintf(full_filename, "%s\\%s", directory, files[item]);
+#endif
+					flag = TRUE;
+					break;
 				}
 				else
 					break;
 			}
 
-			ClearScreen(screen);
-			TitleScreen(screen, "Select File");
-			Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
-
-			item = Select(screen, item, nitems, files, NROWS, NCOLUMNS, 1, 4, TRUE, &ascii);
-			if (item >= (nitems * 2 + NROWS)) {		/* Scroll Right */
-				if ((offset + NROWS + NROWS) < nfiles)
-					offset += NROWS;
-				item = item % nitems;
-			}
-			else if (item >= nitems) {	/* Scroll Left */
-				if ((offset - NROWS) >= 0)
-					offset -= NROWS;
-				item = item % nitems;
-			}
-			else if (item != -1) {
-#ifndef BACK_SLASH
-				sprintf(full_filename, "%s/%s", directory, files[item]);
-#else							/* DOS, TOS fs */
-				sprintf(full_filename, "%s\\%s", directory, files[item]);
-#endif
-				flag = TRUE;
-				break;
-			}
-			else
-				break;
+			ListFree(list, free);
 		}
-
-		ListFree(list, free);
-	}
+	} while (next_dir);
 	return flag;
 }
 
@@ -510,9 +540,9 @@ void DiskManagement(UBYTE * screen)
 		Print(screen, 0x9a, 0x94, "D8:", 1, 11);
 
 		dsknum = Select(screen, dsknum, 8, menu, 8, 1, 4, 4, FALSE, &ascii);
-		if (dsknum != -1) {
+		if (dsknum > -1) {
 			if (ascii == 0x9b) {
-				if (FileSelector(screen, atari_disk_dir, filename)) {
+				if (FileSelector(screen, atari_disk_dirs[current_disk_directory], filename)) {
 					SIO_Dismount(dsknum + 1);
 					SIO_Mount(dsknum + 1, filename);
 				}
@@ -779,7 +809,6 @@ void ui(UBYTE * screen)
 {
 	static int initialised = FALSE;
 	int option = 0;
-	char filename[256];
 	int done = FALSE;
 
 	const int nitems = 7;
@@ -794,6 +823,7 @@ void ui(UBYTE * screen)
 		"Exit Emulator"
 	};
 
+	/* Sound_Active(FALSE); */
 	if (!initialised) {
 		if (mach_xlxe)
 			memcpy(charset, atarixl_os + 0x2000, 8192);
@@ -812,6 +842,7 @@ void ui(UBYTE * screen)
 						nitems, 1, 1, 4, FALSE, &ascii);
 
 		switch (option) {
+		case -2:
 		case -1:
 			done = TRUE;
 			break;
@@ -838,4 +869,5 @@ void ui(UBYTE * screen)
 			exit(0);
 		}
 	}
+	/* Sound_Active(TRUE); */
 }

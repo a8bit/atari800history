@@ -1,3 +1,52 @@
+Changes in 0.9.3
+----------------
+
+o POKEY interrupts implemented (inspired by Thor's version).
+  Ghostbusters run now! :-)
+
+o NOVA graphics support on Atari TT/Falcon computers finished.
+  Atari800 is no longer Atari Falcon specific port, now it works
+  on any TOS compatible machine with MC68020 or higher and a NOVA
+  graphics card (please test in on Medusa, Hades and Milan machines)
+
+o A special check for pending IRQ put into CLI, PLP and RTI insns.
+  It's a macro for speed reasons, though a function might be more
+  appropriate.
+
+o A new function GenerateIRQ() was written in CPU module and is used
+  where needed (ATARI and POKEY modules).
+
+o Handling of IRQ's changed. Before, we tested for IRQEN (is interrupt
+  enabled?) and then (in positive case) we set IRQST.
+  Now, we always set the IRQST and then we take an action only if
+  IRQEN is OK. I don't know if it's OK, I have just been told that
+  more demos work with this.
+
+o all HardwareGetByte(address) routines return now 0 for unknown 
+  address (probably not ideal, but deterministic at least).
+
+o several routines from ANTIC, CPU and POKEYSND modules moved to
+  POKEY module, where they actually belongs.
+
+o CPU emulation fixed (INDIRECT_X mode was overflowing) <Thor,
+  Golda, Raster>
+
+o CPU and Antic speeded up *slightly* by using type casts instead
+  of direct anding with 0xff (the compiler got a chance to 
+  optimize it at least). <Raster>
+
+o a lot of uneccessary castings to (UWORD) and (UBYTE) was removed
+  from CPU emulation ;-) <Petr>
+
+o DiskDir of UI enhanced - now you can define up to eight
+  directories where disk images are stored - then you can
+  go through these directories in Disk Management by pressing
+  TAB key. <Golda>
+
+o fixed sorting of file list in Disk management in DOS port 
+  (a speciality of strcmp() function of DJGPP libc). <Golda>
+
+
 Changes in 0.9.2
 ----------------
 

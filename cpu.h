@@ -19,6 +19,7 @@ void SetRAM(int addr1, int addr2);
 void SetROM(int addr1, int addr2);
 void SetHARDWARE(int addr1, int addr2);
 void NMI(void);
+void GenerateIRQ(void);
 int GO(int cycles);
 
 extern UWORD regPC;

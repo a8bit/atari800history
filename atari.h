@@ -46,7 +46,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.2"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.3"
 
 #define NO_CART 0
 #define NORMAL8_CART 1

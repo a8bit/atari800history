@@ -232,11 +232,33 @@ void NMI(void)
 	UBYTE data;
 
 	memory[0x0100 + S--] = regPC >> 8;
-	memory[0x0100 + S--] = regPC & 0xff;
+	memory[0x0100 + S--] = (UBYTE)regPC;
 	PHP;
 	SetI;
 	regPC = (memory[0xfffb] << 8) | memory[0xfffa];
 	regS = S;
+}
+
+/* check pending IRQ, helps in (not only) Lucasfilm games */
+#define CPUCHECKIRQ											\
+{															\
+	if (IRQ) {												\
+		if (!(regP & I_FLAG)) {								\
+			memory[0x0100 + S--] = PC >> 8;					\
+			memory[0x0100 + S--] = (UBYTE)PC;				\
+			PHP;											\
+			SetI;											\
+			PC = (memory[0xffff] << 8) | memory[0xfffe];	\
+			IRQ = 0;										\
+		}													\
+	}														\
+}
+
+/* sets the IRQ flag and checks it */
+void GenerateIRQ(void)
+{
+	IRQ = 1;
+	GO(0);			/* does not execute any instruction */
 }
 
 /*
@@ -276,8 +298,8 @@ int cycles[256] =
 /* decrement 1 or 2 cycles for conditional jumps */
 #define NCYCLES_JMP	if ( ((SWORD) sdata + (UBYTE) PC) & 0xff00) ncycles-=2; else ncycles--;
 /* decrement 1 cycle for X (or Y) index overflow */
-#define NCYCLES_Y		if ( (SWORD) ((UBYTE) addr - (UBYTE) Y) < 0 ) ncycles--;
-#define NCYCLES_X		if ( (SWORD) ((UBYTE) addr - (UBYTE) X) < 0 ) ncycles--;
+#define NCYCLES_Y		if ( (UBYTE) addr < Y ) ncycles--;
+#define NCYCLES_X		if ( (UBYTE) addr < X ) ncycles--;
 
 
 int GO(int ncycles)
@@ -390,18 +412,7 @@ int GO(int ncycles)
 
 	UPDATE_LOCAL_REGS;
 
-	if (IRQ) {
-		if (!(regP & I_FLAG)) {
-			UWORD retadr = PC;
-
-			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = retadr & 0xff;
-			PHP;
-			SetI;
-			PC = (memory[0xffff] << 8) | memory[0xfffe];
-			IRQ = 0;
-		}
-	}
+	CPUCHECKIRQ;
 
 /*
    =====================================
@@ -411,12 +422,12 @@ int GO(int ncycles)
 
 #define	ABSOLUTE	addr=(memory[PC+1]<<8)+memory[PC];PC+=2;
 #define	ZPAGE		addr=memory[PC++];
-#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)X;PC+=2;
-#define 	ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)Y;PC+=2;
-#define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=(memory[addr+1]<<8)+memory[addr];
-#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[addr+1]<<8)+memory[addr]+(UWORD)Y;
-#define	ZPAGE_X		addr=(memory[PC++]+X)&0xff;
-#define	ZPAGE_Y		addr=(memory[PC++]+Y)&0xff;
+#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+X;PC+=2;
+#define	ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+Y;PC+=2;
+#define	INDIRECT_X	addr=(UBYTE)(memory[PC++]+X);addr=(memory[(UBYTE)(addr+1)]<<8)+memory[addr];
+#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[(UBYTE)(addr+1)]<<8)+memory[addr]+Y;
+#define	ZPAGE_X		addr=(UBYTE)(memory[PC++]+X);
+#define	ZPAGE_Y		addr=(UBYTE)(memory[PC++]+Y);
 
 #ifdef __i386__
 #undef ABSOLUTE
@@ -1012,7 +1023,7 @@ int GO(int ncycles)
 		if (!(regP & I_FLAG)) {
 			UWORD retadr = PC + 1;
 			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = retadr & 0xff;
+			memory[0x0100 + S--] = (UBYTE)retadr;
 			SetB;
 			PHP;
 			SetI;
@@ -1143,7 +1154,7 @@ int GO(int ncycles)
 		{
 			UWORD retadr = PC + 1;
 			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = retadr & 0xff;
+			memory[0x0100 + S--] = (UBYTE)retadr;
 			PC = (memory[PC + 1] << 8) | memory[PC];
 		}
 		goto next;
@@ -1181,6 +1192,7 @@ int GO(int ncycles)
 
 	  opcode_28:				/* PLP */
 		PLP;
+		CPUCHECKIRQ;
 		goto next;
 
 	  opcode_29:				/* AND #ab */
@@ -1307,6 +1319,7 @@ int GO(int ncycles)
 		PLP;
 		data = memory[0x0100 + ++S];
 		PC = (memory[0x0100 + ++S] << 8) | data;
+		CPUCHECKIRQ;
 		goto next;
 
 	  opcode_41:				/* EOR (ab,x) */
@@ -1404,16 +1417,7 @@ int GO(int ncycles)
 
 	  opcode_58:				/* CLI */
 		ClrI;
-		if (IRQ) {				/* check pending IRQ, helps in Lucasfilm games */
-			UWORD retadr = PC;
-
-			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = retadr & 0xff;
-			PHP;
-			SetI;
-			PC = (memory[0xffff] << 8) | memory[0xfffe];
-			IRQ = 0;
-		}
+		CPUCHECKIRQ;
 		goto next;
 
 	  opcode_59:				/* EOR abcd,y */
@@ -1505,7 +1509,7 @@ int GO(int ncycles)
 #ifdef CPU65C02
 		PC = (memory[addr + 1] << 8) | memory[addr];
 #else							/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
-		if ((addr & 0xff) == 0xff)
+		if ( (UBYTE)addr == 0xff)
 			PC = (memory[addr & ~0xff] << 8) | memory[addr];
 		else
 			PC = (memory[addr + 1] << 8) | memory[addr];
@@ -2708,12 +2712,12 @@ int GO(int ncycles)
 			UWORD t_data;
 
 
-			t_data = (UWORD) data + (UWORD) ! C;
+			t_data = data + ! C;
 
-			temp = (UWORD) X - t_data;
+			temp = X - t_data;
 
 
-			Z = N = temp & 0xff;
+			Z = N = (UBYTE)temp;
 
 
 			V = (~(X ^ t_data)) & (Z ^ X) & 0x80;
@@ -2831,7 +2835,7 @@ int GO(int ncycles)
 		ABSOLUTE_Y;
 
 		Z = N = A = X = GetByte(addr) & 0xfd;
-		S = ((UWORD) A - 4) & 0xff;
+		S = (UBYTE)(A - 4);
 
 		goto next;
 
@@ -2847,8 +2851,8 @@ int GO(int ncycles)
 			UWORD temp;
 			UWORD t_data;
 
-			t_data = (UWORD) data + (UWORD) C;
-			Z = N = temp = (UWORD) A + t_data;
+			t_data = data + C;
+			Z = N = temp = A + t_data;
 
 			V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
 			C = temp >> 8;
@@ -2875,10 +2879,10 @@ int GO(int ncycles)
 			UWORD temp;
 			UWORD t_data;
 
-			t_data = (UWORD) data + (UWORD) ! C;
-			temp = (UWORD) A - t_data;
+			t_data = data + ! C;
+			temp = A - t_data;
 
-			Z = N = temp & 0xff;
+			Z = N = (UBYTE)temp;
 
 /*
  * This was the old code that I have been using upto version 0.5.2

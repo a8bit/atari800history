@@ -172,9 +172,6 @@ static int right_border_chars;
 static int right_border_start;
 extern UBYTE pm_scanline[ATARI_WIDTH];
 extern UBYTE pf_colls[9];
-extern int DELAYED_SERIN_IRQ;
-extern int DELAYED_SEROUT_IRQ;
-extern int DELAYED_XMTDONE_IRQ;
 
 static int normal_lastline;
 int wsync_halt = 0;
@@ -546,11 +543,11 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (chdata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				if (chdata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				chdata <<= 2;
 			}
 
@@ -696,11 +693,11 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (chdata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				if (chdata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				chdata <<= 2;
 			}
 
@@ -1186,11 +1183,11 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (screendata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				if (screendata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE) ((cl_word[colreg] & 0xff));
+					*ptr++ = (UBYTE)cl_word[colreg];
 				screendata <<= 2;
 			}
 		}
@@ -1337,64 +1334,7 @@ void do_antic()
 #ifdef POKEY_UPDATE
 		pokey_update();
 #endif
-/* Pokey stuff begin (should probably be moved into pokey_update() as well */
-		if (DELAYED_SERIN_IRQ > 0) {
-			if (--DELAYED_SERIN_IRQ == 0) {
-				/* IRQST &= 0xdf; */
-				if (IRQEN & 0x20) {
-#ifdef DEBUG2
-					printf("SERIO: SERIN Interrupt triggered\n");
-#endif
-					IRQST &= 0xdf;
-					IRQ = 1;
-				}
-#ifdef DEBUG2
-				else {
-					printf("SERIO: SERIN Interrupt missed\n");
-				}
-#endif
-			}
-		}
-
-		if (DELAYED_SEROUT_IRQ > 0) {
-			if (--DELAYED_SEROUT_IRQ == 0) {
-				/* IRQST &= 0xef; */
-				if (IRQEN & 0x10) {
-#ifdef DEBUG2
-					printf("SERIO: SEROUT Interrupt triggered\n");
-#endif
-					IRQST &= 0xef;
-					IRQ = 1;
-				}
-#ifdef DEBUG2
-				else {
-					/* sigint_handler(1); */
-					printf("SERIO: SEROUT Interrupt missed\n");
-				}
-#endif
-				DELAYED_XMTDONE_IRQ += XMTDONE_INTERVAL;
-
-			}
-		}
-
-		if (DELAYED_XMTDONE_IRQ > 0) {
-			if (--DELAYED_XMTDONE_IRQ == 0) {
-				/* IRQST &= 0xf7; */
-				if (IRQEN & 0x08) {
-#ifdef DEBUG2
-					printf("SERIO: XMTDONE Interrupt triggered\n");
-#endif
-					IRQST &= 0xf7;
-					IRQ = 1;
-				}
-#ifdef DEBUG2
-				else {
-					printf("SERIO: XMTDONE Interrupt missed\n");
-				}
-#endif
-			}
-		}
-/* Pokey stuff ends */
+		POKEY_Scanline();		/* check and generate IRQ */
 
 		/* if (!wsync_halt) GO(107); */
 		pmgdmac = pmg_dma();
@@ -1835,7 +1775,7 @@ void ANTIC_RunDisplayList(void)
 
 UBYTE ANTIC_GetByte(UWORD addr)
 {
-	UBYTE byte;
+	UBYTE byte = 0;
 
 	addr &= 0xff0f;
 	switch (addr) {

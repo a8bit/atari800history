@@ -107,9 +107,7 @@ extern UBYTE atarixl_os[16384];
 
 UBYTE *cart_image = NULL;		/* For cartridge memory */
 int cart_type = NO_CART;
-int DELAYED_SERIN_IRQ;
-int DELAYED_SEROUT_IRQ;
-int DELAYED_XMTDONE_IRQ;
+
 int countdown_rate = 4000;
 double deltatime;
 
@@ -619,7 +617,8 @@ void PatchOS(void)
 	}
 }
 
-static int Reset_Disabled = FALSE;
+/* static int Reset_Disabled = FALSE; - why is this defined here? (PS) */
+int Initialise_Monty(void);		/* forward reference */
 
 void Coldstart(void)
 {
@@ -1110,14 +1109,7 @@ int main(int argc, char **argv)
 	ANTIC_Initialise(&argc, argv);
 	GTIA_Initialise(&argc, argv);
 	PIA_Initialise(&argc, argv);
-
-	/*
-	 * Initialise Serial Port Interrupts
-	 */
-
-	DELAYED_SERIN_IRQ = 0;
-	DELAYED_SEROUT_IRQ = 0;
-	DELAYED_XMTDONE_IRQ = 0;
+	POKEY_Initialise(&argc, argv);
 
 #ifdef WIN32
 	for( i=0; i < 8; i++ )
@@ -1521,8 +1513,9 @@ int bounty_bob1(UWORD addr)
 	if (addr >= 0x4ff6 && addr <= 0x4ff9) {
 		addr -= 0x4ff6;
 		memcpy(&memory[0x4000], &cart_image[addr << 12], 0x1000);
-		return 0;
+		return FALSE;
 	}
+	return TRUE;
 }
 
 int bounty_bob2(UWORD addr)
@@ -1530,13 +1523,14 @@ int bounty_bob2(UWORD addr)
 	if (addr >= 0x5ff6 && addr <= 0x5ff9) {
 		addr -= 0x5ff6;
 		memcpy(&memory[0x5000], &cart_image[(addr << 12) + 0x4000], 0x1000);
-		return 0;
+		return FALSE;
 	}
+	return TRUE;
 }
 
 UBYTE Atari800_GetByte(UWORD addr)
 {
-	UBYTE byte;
+	UBYTE byte = 0;
 /*
    ============================================================
    GTIA, POKEY, PIA and ANTIC do not fully decode their address
@@ -1650,6 +1644,8 @@ void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 	}
 }
 
+void ui(UBYTE * screen);	/* forward reference */
+
 void Atari800_Hardware(void)
 {
 #ifndef WIN32
@@ -1689,13 +1685,13 @@ void Atari800_Hardware(void)
 			Atari800_Exit(FALSE);
 			exit(1);
 		case AKEY_BREAK:
+			IRQST &= ~0x80;
 			if (IRQEN & 0x80) {
-				IRQST &= ~0x80;
-				IRQ = 1;
+				GenerateIRQ();
 			}
 			break;
 		case AKEY_UI:
-			ui(atari_screen);
+			ui((UBYTE *)atari_screen);
 			break;
 		case AKEY_PIL:
 			if (pil_on)
@@ -1711,9 +1707,9 @@ void Atari800_Hardware(void)
 				break;
 			KBCODE = keycode;
 			Key_Held = TRUE;
+			IRQST &= ~0x40;
 			if (IRQEN & 0x40) {
-				IRQST &= ~0x40;
-				IRQ = 1;
+				GenerateIRQ();
 			}
 			break;
 		}

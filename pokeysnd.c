@@ -792,8 +792,3 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		}
 	}
 }
-
-int pokeysnd_siocheck(void)
-{
-	return ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL[0] & 0x28) == 0x28);
-}

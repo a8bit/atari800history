@@ -16,7 +16,7 @@ char atari_osb_filename[MAX_FILENAME_LEN];
 char atari_xlxe_filename[MAX_FILENAME_LEN];
 char atari_basic_filename[MAX_FILENAME_LEN];
 char atari_5200_filename[MAX_FILENAME_LEN];
-char atari_disk_dir[MAX_FILENAME_LEN];
+char atari_disk_dirs[MAX_DIRECTORIES][MAX_FILENAME_LEN];
 char atari_rom_dir[MAX_FILENAME_LEN];
 char atari_h1_dir[MAX_FILENAME_LEN];
 char atari_h2_dir[MAX_FILENAME_LEN];
@@ -29,6 +29,7 @@ int default_tv_mode;
 int hold_option;
 int enable_c000_ram;
 int enable_sio_patch;
+int disk_directories;
 
 extern int Ram256;
 
@@ -50,7 +51,8 @@ int RtConfigLoad(char *rtconfig_filename)
 	atari_xlxe_filename[0] = '\0';
 	atari_basic_filename[0] = '\0';
 	atari_5200_filename[0] = '\0';
-	atari_disk_dir[0] = '\0';
+	atari_disk_dirs[0][0] = '\0';
+	disk_directories = 0;
 	atari_rom_dir[0] = '\0';
 	atari_h1_dir[0] = '\0';
 	atari_h2_dir[0] = '\0';
@@ -102,7 +104,11 @@ int RtConfigLoad(char *rtconfig_filename)
 				else if (strcmp(string, "5200_ROM") == 0)
 					strcpy(atari_5200_filename, ptr);
 				else if (strcmp(string, "DISK_DIR") == 0)
-					strcpy(atari_disk_dir, ptr);
+					if (disk_directories == MAX_DIRECTORIES)
+						printf("All disk directory slots used!\n");
+					else {
+						strcpy(atari_disk_dirs[disk_directories++], ptr);
+					}
 				else if (strcmp(string, "ROM_DIR") == 0)
 					strcpy(atari_rom_dir, ptr);
 				else if (strcmp(string, "H1_DIR") == 0)
@@ -174,6 +180,7 @@ int RtConfigLoad(char *rtconfig_filename)
 void RtConfigSave(void)
 {
 	FILE *fp;
+	int i;
 
 	fp = fopen(rtconfig_filename1, "w");
 	if (!fp) {
@@ -188,7 +195,8 @@ void RtConfigSave(void)
 	fprintf(fp, "XL/XE_ROM=%s\n", atari_xlxe_filename);
 	fprintf(fp, "BASIC_ROM=%s\n", atari_basic_filename);
 	fprintf(fp, "5200_ROM=%s\n", atari_5200_filename);
-	fprintf(fp, "DISK_DIR=%s\n", atari_disk_dir);
+	for (i = 0; i < disk_directories; i++)
+		fprintf(fp, "DISK_DIR=%s\n", atari_disk_dirs[i]);
 	fprintf(fp, "ROM_DIR=%s\n", atari_rom_dir);
 	fprintf(fp, "H1_DIR=%s\n", atari_h1_dir);
 	fprintf(fp, "H2_DIR=%s\n", atari_h2_dir);
@@ -240,7 +248,8 @@ void RtConfigUpdate(void)
 	strcpy(atari_osb_filename, "atariosb.rom");
 	strcpy(atari_xlxe_filename, "atarixl.rom");
 	strcpy(atari_basic_filename, "ataribas.rom");
-	strcpy(atari_disk_dir, ".");
+	strcpy(atari_disk_dirs[0], ".");
+	disk_directories = 1;
 	strcpy(atari_rom_dir, ".");
 
 	GetString("Enter path with filename of Atari OS/A ROM [%s] ", atari_osa_filename);
@@ -248,7 +257,7 @@ void RtConfigUpdate(void)
 	GetString("Enter path with filename of Atari XL/XE ROM [%s] ", atari_xlxe_filename);
 	GetString("Enter path with filename of Atari BASIC ROM [%s] ", atari_basic_filename);
 	GetString("Enter path with filename of Atari 5200 ROM [%s] ", atari_5200_filename);
-	GetString("Enter path for disk images [%s] ", atari_disk_dir);
+	GetString("Enter path for disk images [%s] ", atari_disk_dirs[0]);
 	GetString("Enter path for ROM images [%s] ", atari_rom_dir);
 	GetString("Enter path for H1: device [%s] ", atari_h1_dir);
 	GetString("Enter path for H2: device [%s] ", atari_h2_dir);
