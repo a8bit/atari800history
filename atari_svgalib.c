@@ -22,6 +22,7 @@
 #endif
 
 #ifdef LINUX_JOYSTICK
+#include <errno.h>
 #include <linux/joystick.h>
 
 static int js0;
@@ -43,7 +44,7 @@ static int pause_hit = 0;
 static UBYTE kbhits[NR_KEYS];
 static int kbcode = 0;
 static int kbjoy = 1;
-static UBYTE joydefs[9] =
+static UBYTE joydefs[] =
 {
   SCANCODE_KEYPAD0,	/* fire */
   SCANCODE_KEYPAD7,	/* up/left */
@@ -54,9 +55,15 @@ static UBYTE joydefs[9] =
   SCANCODE_KEYPAD1,	/* down/left */
   SCANCODE_KEYPAD2,	/* down */
   SCANCODE_KEYPAD3,	/* down/right */
+#ifdef USE_CURSORBLOCK
+  SCANCODE_CURSORBLOCKUP,
+  SCANCODE_CURSORBLOCKLEFT,
+  SCANCODE_CURSORBLOCKRIGHT,
+  SCANCODE_CURSORBLOCKDOWN,
+#endif
 };
 
-static UBYTE joymask[9] =
+static UBYTE joymask[] =
 {
   0, 		/* not used */
   ~1 & ~4,	/* up/left */
@@ -67,6 +74,12 @@ static UBYTE joymask[9] =
   ~2 & ~4,	/* down/left */
   ~2,		/* down */
   ~2 & ~8,	/* down/right */
+#ifdef USE_CURSORBLOCK
+  ~1, 		/* up */
+  ~4,		/* left */
+  ~8,		/* right */
+  ~2,		/* down */
+#endif
 };
 
 
@@ -153,8 +166,11 @@ int Atari_Keyboard(void)
         if (kbjoy)
         {
           /* fire */
+#ifdef USE_CURSORBLOCK
+          trig0 = (kbhits[joydefs[0]] ? 0 : 1) & (kbhits[SCANCODE_LEFTCONTROL] ? 0 : 1);
+#else
           trig0 = kbhits[joydefs[0]] ? 0 : 1;
-          
+#endif
           stick0 |= 0xf;
           for (i = 1; i < sizeof(joydefs) / sizeof(joydefs[0]); i++)
             if (kbhits[joydefs[i]])
@@ -419,6 +435,11 @@ void Atari_Initialise(int *argc, char *argv[])
 		js0_centre_x = js_data.x;
 		js0_centre_y = js_data.y;
 	}
+        else {
+                printf("cannot open joystick /dev/js0: %s\n"
+                       "joystick disabled\n",strerror(errno));
+        }
+#if 0 /* currently not used */
 	js1 = open("/dev/js1", O_RDONLY, 0777);
 	if (js1 != -1) {
 		int status;
@@ -431,6 +452,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		js1_centre_x = js_data.x;
 		js1_centre_y = js_data.y;
 	}
+#endif
 #endif
 
 	vga_init();
@@ -632,6 +654,7 @@ void read_joystick(int js, int centre_x, int centre_y)
 }
 #endif
 
+
 int Atari_PORT(int num)
 {
 	if (num == 0) {
@@ -640,6 +663,7 @@ int Atari_PORT(int num)
 #endif
 
 #ifdef LINUX_JOYSTICK
+                if (js0 != -1)
 		read_joystick(js0, js0_centre_x, js0_centre_y);
 #endif
 		return 0xf0 | stick0;
@@ -647,6 +671,7 @@ int Atari_PORT(int num)
 	else
 		return 0xff;
 }
+
 
 int Atari_TRIG(int num)
 {
@@ -656,6 +681,7 @@ int Atari_TRIG(int num)
 #endif
 
 #ifdef LINUX_JOYSTICK
+                if (js0 != -1) {
 		int status;
 
 		status = read(js0, &js_data, JS_RETURN);
@@ -674,6 +700,7 @@ int Atari_TRIG(int num)
 /*
    trig0 = (js_data.buttons & 0x0f) ? 0 : 1;
  */
+                }
 #endif
 		return trig0;
 	}

@@ -191,3 +191,10 @@ Marek Zelem <marek@fornax.elf.stuba.sk>
 - console sound emulation
 - disk drive sound emulation
 - various fixes
+
+Marcin Zukowski <eru@ibb.waw.pl>
+- fix in ANTIC, GTIA
+- slight monitor improvement
+
+Christian Groessler <cpg@aladdin.de>
+- SVGAlib patch for joystick

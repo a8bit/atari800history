@@ -416,7 +416,7 @@ void new_pm_scanline(void)
 
 UBYTE GTIA_GetByte(UWORD addr)
 {
-	UBYTE byte = 0xff;
+	UBYTE byte = 0x0f;	/* write-only registers return 0x0f */
 
 	addr &= 0x1f;
 	switch (addr) {
@@ -533,9 +533,6 @@ UBYTE GTIA_GetByte(UWORD addr)
 		else
 			/* extremely important patch - thanks to this hundred of games start running (BruceLee) */
 			byte = rom_inserted;
-		break;
-	case _GRACTL:
-		byte = 0x0f;			/* according to XL-it! this helps some games */
 		break;
 	}
 

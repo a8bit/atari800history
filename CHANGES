@@ -1,3 +1,21 @@
+Changes in 0.9.9e
+-----------------
+
+o new binary loader fixed <Marek>
+
+o X11 keyboard autorepeat turned off during emulation <Marek>
+
+o Antic: border color in GTIA 0x80 modes should be taken from $d012 not $d01a
+  <Marcin>
+
+o GTIA: return 0x0f for all write-only registers <Marcin>
+
+o monitor: added filename to write (memory dump) <Marcin>
+
+o svgalib: don't abort if joystick cannot be opened. Also allow cursorpad
+           keys/ctrl key for joystick emulation  <Christian Groessler>
+
+
 Changes in 0.9.9d
 -----------------
  Almost all changes in this version came from Marek Zelem. Thanks to him

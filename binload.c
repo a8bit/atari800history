@@ -35,6 +35,14 @@ printf("Boot Error\n");
 		}
 		return;
 	}
+	if( buf[0]==0xff && buf[1]==0xff )
+	{	buf[0]=buf[2];
+		buf[1]=buf[3];
+		if( (i=read(bin_fd,buf+2,2))!=2 )
+		{	printf("Boot Error\n");
+			return;
+		}
+	}
 
 	dPutByte( 738 , addrL_init );	/* init low */
 	dPutByte( 739 , 0x01 );		/* init high */

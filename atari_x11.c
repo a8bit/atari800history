@@ -216,6 +216,24 @@ extern double deltatime;
 extern double fps;
 extern int nframes;
 
+static int autorepeat=1;
+
+void autorepeat_get( ovid )
+{ XKeyboardState kstat;
+	XGetKeyboardControl(display, &kstat);
+	autorepeat=kstat.global_auto_repeat;
+}
+void autorepeat_off( ovid )
+{
+	XAutoRepeatOff(display);
+}
+void autorepeat_restore( ovid )
+{
+	if( autorepeat )
+		XAutoRepeatOn(display);
+	else	XAutoRepeatOff(display);
+}
+
 int GetKeyCode(XEvent * event)
 {
 	KeySym keysym;
@@ -235,6 +253,13 @@ int GetKeyCode(XEvent * event)
 				  window_width, window_height,
 				  0, 0);
 #endif
+		break;
+	case FocusIn:
+		autorepeat_get();
+		autorepeat_off();
+		break;
+	case FocusOut:
+		autorepeat_restore();
 		break;
 	case VisibilityNotify:
 		if( ((XVisibilityEvent*)event)->state==VisibilityFullyObscured )
@@ -689,7 +714,8 @@ int GetKeyCode(XEvent * event)
 		}
 		break;
 	}
-        KEYPRESSED = (keycode != AKEY_NONE);
+	if( event->type==KeyPress || event->type==KeyRelease )
+	        KEYPRESSED = (keycode != AKEY_NONE);
 	return keycode;
 }
 
@@ -2249,7 +2275,7 @@ void Atari_Initialise(int *argc, char *argv[])
 											   NULL);
 
 		XtAddEventHandler(drawing_area,
-						  KeyPressMask | KeyReleaseMask | VisibilityChangeMask, /* mmm */
+						  KeyPressMask | KeyReleaseMask | VisibilityChangeMask | FocusChangeMask, /* mmm */
 						  False,
 						  motif_keypress, NULL);
 
@@ -2306,7 +2332,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	else
 		cmap = XDefaultColormapOfScreen(screen);
 
-	xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask | VisibilityChangeMask /* mmm */;
+	xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask | VisibilityChangeMask | FocusChangeMask /* mmm */;
 	xswda.colormap = cmap;
 
 	window = XCreateWindow(display,
@@ -2410,6 +2436,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	XMapWindow(display, window);
 
 	XSync(display, False);
+	autorepeat_get();
 /*
    ============================
    Storage for Atari 800 Screen
@@ -2465,6 +2492,7 @@ int Atari_Exit(int run_monitor)
 #endif
 		XUnmapWindow(display, window);
 		XDestroyWindow(display, window);
+		autorepeat_restore();
 		XCloseDisplay(display);
 
 #ifdef LINUX_JOYSTICK

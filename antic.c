@@ -806,7 +806,10 @@ void do_border(void)
 	ULONG *t_pm_scanline_ptr = (ULONG *) (&pm_scanline[LCHOP * 4]);
 	ULONG COL_8_LONG;
 
-	COL_8_LONG = cl_word[8] | (cl_word[8] << 16);
+	if ((PRIOR & 0xC0) == 0x80)                       /* ERU */
+		COL_8_LONG = cl_word[0] | (cl_word[0] << 16); /* ERU */
+	else                                              /* ERU */
+		COL_8_LONG = cl_word[8] | (cl_word[8] << 16);
 	temp_border_chars = left_border_chars;
 	pass = 2;
 	while (pass--) {

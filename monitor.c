@@ -808,16 +808,19 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 		else if (strcmp(t, "WRITE") == 0) {
 			UWORD addr1;
 			UWORD addr2;
-
+			char *filename;
 			int status;
 
 			status = get_hex(NULL, &addr1);
 			status |= get_hex(NULL, &addr2);
 
+			if ( ! (filename = get_token(NULL) )) /* ERU */
+				filename="memdump.dat"; 
+
 			if (status) {
 				int fd;
 
-				fd = open("memdump.dat", O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
+				fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
 				if (fd == -1) {
 					perror("open");
 					Atari800_Exit(FALSE);
@@ -1020,7 +1023,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			printf("CONT                      - Continue\n");
 			printf("SHOW                      - Show Registers\n");
 			printf("READ filename addr nbytes - Read file into memory\n");
-			printf("WRITE startaddr endaddr   - Write specified area of memory to memdump.dat\n");
+			printf("WRITE start end [file]    - Write specified area of memory to a file (memdump.dat)\n");
 			printf("SUM [startaddr] [endaddr] - SUM of specified memory range\n");
 #ifdef TRACE
 			printf("TRON                      - Trace On\n");
