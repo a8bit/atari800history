@@ -59,7 +59,10 @@ UBYTE PIA_GetByte(UWORD addr)
 		byte = Atari_PORT(0);
 		byte &= PORTA_mask;
 	*/
-		byte = (PORTA & (~PORTA_mask)) | (Atari_PORT(0) & PORTA_mask);
+		if (!(PACTL & 0x04))
+ 			byte = ~PORTA_mask;
+		else
+			byte = (PORTA & (~PORTA_mask)) | (Atari_PORT(0) & PORTA_mask);
 		break;
 	case _PORTB:
 		switch (machine) {

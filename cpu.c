@@ -1398,6 +1398,10 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_4c:				/* JMP abcd */
+#ifdef MONITOR_BREAK
+		memmove(&remember_JMP[0], &remember_JMP[1], 2 * (REMEMBER_JMP_STEPS - 1));
+		remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
+#endif
 		PC = (memory[PC + 1] << 8) | memory[PC];
 		goto next;
 
@@ -1545,6 +1549,10 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_6c:				/* JMP (abcd) */
+#ifdef MONITOR_BREAK
+		memmove(&remember_JMP[0], &remember_JMP[1], 2 * (REMEMBER_JMP_STEPS - 1));
+		remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
+#endif
 		addr = (memory[PC + 1] << 8) | memory[PC];
 #ifdef CPU65C02
 		PC = (memory[addr + 1] << 8) | memory[addr];

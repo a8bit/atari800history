@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.4
+Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.5
 --------------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -8,7 +8,7 @@ Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.4
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.9.4 of my Atari 800, 800XL, 130XE and 5200 emulator
+This is the version 0.9.5 of my Atari 800, 800XL, 130XE and 5200 emulator
 for Unix, Amiga, MS-DOS and Falcon. My main objective is to create a freely
 distributable portable emulator (i.e. with source code available). It can
 be configured to run in the following ways :-
@@ -41,10 +41,10 @@ joystick support (If joystick module is installed in the kernel).
 
 The Amiga version supports graphics but currently lacks Paddle support.
 
-The MS-DOS version supports 320x200 graphics, sound (SoundBlaster
-compatible sound cards, 8bit, 22 kHz), keyboard and joystick.
-The area which is displayed can be modified using the Control-arrows
-keys.
+The MS-DOS version supports 320x200, 320x240 and even 320x480 interlaced
+graphics, sound (SoundBlaster compatible sound cards, 8bit, 22 kHz),
+keyboard, one joystick connected to game port and up to three additional
+digital joysticks connected to parallel (printer) ports.
 
 The Atari Falcon030/040 version supports 320x240, 352x240 and also full
 384x240 graphics, sound (DMA 12.5 kHz) and up to two joysticks (old

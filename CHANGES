@@ -1,13 +1,42 @@
+Changes in 0.9.5
+----------------
+o ANTIC: fix for scrolling of empty lines. <Perry>
+
+o CPU: little fix in remembering last N jumps. <Golda>
+
+o new command line option: '-basic' to override Hold_Option in cfg file
+
+o UI: you can now go into folders when selecting image in Disk Management
+
+o DOS port - finally full resolution 320x240, 320x480 interlaced. <Golda>
+
+o SIO: ATR images created by SIO2PC are readable now. Also Read/Write
+  Config was updated to reflect real XF551. <Michael>
+
+o monitor continues last command by pressing [Return/Enter] key. <Michael>
+
+o PIA: reading PORTA fixed (now works exactly like real Atari800,
+  not compatible with Atari5200 yet). <Perry>
+
+o UI fix: it's possible to disable disk drive by [Space] again.
+
+o Gtia fix: CONSOL (Start/Select/Option keys) handling. <Perry>
+
+o Pokeysnd: poly4 and poly5 bit fields were changed for more accurate
+  sound emulation. The original values are still available with
+  -DPOKEY23_POLY. <Perry>
+
+
 Changes in 0.9.4
 ----------------
 
 o CPU fixes: several unofficial instructions compared with real
   Atari800XE and their emulation fixed. ADC/SBC "V" bit bug found
-  and fixed (Thor source used, which in turn was taken from Frodo
+  and fixed (Thor's code used, which in turn was taken from Frodo
   emulator, AFAIK). Compatibility greatly improved again! <RASTER>
 
-o Antic fix (improves sound quality in non-interrupt driven sound
-  update routines). <Perry>
+o Antic fix: cycle counting when DMA is disabled (improves sound
+  quality in non-interrupt driven sound update routines). <Perry>
 
 o Voxware sound driver updated (tested under Linux).
   pokey11.[ch] files removed. <Robert Brewer>
@@ -23,7 +52,7 @@ o internal monitor improved (symbolic names for often used hardware
   <Golda>
 
 o additional WIN32 code (Atari800 User Interface is used in
-  Win port now) <Rich>
+  Windows port now) <Rich>
 
 o all Hardware_GetByte(address) routines return 0xff for unknown 
   address now.

@@ -11,6 +11,13 @@
 #define FILENAME_LEN 256
 #endif
 
+/*
+ * it seems, there are two different ATR formats with different handling for
+ * DD sectors
+ */
+#define SIO2PC_ATR	1
+#define OTHER_ATR	2
+
 extern char sio_status[256];
 extern char sio_filename[MAX_DRIVES][FILENAME_LEN];
 

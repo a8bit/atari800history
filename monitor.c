@@ -356,7 +356,7 @@ int ret_nesting=0;
 int monitor(void)
 {
 	UWORD addr;
-	char s[128];
+	char s[128], old_s[sizeof(s)];
 	int p;
 
 	addr = 0;
@@ -481,9 +481,24 @@ int monitor(void)
 
 		printf("> ");
 		fflush(stdout);
-		if (gets(s) == NULL) {
+		if (gets(s) == NULL) {	/* this never happens ??? */
 			printf("\n> CONT\n");
 			strcpy(s, "CONT");
+		}
+		if (s[0])
+			memcpy(old_s, s, sizeof(s));
+		else {
+			int i;
+
+			/* if no command is given, restart the last one, but remove all
+			 * arguments, so after a 'm 600' we will see 'm 700' ...
+			 */
+			memcpy(s, old_s, sizeof(s));
+			for (i = 0; i < sizeof(s); ++i)
+				if (isspace(s[i])) {
+					s[i] = '\0';
+					break;
+				}
 		}
 		t = get_token(s);
 		if (t == NULL) {
@@ -1293,3 +1308,4 @@ UWORD assembler(UWORD addr)
   }
 }
 #endif
+

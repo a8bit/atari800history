@@ -318,10 +318,10 @@ int Select(UBYTE * screen,
 			else if (scrollable)
 				return index + nitems * 2;
 			break;
+		case 0x7f:				/* Tab (for exchanging disk directories) */
+			return -2;			/*GOLDA CHANGED */
 		case 0x20:				/* Space */
 		case 0x7e:				/* Backspace */
-		case 0x7f:				/* Tab */
-			return -2;			/*GOLDA CHANGED */
 		case 0x9b:				/* Select */
 			return index;
 		case 0x1b:				/* Cancel */
@@ -456,6 +456,9 @@ List *GetDirectory(char *directory)
 		while ((entry = readdir(dp))) {
 			char *filename;
 
+			if (strcmp(entry->d_name,".")==0)
+				continue;
+
 			filename = strdup(entry->d_name);
 			if (!filename) {
 				perror("strdup");
@@ -560,32 +563,15 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 
 void DiskManagement(UBYTE * screen)
 {
-	char *menu[8] =
-	{
-		NULL,					/* D1 */
-		NULL,					/* D2 */
-		NULL,					/* D3 */
-		NULL,					/* D4 */
-		NULL,					/* D5 */
-		NULL,					/* D6 */
-		NULL,					/* D7 */
-		NULL,					/* D8 */
-	};
-
+	char *menu[8];
 	int done = FALSE;
 	int dsknum = 0;
+	int i;
 
-	menu[0] = sio_filename[0];
-	menu[1] = sio_filename[1];
-	menu[2] = sio_filename[2];
-	menu[3] = sio_filename[3];
-	menu[4] = sio_filename[4];
-	menu[5] = sio_filename[5];
-	menu[6] = sio_filename[6];
-	menu[7] = sio_filename[7];
+	for(i=0;i<8;++i) menu[i] = sio_filename[i];
 
 	while (!done) {
-		char filename[256];
+		char filename[1024];
 		int ascii;
 
 		ClearScreen(screen);
@@ -603,10 +589,23 @@ void DiskManagement(UBYTE * screen)
 
 		dsknum = Select(screen, dsknum, 8, menu, 8, 1, 4, 4, FALSE, &ascii);
 		if (dsknum > -1) {
-			if (ascii == 0x9b) {
-				if (FileSelector(screen, atari_disk_dirs[current_disk_directory], filename)) {
-					SIO_Dismount(dsknum + 1);
-					SIO_Mount(dsknum + 1, filename);
+ 			if (ascii == 0x9b) { /* User pressed "Enter" to select a disk image */
+ 				char *pathname;
+ 
+ 				pathname=atari_disk_dirs[current_disk_directory];
+ 				while (FileSelector(screen, pathname, filename)) {
+ 					DIR *subdir;
+ 
+ 					subdir=opendir(filename);
+ 					if (!subdir) { /* A file was selected */
+ 						SIO_Dismount(dsknum + 1);
+ 						SIO_Mount(dsknum + 1, filename);
+ 						break;
+ 					}
+ 					else { /* A directory was selected */
+ 						closedir(subdir);
+ 						pathname=filename;
+ 					}
 				}
 			}
 			else {

@@ -1577,6 +1577,16 @@ void ANTIC_RunDisplayList(void)
 		switch (anticmode) {
 		case 0x00:
 			{
+				if (vscrol_flag) {
+					vskipafter = VSCROL;
+				}
+				vscrol_flag=FALSE;
+				/* apparently blank lines are
+				affected by a VSCROL on to off transition
+				and are shortened from the bottom.
+				they always turn vscrol_flag off however */
+				/* should the blank line in case 0x01 (jump)
+				also be so affected? */
 				normal_lastline = ((IR >> 4) & 0x07);
 				dldmac = 1;
 				/* IR=0; leave dli bit alone. */
@@ -1585,6 +1595,7 @@ void ANTIC_RunDisplayList(void)
 			}
 			break;
 		case 0x01:
+			vscrol_flag=FALSE;
 			if (IR & 0x40) {
 				nlines = 0;
 				JVB = TRUE;

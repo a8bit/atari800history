@@ -13,9 +13,10 @@
 /*            are possible values for either SB or SB compatibles.           */
 /*            Added several helpful information/error messages.  These can   */
 /*            be disabled by removing the SBDRV_SHOW_ERR definition.         */
-/*                                                                                                                                                       */
+/*                                                                           */
 /* 12/24/97 - V1.2 - Added support for DJGPP (by Bradford Mott).             */
 /*                                                                           */
+/* 05/01/98 - V1.3 - Added timeout handling and ResetDSP (by Robert Golias)  */
 /*                                                                           */
 /*****************************************************************************/
 /*                                                                           */
@@ -258,9 +259,9 @@ static void setOldIntVect(uint16 irq)
 
 static void dsp_out(uint16 port, uint8 val)
 {
-
+	uint32 timeout=60000;
 	/* wait for buffer to be free */
-	while (inp(IOaddr + DSP_WRITE) & 0x80) {
+	while ((timeout--) && (inp(IOaddr + DSP_WRITE) & 0x80)) {
 
 		/* do nothing */
 	}
@@ -928,12 +929,13 @@ void CloseSB(void)
 	/* if the SB was initialized */
 	if (Sb_init) {
 
-		/* turn the speaker off */
-		dsp_out(IOaddr + DSP_WRITE, 0xd3);
-
-
 		/* stop all DMA transfer */
 		Stop_audio_output();
+		ResetDSP(IOaddr); /*GOLDA CHANGED*/
+
+
+		/* turn the speaker off */
+		dsp_out(IOaddr + DSP_WRITE, 0xd3);
 
 
 		/* indicate SB no longer active */
@@ -978,7 +980,6 @@ void CloseSB(void)
 		}
 
 	}
-
 }
 
 
@@ -1145,6 +1146,7 @@ uint8 Start_audio_output(uint8 dma_mode,
 			/* reset the DMA counter */
 			DMAcount = 0;
 
+			ResetDSP(IOaddr); /*GOLDA CHANGED*/
 
 			/* set the auto-initialize buffer size */
 			dsp_out(IOaddr + DSP_WRITE, 0x48);

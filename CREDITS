@@ -122,12 +122,17 @@ Thomas Richter <thor@math.tu-berlin.de>
 - POKEY timers
 - ADC/SBC "V" bit bug found and fixed using Frodo 6502 emu source
 
-Petr Sumbera
+Petr Sumbera <xsumbe00@stud.fee.vutbr.cz>
 - LPTjoy idea and design of the interface
 
-Robert Golias <Golda>
+Robert Golias <golias@informatics.muni.cz>
 - UI enhancements and DJGPP fixes
 - Monitor enhancements (esp. line assembler)
 
 Robert W. Brewer <rbrewer@Op.Net>
 - Voxware sound driver updated for POKEY v2.4
+
+Michael Beck <beck@dresearch.de>
+- SIO2PC ATR patch
+- SIO Config patches (tested on real XF551)
+- monitor continues last command

@@ -167,14 +167,14 @@ static uint8 Outvol[4 * MAXPOKEYS];		/* last output volume for each channel */
 /* efficient processing. */
 
 static uint8 bit4[POLY4_SIZE] =
-#ifdef PERRY_MODIFIED_POLY
-{1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0};
+#ifndef POKEY23_POLY
+{1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0};	/* new table invented by Perry */
 #else
-{1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0};
+{1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0};	/* original POKEY 2.3 table */
 #endif
 
 static uint8 bit5[POLY5_SIZE] =
-#ifdef PERRY_MODIFIED_POLY
+#ifndef POKEY23_POLY
 {1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0};
 #else
 {0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1};

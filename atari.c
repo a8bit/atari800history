@@ -967,6 +967,8 @@ int main(int argc, char **argv)
 			machine = Atari5200;
 		else if (strcmp(argv[i], "-nobasic") == 0)
 			hold_option = TRUE;
+		else if (strcmp(argv[i], "-basic") == 0)
+			hold_option = FALSE;
 		else if (strcmp(argv[i], "-nopatch") == 0)
 			enable_sio_patch = FALSE;
 		else if (strcmp(argv[i], "-pal") == 0)
@@ -1020,6 +1022,8 @@ int main(int argc, char **argv)
 			printf("\t-xe           Atari 130XE mode\n");
 			printf("\t-320xe        Atari 320XE mode (COMPY SHOP)\n");
 			printf("\t-rambo        Atari 320XE mode (RAMBO)\n");
+			printf("\t-nobasic      Turn off Atari BASIC ROM\n");
+			printf("\t-basic        Turn on Atari BASIC ROM\n");
 			printf("\t-5200         Atari 5200 Games System\n");
 			printf("\t-pal          Enable PAL TV mode\n");
 			printf("\t-ntsc         Enable NTSC TV mode\n");
@@ -1618,6 +1622,7 @@ int Atari800_PutByte(UWORD addr, UBYTE byte)
 	return abort;
 }
 
+#ifdef SNAILMETER
 void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 {
 	UWORD *ptr, *ptr2;
@@ -1638,6 +1643,7 @@ void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 		ptr[j] = ptr2[j] = 0;
 	}
 }
+#endif
 
 void ui(UBYTE * screen);	/* forward reference */
 
@@ -1716,8 +1722,10 @@ void Atari800_Hardware(void)
 #ifndef BASIC
 		if (++test_val == refresh_rate) {
 			ANTIC_RunDisplayList();
+#ifdef SNAILMETER
 			if (emu_too_fast == 0)
 				ShowRealSpeed(atari_screen, refresh_rate);
+#endif
 			Atari_DisplayScreen((UBYTE *) atari_screen);
 			test_val = 0;
 		}

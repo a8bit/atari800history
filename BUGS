@@ -3,12 +3,12 @@ Bugs and Known Problems
 
 1. Sound should be disabled before entering Monitor...
 
-2. there's probably a bug in SIO (7cities?)
+2. There is incorrect VCOUNT emulation <Thor>
 
-3. There is incorrect VCOUNT emulation <Thor>
+3. there is also a bug in DL handling <Thor>
 
-5. there is also a bug in DL handling <Thor>
+4. keyboard repeat in UI is crazy fast, but just on some machines
 
-6. the last ESC press in UI is passed to the emulated environment
+5. the last ESC press in UI is passed to the emulated environment
 
-7. keyboard in DOS port reacts too slowly
+6. keyboard in DOS port reacts too slowly

@@ -43,6 +43,13 @@ static int ypos_inc = 1;
 static int vga_ptr_inc = 320;
 static int scr_ptr_inc = ATARI_WIDTH;
 
+static int video_mode=0;
+#ifdef AT_USE_ALLEGRO
+  BITMAP *scr_bitmap;
+  UBYTE *dark_memory;
+  void *scr_data=NULL;
+#endif
+
 static int vga_started = 0;		/*AAA needed for DOS to see text */
 UBYTE POT[2];
 extern int SHIFT;
@@ -163,6 +170,285 @@ void read_LPTjoy(int LPTidx, int joyport)
 		trig1 = trigger;
 	}
 }
+
+/* -------------------------------------------------------------------------- */
+#ifdef AT_USE_ALLEGRO
+void Map_bitmap(BITMAP *bitmap,void *memory,int width,int height)
+{
+  int i;
+  
+  bitmap->dat=memory;
+  bitmap->line[0]=memory;
+  for (i=1;i<height;i++)
+    bitmap->line[i]=bitmap->line[i-1]+width;
+}
+void Map_i_bitmap(BITMAP *bitmap,void *memory,void *memory2,int width,int height)
+{
+  int i;
+  
+  bitmap->dat=memory;
+  bitmap->line[0]=memory;
+  bitmap->line[1]=memory2;
+  for (i=2;i<height;i+=2)
+  {
+    bitmap->line[i]=bitmap->line[i-2]+width;
+    bitmap->line[i+1]=bitmap->line[i-1]+width;
+  }
+}
+void make_darker(void *target,void *source,int bytes)
+{
+  __asm__ ("
+          movl %0,%%edi
+          movl %1,%%esi
+          movl %2,%%ecx
+          subl $4,%%edi
+          shr $2,%%ecx
+0:
+          movl (%%esi),%%eax
+          movl %%eax,%%ebx
+          andl  $0xf0f0f0f0,%%eax
+          shrl $1,%%ebx
+          addl $4,%%esi
+          addl $4,%%edi
+          andl $0x07070707,%%ebx
+          orl %%ebx,%%eax
+          decl %%ecx
+          movl %%eax,(%%edi)
+          jne 0b
+    "
+    :
+    : "g" (target), "g" (source), "g" (bytes)
+    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
+  );
+}
+#else
+/* Procedure for initializing X-mode. Possible modes:
+ *		0	320x175			6	360x175
+ *		1	320x200			7	360x200
+ *		2	320x240			8	360x240
+ *		3	320x350			9	360x350
+ *		4	320x400			a	360x400
+ *		5	320x480			b	360x480
+ *
+ * This procedure is based on Guru mode by Per Ole Klemetsrud
+ */
+UWORD x_regtab[]={0x0e11,0x0014,0xe317,0x6b00,0x5901,
+                  0x5a02,0x8e03,0x5e04,0x8a05,0x2d13};
+UWORD x_vert480[]={0x4009,0x3e07,0x0b06,0xea10,0x8c11,
+                   0xe715,0x0416,0xdf12,0xdf12};
+UWORD x_vert350[]={0x4009,0x1f07,0xbf06,0x8310,0x8511,
+                   0x6315,0xba16,0x5d12,0x5d12};
+UBYTE x_clocktab[]={0xa3,0x0,0xe3,0xa3,0x0,0xe3,0xa7,0x67,
+                    0xe7,0xa7,0x67,0xe7};
+UWORD *x_verttab[]={x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480,
+                   x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480};
+
+UBYTE x_open(UWORD mode)
+{
+  __asm__ __volatile__("
+     pushw %%es
+     movw $0x1a00,%%ax
+     int $0x10
+     cmpb $0x1a,%%al
+     je x_VGApresent
+     movb $0,%%al
+     jmp x_exit
+x_VGApresent:
+     movb $0,%%al
+     movzwl %0,%%ebx
+     cmpw $0xb,%%bx
+     jg x_exit
+
+     movw $0x0013,%%ax
+     int $0x10
+
+     movw %1,%%es
+     movw $0x03c4,%%dx
+     movb _x_clocktab(%%ebx),%%cl
+     orb %%cl,%%cl
+     je x_Skip_Reset
+
+     movw $0x100,%%ax
+     outw %%ax,%%dx
+
+     movw $0x3c2,%%dx
+     movb %%cl,%%al
+     outb %%al,%%dx
+
+     movw $0x3c4,%%dx
+     movw $0x300,%%ax
+     outw %%ax,%%dx
+x_Skip_Reset:
+     movw $0x604,%%ax
+     outw %%ax,%%dx
+     
+     cld
+     movl $0xa0000,%%di
+     xorl %%eax,%%eax
+     mov $0x8000,%%cx
+     rep
+     stosw
+
+     movw $0x3d4,%%dx
+     xorl %%esi,%%esi
+     movl %%esi,%%ecx
+     movw $3,%%cx
+     cmpb $5,%%bl
+     jbe x_CRT1
+     movw $10,%%cx
+x_CRT1:
+     movw _x_regtab(,%%esi,2),%%ax
+     outw %%ax,%%dx
+     incl %%esi
+     decw %%cx
+     jne x_CRT1
+
+     movl _x_verttab(,%%ebx,4),%%esi
+     cmpl $0,%%esi
+     je x_noerr
+     cmpl $1,%%esi
+     je x_Set400
+
+     movw $8,%%cx
+x_CRT2:
+     movw (%%esi),%%ax
+     outw %%ax,%%dx
+     incl %%esi
+     incl %%esi
+     decl %%ecx
+     jne x_CRT2
+     jmp x_noerr
+
+x_Set400:
+     mov $0x4009,%%ax
+     out %%ax,%%dx
+x_noerr:
+     xorb %%al,%%al
+x_exit:
+     popw %%es
+     "
+     :
+     : "g" (mode), "c" (_dos_ds)
+     : "%esi", "%eax", "%ebx", "%ecx", "%edx"
+     );
+}
+/* Procedure for copying atari screen to x-mode videomemory */
+void x_blit(void *mem,UBYTE lines,ULONG change,ULONG videoline)
+{ 
+  asm volatile("
+     movl %0,%%esi
+     pushw %%es
+     movw %1,%%es
+     subl $4,%3	
+
+     movw $0x102,%%bx
+     movw $0x3c4,%%dx
+     cld
+     
+     movb %2,%%ch 
+     movl $0xa0000,%%edi
+.ALIGN 4
+__xb_lloop:
+     movb $0x11,%%bh
+__xb_mloop:
+     movw %%bx,%%ax
+     outw %%ax,%%dx 	
+     movb $20,%%cl
+.ALIGN 4     
+__xb_loop:
+     movb (%%esi),%%al
+     movb 4(%%esi),%%ah
+     shrd $16,%%eax,%%eax
+     movb 8(%%esi),%%al
+     movb 12(%%esi),%%ah
+     shrd $16,%%eax,%%eax
+     addl $16,%%esi
+     stosl		
+
+     dec %%cl
+     jne __xb_loop
+
+     subl $319,%%esi
+     subl $80,%%edi
+     shlb $1,%%bh
+     cmpb $0x10,%%bh
+     jne __xb_mloop
+
+     addl %3,%%esi 
+     addl %4,%%edi
+     dec %%ch
+     jne __xb_lloop
+
+     popw %%es
+    "
+    :
+    : "b" (mem), "a"(_dos_ds), "g" (lines), "m" (change), "m" (videoline)
+    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
+  );
+}
+
+void x_blit_i2(void *mem,UBYTE lines,ULONG change,ULONG videoline)
+{ 
+  asm volatile("
+     movl %0,%%esi
+     pushw %%es
+     movw %1,%%es
+     subl $4,%3	
+
+     movw $0x102,%%bx
+     movw $0x3c4,%%dx
+     cld
+     
+     movb %2,%%ch 
+     movl $0xa0000,%%edi
+.ALIGN 4
+__x2_lloop:
+     movb $0x11,%%bh
+__x2_mloop:
+     movw %%bx,%%ax
+     movw $0x3c4,%%dx
+     outw %%ax,%%dx 	
+     movb $20,%%cl
+.ALIGN 4     
+__x2_loop:
+     movb (%%esi),%%al
+     movb 4(%%esi),%%ah
+     shrd $16,%%eax,%%eax
+     movb 8(%%esi),%%al
+     movb 12(%%esi),%%ah
+     shrd $16,%%eax,%%eax
+     addl $16,%%esi
+     movl %%eax,%%edx
+     stosl
+     shr $1,%%edx 
+     and $0xf0f0f0f0,%%eax
+     and $0x07070707,%%edx
+     or %%edx,%%eax
+     .BYTE 0x26
+     movl %%eax,76(%%edi)
+
+     dec %%cl
+     jne __x2_loop
+
+     subl $319,%%esi
+     subl $80,%%edi
+     shlb $1,%%bh
+     cmpb $0x10,%%bh
+     jne __x2_mloop
+
+     addl %3,%%esi 
+     addl %4,%%edi
+     dec %%ch
+     jne __x2_lloop
+
+     popw %%es
+    "
+    :
+    : "b" (mem), "a"(_dos_ds), "g" (lines), "m" (change), "m" (videoline)
+    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
+  );
+}
+#endif
 
 /* -------------------------------------------------------------------------- */
 
@@ -315,10 +601,45 @@ void SetupVgaEnvironment()
 	union REGS rg;
 
 #ifdef AT_USE_ALLEGRO
-	set_gfx_mode(GFX_VGA, 320, 200, 0, 0);
+        switch(video_mode)
+        {
+	  case 0:
+	    set_gfx_mode(GFX_VGA, 320, 200, 0, 0);
+            break;
+          case 1:
+            set_gfx_mode(GFX_AUTODETECT,320,240,0,0);
+ 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT);
+	    scr_data=scr_bitmap->dat;
+            break;
+          case 2:
+            set_gfx_mode(GFX_AUTODETECT,320,480,0,0);
+ 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
+	    scr_data=scr_bitmap->dat;
+            dark_memory=(UBYTE*)malloc(ATARI_WIDTH*ATARI_HEIGHT);
+            memset(dark_memory,0,ATARI_WIDTH*ATARI_HEIGHT);
+            break;
+          case 3:
+            set_gfx_mode(GFX_AUTODETECT,320,480,0,0);
+ 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
+	    scr_data=scr_bitmap->dat;
+            dark_memory=(UBYTE*)malloc(ATARI_WIDTH*ATARI_HEIGHT);
+            break;
+        }
 #else
-	rg.x.ax = 0x0013;
-	int86(0x10, &rg, &rg);
+        switch(video_mode)
+        {
+          case 0:
+	    rg.x.ax = 0x0013;
+	    int86(0x10, &rg, &rg);
+            break;
+          case 1:
+            x_open(2);
+            break;
+          case 2:
+          case 3:
+            x_open(5);
+            break;
+        }
 #endif
 	vga_started = 1;
 
@@ -335,6 +656,31 @@ void SetupVgaEnvironment()
 	}
 
 	key_init();
+}
+
+void ShutdownVgaEnvironment()
+{
+	union REGS rg;
+
+	if (vga_started) {
+		rg.x.ax = 0x0003;
+		int86(0x10, &rg, &rg);
+#ifdef AT_USE_ALLEGRO
+		switch(video_mode)
+		{
+		  case 1:
+ 	            Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT);
+	            destroy_bitmap(scr_bitmap);
+	            break;
+	          case 2:
+	          case 3:
+ 	            Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT*2);
+	            destroy_bitmap(scr_bitmap);
+                    free(dark_memory);
+	            break;
+                }
+#endif
+	}
 }
 
 void Atari_Initialise(int *argc, char *argv[])
@@ -357,6 +703,18 @@ void Atari_Initialise(int *argc, char *argv[])
 
 		else if (strcmp(argv[i], "-joyswap") == 0)
 			joyswap = TRUE;
+			
+		else if (strcmp(argv[i], "-video") == 0)	
+		{
+		  i++;
+		  video_mode=atoi(argv[i]);
+		  if (video_mode<0 || video_mode>3) 
+		  {
+		    printf("Invalid video mode, using default.\n");
+		    getchar();
+		    video_mode=0;
+		  }
+		}
 		else {
 			if (strcmp(argv[i], "-help") == 0) {
 				printf("\t-interlace    Generate screen with interlace\n");
@@ -364,6 +722,10 @@ void Atari_Initialise(int *argc, char *argv[])
 				printf("\t-LPTjoy2      Read joystick connected to LPT2\n");
 				printf("\t-LPTjoy3      Read joystick connected to LPT3\n");
 				printf("\t-joyswap      Swap joysticks\n");
+				printf("\t-video x          set video mode:\n");
+				printf("\t\t0 - 320x200\n\t\t1 - 320x240\n");
+				printf("\t\t2 - 320x240, interlaced with black lines\n");
+				printf("\t\t3 - 320x240, interlaced with darker lines (slower!)\n");
 				printf("\nPress Return/Enter to continue...");
 				getchar();
 				printf("\r                                 \n");
@@ -418,15 +780,8 @@ void Atari_Initialise(int *argc, char *argv[])
 
 int Atari_Exit(int run_monitor)
 {
-	union REGS rg;
-
 	/* restore to text mode */
-
-	if (vga_started) {
-		rg.x.ax = 0x0003;
-		int86(0x10, &rg, &rg);
-	}
-
+        ShutdownVgaEnvironment();
 #ifdef BACKUP_MSG
 	if (*backup_msg_buf) {		/* print the buffer */
 		puts(backup_msg_buf);
@@ -474,18 +829,58 @@ void Atari_DisplayScreen(UBYTE * ascreen)
 		}
 		lace = 1 - lace;
 	}
-	_farsetsel(_dos_ds);
-	for (ypos = 0; ypos < 200; ypos += ypos_inc) {
-/*
-   for (x = 0; x < 320; x += 4) {
-   _farnspokel((int) (vga_ptr + x), *(long *) (scr_ptr + x));
-   }
- */
+#ifdef AT_USE_ALLEGRO
+        switch(video_mode)
+        {
+          case 0:
+	     /*_farsetsel(_dos_ds);*/
+	    for (ypos = 0; ypos < 200; ypos += ypos_inc) {
 		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
 
 		vga_ptr += vga_ptr_inc;
 		scr_ptr += scr_ptr_inc;
-	}
+	    }
+            break;
+          case 1:
+            if (screen!=scr_bitmap->dat)
+              Map_bitmap(scr_bitmap,ascreen,ATARI_WIDTH,ATARI_HEIGHT);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,240);
+            break;
+          case 2:
+            if (screen!=scr_bitmap->dat)
+            Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
+            break;
+          case 3:
+            if (screen!=scr_bitmap->dat)
+              Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
+            make_darker(dark_memory,ascreen,ATARI_WIDTH*ATARI_HEIGHT);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
+            break;
+        }
+#else
+        switch(video_mode)
+        {
+          case 0:
+	     /*_farsetsel(_dos_ds);*/
+	    for (ypos = 0; ypos < 200; ypos += ypos_inc) {
+		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+
+		vga_ptr += vga_ptr_inc;
+		scr_ptr += scr_ptr_inc;
+	    }
+            break;
+          case 1:
+            x_blit(ascreen+first_col,240,ATARI_WIDTH,80);
+            break;
+          case 2:
+            x_blit(ascreen+first_col,240,ATARI_WIDTH,160);
+            break;
+          case 3:
+            x_blit_i2(ascreen+first_col,240,ATARI_WIDTH,160);
+            break;
+        }
+#endif
 
 #ifdef AT_USE_ALLEGRO_COUNTER
 	sprintf(speedmessage, "%d", speed_count);

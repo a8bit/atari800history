@@ -22,6 +22,10 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
 -rambo  Use Rambo mode of 320 kB memory.
 -5200   Enable Atari 5200 Games System Emulation Mode.
 
+-nobasic Disables BASIC (just like when you hold down OPTION while booting)
+
+-basic   Enables BASIC (even if disabled in atari800.cfg by HoldOption)
+
 -nopatch Normally the OS is patched giving very fast I/O. This option
          prevents the patch from being applied so that the OS works
          using the serial port hardware directly. This option will
@@ -92,9 +96,11 @@ Dos VGA Options
 ---------------
 
 -interlace	Select this to display only half the scanlines at a
-		time. Gives a performance increase of about 10%.
+            time. Gives a performance increase of about 10%.
 -nosound	Use this for disabling sound
 -joyswap	Use this for swapping joy0 and joy1
+-LPTjoy1    Use this when you have connected joy to LPT1
+-video <n>  Select video mode: 0 = 320x200, 1 = 320x240
 
 
 Falcon Options

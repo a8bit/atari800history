@@ -74,6 +74,12 @@ struct ATR_Header {
 	unsigned char gash[8];
 };
 
+/*
+ * it seems, there are two different ATR formats with different handling for
+ * DD sectors
+ */
+static int atr_format[MAX_DRIVES];
+
 typedef enum Format {
 	XFD, ATR
 } Format;
@@ -130,6 +136,8 @@ int SIO_Mount(int diskno, char *filename)
 
 	if (fd >= 0) {
 		int status;
+		ULONG file_length = lseek(fd, 0L, SEEK_END);
+		lseek(fd, 0L, SEEK_SET);
 
 		status = read(fd, &header, sizeof(struct ATR_Header));
 		if (status == -1) {
@@ -141,6 +149,8 @@ int SIO_Mount(int diskno, char *filename)
 		strcpy(sio_filename[diskno - 1], filename);
 
 		if ((header.magic1 == MAGIC1) && (header.magic2 == MAGIC2)) {
+			format[diskno - 1] = ATR;
+
 			sectorcount[diskno - 1] = header.hiseccounthi << 24 |
 				header.hiseccountlo << 16 |
 				header.seccounthi << 8 |
@@ -155,17 +165,23 @@ int SIO_Mount(int diskno, char *filename)
 				sectorcount[diskno - 1] /= 2;
 			}
 
+			/* ok, try to check if it's a SIO2PC ATR */
+			{
+				ULONG len = (sectorcount[diskno - 1] - 3) * sectorsize[diskno - 1] + 16 + 3*128;
+				if (file_length == len)
+					atr_format[diskno - 1] = SIO2PC_ATR;
+				else
+					atr_format[diskno - 1] = OTHER_ATR;
+			}
+
 #ifdef DEBUG
 			printf("ATR: sectorcount = %d, sectorsize = %d\n",
 				   sectorcount[diskno - 1],
 				   sectorsize[diskno - 1]);
+			printf("%s ATR\n", atr_format[diskno - 1] == SIO2PC_ATR ? "SIO2PC" : "???");
 #endif
-
-			format[diskno - 1] = ATR;
 		}
 		else {
-			ULONG file_length = lseek(fd, 0L, SEEK_END);
-			lseek(fd, 0L, SEEK_SET);
 			format[diskno - 1] = XFD;
 			/* XFD might be of double density ! (PS) */
 			sectorsize[diskno - 1] = (file_length > (1040 * 128)) ? 256 : 128;
@@ -208,9 +224,21 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 		break;
 	case ATR:
 		if (sector < 4)
-			size = 128;		/* special case for first three sectors in ATR image */
-
+			/* special case for first three sectors in ATR image */
+			size = 128;
+#if 0	/* PS code, not tested yet */
 		offset = (sector - 1) * size + 16;
+
+		if (atr_format[unit] == SIO2PC_ATR && sector >= 4)
+				/* SIO2PC stores first 3 sectors always in single density */
+				offset -= 3*(size - 128);
+		}
+#else
+		if (atr_format[unit] == SIO2PC_ATR && sector >= 4)
+			offset = (sector - 4) * size + 16 + 3*128;
+		else
+			offset = (sector - 1) * size + 16;
+#endif
 		break;
 	default:
 #ifdef WIN32
@@ -301,6 +329,11 @@ int WriteSector(int unit, int sector, UBYTE * buffer)
 		return 0;
 }
 
+/*
+ * FormatSingle is used on the XF551 for formating SS/DD and DS/DD too
+ * however, I have to check if they expect a 256 byte buffer or if 128
+ * is ok either
+ */
 int FormatSingle(int unit, UBYTE * buffer)
 {
 	int i;
@@ -357,18 +390,29 @@ int FormatEnhanced(int unit, UBYTE * buffer)
 
 int WriteStatusBlock(int unit, UBYTE * buffer)
 {
+	int size;
 
 	if (drive_status[unit] != Off) {
-		/* We only care about the density right here. Setting everything else
-		   right here seems to be non-sense */
+		/*
+		 * We only care about the density and the sector count
+		 * here. Setting everything else right here seems to
+		 * be non-sense
+		 */
 		if (format[unit] == ATR) {
-			if (buffer[5] == 8) {
+			/* I'm not sure about this density settings, my XF551
+			 * honnors only the sector size and ignore the density
+			 */
+			size = buffer[6] * 256 + buffer[7];
+			if (size == 128 || size == 256)
+				sectorsize[unit] = size;
+			else if (buffer[5] == 8) {
 				sectorsize[unit] = 256;
 			}
 			else {
 				sectorsize[unit] = 128;
 			}
-			sectorcount[unit] = 720;
+			/* Note, that the number of heads are minus 1 */
+			sectorcount[unit] = buffer[0] * (buffer[2] * 256 + buffer[3]) * (buffer[4] + 1);
 			return 'C';
 		}
 		else
@@ -378,17 +422,26 @@ int WriteStatusBlock(int unit, UBYTE * buffer)
 		return 0;
 }
 
+/*
+ * My german "Atari Profi Buch" says, buffer[4] holds the number of
+ * heads. However, BiboDos and my XF551 think that´s the number minus 1.
+ *
+ * ???
+ */
 int ReadStatusBlock(int unit, UBYTE * buffer)
 {
-	int size;
+	int size, spt, heads;
 
 	if (drive_status[unit] != Off) {
+		spt = sectorcount[unit] / 40;
+		heads =  (spt > 26) ? 2 : 1;
 		SizeOfSector((UBYTE)unit, 0x168, &size, NULL);
+
 		buffer[0] = 40;			/* # of tracks */
 		buffer[1] = 1;			/* step rate. No idea what this means */
-		buffer[2] = 0;			/* sectors per track. HI byte */
-		buffer[3] = 18;			/* sectors per track. LO byte */
-		buffer[4] = 1;			/* # of heads */
+		buffer[2] = spt >> 8;	/* sectors per track. HI byte */
+		buffer[3] = spt & 0xFF;	/* sectors per track. LO byte */
+		buffer[4] = heads-1;	/* # of heads */
 		if (size == 128) {
 			buffer[5] = 4;		/* density */
 			buffer[6] = 0;		/* HI bytes per sector */
@@ -467,7 +520,6 @@ void SIO(void)
 /*
    printf("SIO: Unit %x,Sector %x,Data %x,Length %x,CMD %x\n",unit,sector,data,length,cmd);
  */
-
 	if (Peek(0x300) == 0x31)
 		switch (cmd) {
 		case 0x4e:				/* Read Status Block */

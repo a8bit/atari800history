@@ -31,6 +31,7 @@
 
 static char *rcsid = "$Id: gtia.c,v 1.17 1997/02/15 13:57:11 david Exp $";
 int atari_speaker;
+int consol_mask;
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
@@ -413,11 +414,13 @@ UBYTE GTIA_GetByte(UWORD addr)
 	switch (addr) {
 	case _CONSOL:
 		if (next_console_value != 7) {
-			byte = next_console_value;
+			byte = (next_console_value|0x08)&consol_mask;
 			next_console_value = 0x07;
 		}
 		else {
-			byte = Atari_CONSOL();
+			byte = (Atari_CONSOL()|0x08)&consol_mask;
+                        //0x08 is because 'speaker is always 'on' '
+                        //consol_mask is set by CONSOL (write) !PM!
 		}
 		break;
 	case _M0PF:
@@ -642,6 +645,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _CONSOL:
 		atari_speaker = !(byte & 0x08);
+		consol_mask = (~byte)&0x0f;
 		break;
 	case _GRAFM:
 		GRAFM = byte;
