@@ -1,3 +1,24 @@
+Changes in 1.0.2  - 2000/05/29
+----------------
+
+o Matt fixed his DOS SB driver
+
+-- Piotr's changes:
+o gray.act palette
+
+o DOS/VGA: assembly part of x_open moved to vga_asm.s as x_open_asm
+  - this should make new djgpp happy :)
+
+o cpu: opcodes $8b and $ab restored - they work different on Atari
+  than on C64
+
+o monitor: READ and WRITE don't quit emulator on error
+
+o monitor: S can search for any number of bytes
+
+o monitor: HELP corrected - [] used for optional parameters only
+
+
 Changes in 1.0.1  - 2000/05/25
 ----------------
 

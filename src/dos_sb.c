@@ -1,21 +1,20 @@
 /*
-** Nofrendo - NES emulator
-** (c) 1998-2000 Matthew Conte
+** Nofrendo (c) 1998-2000 Matthew Conte (matt@conte.com)
 **
 **
-** This library is free software; you can redistribute it and/or modify it
-** under the terms of version 2 of the GNU Library General Public License
-** as published by the Free Software Foundation.
+** This program is free software; you can redistribute it and/or
+** modify it under the terms of version 2 of the GNU Library General 
+** Public License as published by the Free Software Foundation.
 **
-** This library is distributed in the hope that it will be useful, but
-** WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library
-** General Public License for more details.
-** To obtain a copy of the GNU Library General Public License, write to the
-** Free Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+** This program is distributed in the hope that it will be useful, 
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+** Library General Public License for more details.  To obtain a 
+** copy of the GNU Library General Public License, write to the Free 
+** Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
-** Any permitted reproduction of these routines, in whole or in part, must
-** bear this legend.
+** Any permitted reproduction of these routines, in whole or in part,
+** must bear this legend.
 **
 **
 ** dos_sb.c
@@ -24,6 +23,7 @@
 **
 ** Note: the information in this file has been gathered from many
 **  Internet documents, and from source code written by Ethan Brodsky.
+** $Id: dos_sb.c,v 1.3 2000/05/14 19:11:56 matt Exp $
 */
 
 #include <stdio.h>
@@ -41,17 +41,37 @@
 #define log_printf Aprint
 
 
+#define  INVALID        0xFFFFFFFF
+
+#define  DSP_RESET      0x06
+#define  DSP_READ       0x0A
+#define  DSP_WRITE      0x0C
+#define  DSP_ACK        0x0E
+
+#define  DSP_GETVERSION 0xE1
+
+#define  DSP_DMA_PAUSE_8BIT   0xD0
+#define  DSP_DMA_PAUSE_16BIT  0xD5
+
+#define  LOW_BYTE(x)    (uint8) ((x) & 0xFF)
+#define  HIGH_BYTE(x)   (uint8) ((x) >> 8)
+
+
+/* our all-encompassing Sound Blaster structure */
 static struct
 {
    uint16 baseio;
    uint16 dspversion;
-   unsigned int dma, dma16;
-   unsigned int irq;
-   int samplerate;
-   int bps;
-   int bufsize, halfbuf;
+   uint32 dma, dma16;
+   uint32 irq;
+   
+   uint32 samplerate;
+   uint8 bps;
    boolean stereo;
+   
    void *buffer;
+   uint32 bufsize, halfbuf;
+   
    sbmix_t callback;
 } sb;
 
@@ -59,23 +79,22 @@ static struct
 static boolean dma_autoinit = FALSE;
 static volatile int dma_count = 0;
 static int dma_length;
-static int dma_addrport;
-static int dma_ackport;
+static uint16 dma_addrport;
+static uint16 dma_ackport;
 
 /* DOS specifics */
 static _go32_dpmi_seginfo dos_buffer;
-static int dos_bufaddr = 0;
-static unsigned int dos_offset = 0, dos_page = 0;
+static uint32 dos_offset = 0, dos_page = 0;
+static uint32 dos_bufaddr = 0;
 
 /* interrupt / autodetection info */
 #define  MAX_IRQS    11
 
-static unsigned int irq_intvector = INVALID;
-static unsigned int pic_rotateport = INVALID, pic_maskport = INVALID;
-static unsigned int irq_stopmask = INVALID, irq_startmask = INVALID;
+static uint32 irq_intvector = INVALID;
+static uint8 pic_rotateport = (uint8) INVALID, pic_maskport = (uint8) INVALID;
+static uint8 irq_stopmask = (uint8)  INVALID, irq_startmask = (uint8)  INVALID;
 static _go32_dpmi_seginfo old_interrupt;
 static _go32_dpmi_seginfo new_interrupt;
-
 static _go32_dpmi_seginfo old_handler[MAX_IRQS];
 static _go32_dpmi_seginfo new_handler[MAX_IRQS];
 static volatile int irq_hit[MAX_IRQS];
@@ -99,16 +118,18 @@ static const uint8 dma_ports[] =
 */
 static void dsp_write(uint16 baseio, uint8 value)
 {
-   int timeout = 0x10000;
+   int timeout = 10000;
+
    /* wait until DSP is ready... */
-   while (timeout-- && inportb(baseio + DSP_WRITE) & 0x80)
+   while (timeout-- && (inportb(baseio + DSP_WRITE) & 0x80))
       ; /* loop */
    outportb(baseio + DSP_WRITE, value);
 }
 
 static uint8 dsp_read(uint16 baseio)
 {
-   int timeout = 0x10000;
+   int timeout = 10000;
+
    while (timeout-- && (0 == (inportb(baseio + DSP_ACK) & 0x80)))
       ; /* loop */
    return (inportb(baseio + DSP_READ));
@@ -117,18 +138,13 @@ static uint8 dsp_read(uint16 baseio)
 /* returns TRUE if DSP found and successfully reset, FALSE otherwise */
 static boolean dsp_reset(uint16 baseio)
 {
-   int timeout = 0x1000;
-
    outportb(baseio + DSP_RESET, 1); /* reset command */
    delay(5);                        /* 5 usec delay */
    outportb(baseio + DSP_RESET, 0); /* clear */
    delay(5);                        /* 5 usec delay */
 
-   while (timeout--)
-   {
-      if (0xAA == dsp_read(baseio))
-         return TRUE;
-   }
+   if (0xAA == dsp_read(baseio))
+      return TRUE;
 
    /* BLEH, we failed */
    return FALSE;
@@ -139,7 +155,7 @@ static uint16 dsp_getversion(uint16 baseio)
 {
    uint16 version;
 
-   dsp_write(baseio, 0xE1);
+   dsp_write(baseio, DSP_GETVERSION);
    version = dsp_read(baseio) << 8;
    version += dsp_read(baseio);
    return version;
@@ -172,8 +188,8 @@ static void dsp_stop(uint16 baseio)
 {
    /* pause 8/16 bit DMA mode digitized sound IO */
    dsp_reset(baseio);
-   dsp_write(baseio, 0xD0);
-   dsp_write(baseio, 0xD5);
+   dsp_write(baseio, DSP_DMA_PAUSE_8BIT);
+   dsp_write(baseio, DSP_DMA_PAUSE_16BIT);
 }
 
 /* return dma_request for all channels (bit7->dma7... bit0->dma0) */
@@ -326,6 +342,7 @@ static int check_hits(uint16 baseio)
       if (irq_hit[i] && (0 == irq_mask[i]))
       {
          irq = i;
+
          /* acknowledge the interrupts! */
          inportb(baseio + 0x0E);
          if (irq > 7)
@@ -413,55 +430,60 @@ static unsigned int detect_irq(uint16 baseio, int dma)
 }
 
 /* try and detect an SB without environment variables */
-static boolean sb_detect(uint16 *baseio, unsigned int *irq, unsigned int *dma, 
-                         unsigned int *dma16)
+static boolean sb_detect(void)
 {
-   if ((uint16) INVALID == (*baseio = detect_baseio()))
+   if ((uint16) INVALID == (sb.baseio = detect_baseio()))
       return FALSE;
-   if (INVALID == (*dma = detect_dma(*baseio)))
+   if (INVALID == (sb.dma = detect_dma(sb.baseio)))
       return FALSE;
-   if (INVALID == (*dma16 = detect_dma16(*baseio)))
+   if (INVALID == (sb.dma16 = detect_dma16(sb.baseio)))
       return FALSE;
-   if (INVALID == (*irq = detect_irq(*baseio, *dma)))
+   if (INVALID == (sb.irq = detect_irq(sb.baseio, sb.dma)))
       return FALSE;
 
    return TRUE;
 }
 
-
 /*
 ** BLASTER environment variable parsing
 */
-static boolean get_env_item(char *env, int *value, char find, int base)
+static boolean get_env_item(char *env, void *ptr, char find, int base)
 {
    char *item;
+   int value;
 
    item = strrchr(env, find);
    if (NULL == item)
       return FALSE;
 
    item++;
-   *value = strtol(item, NULL, base);
+   value = strtol(item, NULL, base);
+
+   if (10 == base)
+      *(int *) ptr = value;
+   else if (16 == base)
+      *(uint16 *) ptr = value;
+
    return TRUE;
 }
 
 /* parse the BLASTER environment variable */
 static boolean parse_blaster_env(void)
 {
-   char blaster[256];
-   int baseio;
+   char blaster[256], *penv;
+
+   penv = getenv("BLASTER");
 
    /* bail out if we can't find it... */
-   if (NULL == getenv("BLASTER"))
+   if (NULL == penv)
       return FALSE;
 
    /* copy it, normalize case */
-   strcpy(blaster, getenv("BLASTER"));
+   strcpy(blaster, penv);
    strupr(blaster);
 
-   if (FALSE == get_env_item(blaster, &baseio, 'A', 16))
+   if (FALSE == get_env_item(blaster, &sb.baseio, 'A', 16))
       return FALSE;
-   sb.baseio = (uint16) baseio;
    if (FALSE == get_env_item(blaster, &sb.irq, 'I', 10))
       return FALSE;
    if (FALSE == get_env_item(blaster, &sb.dma, 'D', 10))
@@ -479,10 +501,10 @@ static boolean sb_probe(void)
 
    for (i = 0; i < 2; i++)
    {
-      if (i == 0)
+      if (0 == i)
          success = parse_blaster_env();
       else
-         success = sb_detect(&sb.baseio, &sb.irq, &sb.dma, &sb.dma16);
+         success = sb_detect();
 
       if (FALSE == success)
          continue;
@@ -509,7 +531,7 @@ static boolean sb_probe(void)
 /* interrupt handler for 8/16-bit audio */
 static void sb_isr(void)
 {
-   int address;
+   uint32 address;
 
    if (FALSE == dma_autoinit)
    {
@@ -553,18 +575,22 @@ END_OF_FUNCTION(sb_isr);
 /* install the SB ISR */
 static void sb_setisr(int irq, int bps)
 {
-   assert(irq < 10);
+   /* if your IRQ is greater than 10, you're
+   ** going to be screwed, anyway..  but
+   ** we'll allow it for the time being
+   */
+   /*assert(irq < 11);*/
 
    /* lock variables, routines */
    LOCK_VARIABLE(dma_autoinit);
-   LOCK_VARIABLE(sb.baseio);
-   LOCK_VARIABLE(sb.bufsize);
    LOCK_VARIABLE(dma_count);
    LOCK_VARIABLE(dma_ackport);
    LOCK_VARIABLE(dma_addrport);
+   LOCK_VARIABLE(dos_bufaddr);
+   LOCK_VARIABLE(sb.baseio);
+   LOCK_VARIABLE(sb.bufsize);
    LOCK_VARIABLE(sb.buffer);
    LOCK_VARIABLE(sb.halfbuf);
-   LOCK_VARIABLE(dos_bufaddr);
    LOCK_VARIABLE(sb.irq);
    LOCK_FUNCTION(sb_isr);
 
@@ -795,7 +821,7 @@ void sb_stopoutput(void)
 /* return time constant for older sound bastards */
 static uint8 get_time_constant(int rate)
 {
-   return (256 - (1000000 / rate));
+   return ((65536 - (256000000L / rate)) >> 8);
 }
 
 static void init_samplerate(int rate)
@@ -817,14 +843,17 @@ static void init_samplerate(int rate)
 void sb_setrate(int rate)
 {
    if (8 == sb.bps)
+   {
       dsp_write(sb.baseio, 0xD0);   /* pause 8-bit DMA */
-
-   init_samplerate(rate);
-
-   if (8 == sb.bps)
+      init_samplerate(rate);
       dsp_write(sb.baseio, 0xD4);   /* continue 8-bit DMA */
+   }
    else
+   {
+      dsp_write(sb.baseio, 0xD5);   /* pause 16-bit DMA */
+      init_samplerate(rate);
       dsp_write(sb.baseio, 0xD6);   /* continue 16-bit DMA */
+   }
 
    sb.samplerate = rate;
 }
@@ -832,15 +861,10 @@ void sb_setrate(int rate)
 /* start SB DMA transfer */
 static void start_transfer(void)
 {
-   int dma_maskport;
-   int dma_stopmask;
-   int dma_clrptrport;
-   int dma_modeport;
-   int dma_mode;
-   int dma_countport;
-   int dma_pageport;
-   int dma_startmask;
-   uint8 start_command, mode_command;
+   int dma_maskport, dma_clrptrport;
+   int dma_startmask, dma_stopmask;
+   int dma_modeport, dma_countport, dma_pageport;
+   uint8 dma_mode, start_command, mode_command;
 
    dma_count = 0;
 
@@ -855,6 +879,7 @@ static void start_transfer(void)
       dma_pageport = dma_ports[sb.dma16];
       dma_stopmask = (sb.dma16 - 4) + 0x04;
       dma_startmask = (sb.dma16 - 4) + 0x00;
+
       if (dma_autoinit)
          dma_mode = (sb.dma16 - 4) + 0x58;
       else
@@ -884,9 +909,9 @@ static void start_transfer(void)
 
    /* set signed/unsigned */
    if (8 == sb.bps)
-      mode_command = 0;    /* signed */
+      mode_command = 0;       /* signed */
    else
-      mode_command = 0x10; /* unsigned */
+      mode_command = 0x10;    /* unsigned */
 
    if (TRUE == sb.stereo)
       mode_command |= 0x20;   /* OR in the stereo bit */
@@ -961,7 +986,8 @@ int sb_startoutput(sbmix_t fillbuf)
    /* ensure interrupts are really firing... */
    count = clock();
 
-   while (((clock() - count) < CLOCKS_PER_SEC / 2) && (dma_count < 2)); /* loop */
+   while (((clock() - count) < CLOCKS_PER_SEC / 2) && (dma_count < 2))
+      ; /* loop */
 
    if (dma_count < 2)
    {
@@ -970,7 +996,7 @@ int sb_startoutput(sbmix_t fillbuf)
          log_printf("Autoinit DMA failed, trying standard mode.\n");
          dsp_reset(sb.baseio);
          dma_autoinit = FALSE;
-         return (sb_startoutput(fillbuf)); /* yee-haw!  recursion! */
+         return (sb_startoutput(fillbuf));
       }
       else
       {

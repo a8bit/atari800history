@@ -1,6 +1,6 @@
 /*	CPU.C
  *	Original Author : David Firth
- *	Last changes    : 24th May 2000, Matthew Conte
+ *	Last changes    : 25th May 2000, Piotr Fusik (Fox)
  */
 /*
 	Compilation options
@@ -1369,10 +1369,10 @@ void GO(int limit)
 		Z = N = A = X;
 		DONE
 
-	OPCODE(8b)				/* ANE #ab [unofficial - (A OR $EE) AND X AND Mem to Acc] (Fox) */
+	OPCODE(8b)				/* ANE #ab [unofficial - A AND X AND (Mem OR $EF) to Acc] (Fox) */
 		data = dGetByte(PC++);
-		/* MPC 05/24/00 */
-		N = Z = A = (A | 0xee) & X & data;
+		N = Z = A & X & data;
+		A &= X & (data | 0xef);
 		DONE
 
 	OPCODE(8c)				/* STY abcd */
@@ -1541,9 +1541,8 @@ void GO(int limit)
 		Z = N = X = A;
 		DONE
 
-	OPCODE(ab)				/* ANX #ab [unofficial - (A OR $EE) AND #ab, then TAX] */
-		/* MPC 05/24/00 */
-		Z = N = X = A = ((A | 0xee) & dGetByte(PC++));
+	OPCODE(ab)				/* ANX #ab [unofficial - AND #ab, then TAX] */
+		Z = N = X = A &= dGetByte(PC++);
 		DONE
 
 	OPCODE(ac)				/* LDY abcd */
@@ -1709,10 +1708,8 @@ void GO(int limit)
 		X &= A;
 		data = dGetByte(PC++);
 		C = X >= data;
-		Z = N = X - data;
 		/* MPC 05/24/00 */
-		X -= data;
-		Z = N = X;
+		Z = N = X -= data;
 		DONE
 
 	OPCODE(cc)				/* CPY abcd */

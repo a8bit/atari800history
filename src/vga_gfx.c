@@ -272,10 +272,11 @@ UBYTE x_clocktab[]={0xa3,0x0,0xe3,0xa3,0x0,0xe3,0xa7,0x67,
 UWORD *x_verttab[]={x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480,
                    x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480};
 
+void x_open_asm(int mode);	/* in vga_asm.s */
+
 UBYTE x_open(UWORD mode)
 {
     __dpmi_regs rg;
-    UBYTE ret = 0;
 
     if (mode>0xb) return 0;
     rg.x.ax = 0x1a00;
@@ -285,81 +286,8 @@ UBYTE x_open(UWORD mode)
     rg.x.ax=0x0013;
     __dpmi_int(0x10,&rg);
 
-     __asm__ __volatile__("
-     movzwl %0,%%ebx
-
-     pushw %%es
-     movw %1,%%es
-     movw $0x03c4,%%dx
-     movb _x_clocktab(%%ebx),%%cl
-     orb %%cl,%%cl
-     je x_Skip_Reset
-
-     movw $0x100,%%ax
-     outw %%ax,%%dx
-
-     movw $0x3c2,%%dx
-     movb %%cl,%%al
-     outb %%al,%%dx
-
-     movw $0x3c4,%%dx
-     movw $0x300,%%ax
-     outw %%ax,%%dx
-x_Skip_Reset:
-     movw $0x604,%%ax
-     outw %%ax,%%dx
-
-     cld
-     movl $0xa0000,%%di
-     xorl %%eax,%%eax
-     mov $0x8000,%%cx
-     rep
-     stosw
-
-     movw $0x3d4,%%dx
-     xorl %%esi,%%esi
-     movl %%esi,%%ecx
-     movw $3,%%cx
-     cmpb $5,%%bl
-     jbe x_CRT1
-     movw $10,%%cx
-x_CRT1:
-     movw _x_regtab(,%%esi,2),%%ax
-     outw %%ax,%%dx
-     incl %%esi
-     decw %%cx
-     jne x_CRT1
-
-     movl _x_verttab(,%%ebx,4),%%esi
-     cmpl $0,%%esi
-     je x_noerr
-     cmpl $1,%%esi
-     je x_Set400
-
-     movw $8,%%cx
-x_CRT2:
-     movw (%%esi),%%ax
-     outw %%ax,%%dx
-     incl %%esi
-     incl %%esi
-     decl %%ecx
-     jne x_CRT2
-     jmp x_noerr
-
-x_Set400:
-     mov $0x4009,%%ax
-     out %%ax,%%dx
-x_noerr:
-     xorb %%al,%%al
-x_exit:
-     popw %%es
-     "
-     :
-     : "g" (mode), "c" (_dos_ds)
-     : "%esi", "%eax", "%ebx", "%ecx", "%edx"
-     );
-     /* ret should be filled with %al in the inline asm but I don't know the syntax */
-     return ret;
+	x_open_asm(mode);
+	return 0;
 }
 
 #else

@@ -43,6 +43,90 @@ y_ok:
 
 /* from vga_gfx.c ---------------------------------------------------------- */
 
+/* void x_open_asm(int mode) */
+/* stack frame:
+esp:	old_es
+esp+2:	old_ebx
+esp+6:	old_esi
+esp+10:	old_edi
+esp+14:	ret_addr
+esp+18:	mode
+ */
+.globl _x_open_asm
+_x_open_asm:
+	pushl %edi
+	pushl %esi
+	pushl %ebx
+	pushw %es
+
+	movl 18(%esp), %ebx
+	movw __go32_info_block+26, %es	/* __dos_ds */
+	movw $0x03c4, %dx
+	movb _x_clocktab(%ebx), %cl
+	orb %cl, %cl
+	je x_Skip_Reset
+
+	movw $0x100, %ax
+	outw %ax, %dx
+
+	movw $0x3c2, %dx
+	movb %cl, %al
+	outb %al, %dx
+
+	movw $0x3c4, %dx
+	movw $0x300, %ax
+	outw %ax, %dx
+x_Skip_Reset:
+	movw $0x604, %ax
+	outw %ax, %dx
+
+	cld
+	movl $0xa0000, %edi
+	xorl %eax, %eax
+	movl $0x8000, %ecx
+	rep
+	stosw
+
+	movw $0x3d4, %dx
+	xorl %esi, %esi
+	movw $3, %ecx
+	cmpb $5, %bl
+	jbe x_CRT1
+	movw $10, %cx
+x_CRT1:
+	movw _x_regtab(,%esi,2), %ax
+	outw %ax, %dx
+	incl %esi
+	decw %cx
+	jne x_CRT1
+
+	movl _x_verttab(,%ebx,4),%esi
+	cmpl $0, %esi
+	je x_noerr
+	cmpl $1, %esi
+	je x_Set400
+
+	movw $8, %cx
+x_CRT2:
+	movw (%esi), %ax
+	outw %ax, %dx
+	incl %esi
+	incl %esi
+	decl %ecx
+	jne x_CRT2
+	jmp x_noerr
+
+x_Set400:
+	movw $0x4009, %ax
+	outw %ax, %dx
+x_noerr:
+
+	popw %es
+	popl %ebx
+	popl %esi
+	popl %edi
+	ret
+
 /* bitmap blitting function */
 /* void VESA_blit(void *mem,ULONG width,ULONG height,ULONG bitmapline,ULONG videoline,UWORD selector) */
 /* stack frame:

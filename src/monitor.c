@@ -829,17 +829,13 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 						int fd;
 
 						fd = open(filename, O_RDONLY | O_BINARY);
-						if (fd == -1) {
+						if (fd == -1)
 							perror(filename);
-							Atari800_Exit(FALSE);
-							exit(1);
+						else {
+							if (read(fd, &memory[addr], nbytes) == -1)
+								perror("read");
+							close(fd);
 						}
-						if (read(fd, &memory[addr], nbytes) == -1) {
-							perror("read");
-							Atari800_Exit(FALSE);
-							exit(1);
-						}
-						close(fd);
 					}
 				}
 			}
@@ -860,14 +856,12 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				int fd;
 
 				fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
-				if (fd == -1) {
+				if (fd == -1)
 					perror("open");
-					Atari800_Exit(FALSE);
-					exit(1);
+				else {
+					write(fd, &memory[addr1], addr2 - addr1 + 1);
+					close(fd);
 				}
-				write(fd, &memory[addr1], addr2 - addr1 + 1);
-
-				close(fd);
 			}
 		}
 #endif
@@ -931,27 +925,33 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 		}
 #endif
 		else if (strcmp(t, "S") == 0) {
-			int addr;
-			int addr1;
-			int addr2;
+			int n = 0;
 			UWORD xaddr1;
 			UWORD xaddr2;
 			UWORD hexval;
+			UBYTE tab[64];
 
 			get_hex(NULL, &xaddr1);
 			get_hex(NULL, &xaddr2);
-			get_hex(NULL, &hexval);
+			while (get_hex(NULL, &hexval)) {
+				tab[n++] = (UBYTE) hexval;
+				if (hexval & 0xff00)
+					tab[n++] = (UBYTE) (hexval >> 8);
+			}
+			if (n) {
+				int addr;
+				int addr1 = xaddr1;
+				int addr2 = xaddr2;
 
-			addr1 = xaddr1;
-			addr2 = xaddr2;
-
-			for (addr = addr1; addr <= addr2; addr++)
-				if (dGetByte(addr) == (UBYTE) (hexval & 0x00ff)) {
-					if (hexval & 0xff00)
-						if (dGetByte(addr + 1) != (UBYTE) (hexval >> 8))
-							continue;
+				for (addr = addr1; addr <= addr2; addr++) {
+					int i;
+					for (i = 0; i < n; i++)
+						if (dGetByte(addr + i) != tab[i])
+							goto not_found;
 					printf("Found at %04x\n", addr);
+					not_found:
 				}
+			}
 		}
 #ifndef PAGED_MEM
 		else if (strcmp(t, "C") == 0) {
@@ -1050,17 +1050,17 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			printf("STACK                          - Show stack\n");
 			printf("SET{PC,A,S,X,Y} hexval         - Set register value\n");
 			printf("SET{N,V,D,I,Z,C} hexval        - Set flag value\n");
-			printf("C [startaddr] [hexval...]      - Change memory\n");
+			printf("C startaddr hexval...          - Change memory\n");
 			printf("D [startaddr]                  - Disassemble memory\n");
-			printf("F [startaddr] [endaddr] hexval - Fill memory\n");
+			printf("F startaddr endaddr hexval     - Fill memory\n");
 			printf("M [startaddr]                  - Memory list\n");
-			printf("S [startaddr] [endaddr] hexval - Search memory\n");
+			printf("S startaddr endaddr hexval...  - Search memory\n");
 			printf("ROM startaddr endaddr          - Convert memory block into ROM\n");
 			printf("RAM startaddr endaddr          - Convert memory block into RAM\n");
 			printf("HARDWARE startaddr endaddr     - Convert memory block into HARDWARE\n");
-			printf("READ filename addr nbytes      - Read file into memory\n");
+			printf("READ filename startaddr nbytes - Read file into memory\n");
 			printf("WRITE startaddr endaddr [file] - Write memory block to a file (memdump.dat)\n");
-			printf("SUM [startaddr] [endaddr]      - SUM of specified memory range\n");
+			printf("SUM startaddr endaddr          - SUM of specified memory range\n");
 #ifdef TRACE
 			printf("TRON                           - Trace on\n");
 			printf("TROFF                          - Trace off\n");

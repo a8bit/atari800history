@@ -1,26 +1,26 @@
 /*
-** Nofrendo - NES emulator
-** (c) 1998-2000 Matthew Conte
+** Nofrendo (c) 1998-2000 Matthew Conte (matt@conte.com)
 **
 **
-** This library is free software; you can redistribute it and/or modify it
-** under the terms of version 2 of the GNU Library General Public License
-** as published by the Free Software Foundation.
+** This program is free software; you can redistribute it and/or
+** modify it under the terms of version 2 of the GNU Library General 
+** Public License as published by the Free Software Foundation.
 **
-** This library is distributed in the hope that it will be useful, but
-** WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library
-** General Public License for more details.
-** To obtain a copy of the GNU Library General Public License, write to the
-** Free Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+** This program is distributed in the hope that it will be useful, 
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+** Library General Public License for more details.  To obtain a 
+** copy of the GNU Library General Public License, write to the Free 
+** Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
-** Any permitted reproduction of these routines, in whole or in part, must
-** bear this legend.
+** Any permitted reproduction of these routines, in whole or in part,
+** must bear this legend.
 **
 **
 ** dos_sb.h
 **
 ** DOS Sound Blaster header file
+** $Id: dos_sb.h,v 1.2 2000/05/14 19:11:56 matt Exp $
 */
 
 #ifndef _DOS_SB_H_
@@ -57,16 +57,6 @@
 #ifndef  FALSE
 #define  FALSE    0
 #endif
-
-#define  INVALID        0xFFFFFFFF
-
-#define  DSP_RESET      0x06
-#define  DSP_READ       0x0A
-#define  DSP_WRITE      0x0C
-#define  DSP_ACK        0x0E
-
-#define  LOW_BYTE(x)    (uint8) ((x) & 0xFF)
-#define  HIGH_BYTE(x)   (uint8) ((x) >> 8)
 
 typedef void (*sbmix_t)(void *buffer, int size);
 
