@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "atari.h"
+#include "config.h"
 #include "cpu.h"
 #include "memory.h"
 #include "pia.h"

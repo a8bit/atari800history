@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include "atari.h"
+#include "config.h"
 #include "log.h"
 #ifdef ZLIB_CAPABLE
 #include "zlib.h"

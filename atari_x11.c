@@ -9,6 +9,9 @@
 
 #include <sys/time.h>
 
+typedef unsigned char ubyte;
+typedef unsigned short uword;
+
 /*
  * Note: For SHM version check if image_data or the pixmap is needed
  *       Check if rect, nrects, points and npoints are needed.
@@ -81,6 +84,17 @@ extern char *atari_screen;
 extern int colour_translation_table[256];
 #endif
 
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#ifdef VOXWARE
+extern int sound_record;
+#endif
+void Sound_Record( void );
+
+static int invisible=0;
+
 #ifdef LINUX_JOYSTICK
 #include <linux/joystick.h>
 #include <fcntl.h>
@@ -98,6 +112,8 @@ static struct JS_DATA_TYPE js_data;
 
 #define	FALSE	0
 #define	TRUE	1
+
+extern int SHIFT_KEY, KEYPRESSED;
 
 typedef enum {
 	Small,
@@ -220,6 +236,12 @@ int GetKeyCode(XEvent * event)
 				  0, 0);
 #endif
 		break;
+	case VisibilityNotify:
+		if( ((XVisibilityEvent*)event)->state==VisibilityFullyObscured )
+			invisible=1;
+		else	invisible=0;
+		return AKEY_NONE;
+		break;
 	case KeyPress:
 		switch (keysym) {
 		case XK_Shift_L:
@@ -276,7 +298,10 @@ int GetKeyCode(XEvent * event)
 			keycode = AKEY_NONE;
 			break;
 		case XK_F8:
-			screen_dump = 2;
+			if(CONTROL)
+				Sound_Record();
+			else
+				screen_dump = 2;
 			keycode = AKEY_NONE;
 			break;
 		case XK_F9:
@@ -314,21 +339,24 @@ int GetKeyCode(XEvent * event)
 			else
 				keycode = AKEY_BACKSPACE;
 			break;
+		case XK_End:
+			keycode = AKEY_HELP;
+			break;
 		case XK_Left:
 			keycode = AKEY_LEFT;
-			keypad_stick = STICK_LEFT;
+			keypad_stick &= STICK_LEFT;
 			break;
 		case XK_Up:
 			keycode = AKEY_UP;
-			keypad_stick = STICK_FORWARD;
+			keypad_stick &= STICK_FORWARD;
 			break;
 		case XK_Right:
 			keycode = AKEY_RIGHT;
-			keypad_stick = STICK_RIGHT;
+			keypad_stick &= STICK_RIGHT;
 			break;
 		case XK_Down:
 			keycode = AKEY_DOWN;
-			keypad_stick = STICK_BACK;
+			keypad_stick &= STICK_BACK;
 			break;
 		case XK_Escape:
 			keycode = AKEY_ESCAPE;
@@ -574,25 +602,25 @@ int GetKeyCode(XEvent * event)
 			keypad_stick = STICK_LL;
 			break;
 		case XK_KP_2:
-			keypad_stick = STICK_BACK;
+			keypad_stick &= STICK_BACK;
 			break;
 		case XK_KP_3:
 			keypad_stick = STICK_LR;
 			break;
 		case XK_KP_4:
-			keypad_stick = STICK_LEFT;
+			keypad_stick &= STICK_LEFT;
 			break;
 		case XK_KP_5:
 			keypad_stick = STICK_CENTRE;
 			break;
 		case XK_KP_6:
-			keypad_stick = STICK_RIGHT;
+			keypad_stick &= STICK_RIGHT;
 			break;
 		case XK_KP_7:
 			keypad_stick = STICK_UL;
 			break;
 		case XK_KP_8:
-			keypad_stick = STICK_FORWARD;
+			keypad_stick &= STICK_FORWARD;
 			break;
 		case XK_KP_9:
 			keypad_stick = STICK_UR;
@@ -629,17 +657,30 @@ int GetKeyCode(XEvent * event)
 			keyboard_consol = 0x07;
 			keycode = AKEY_NONE;
 			break;
+		case XK_space:
 		case XK_KP_0:
 			keypad_trig = 1;
 			break;
-		case XK_KP_1:
+		case XK_Down:
 		case XK_KP_2:
-		case XK_KP_3:
+			keypad_stick |= 0x0f ^ STICK_BACK;
+			break;
+		case XK_Left:
 		case XK_KP_4:
-		case XK_KP_5:
+			keypad_stick |= 0x0f ^ STICK_LEFT;
+			break;
+		case XK_Right:
 		case XK_KP_6:
-		case XK_KP_7:
+			keypad_stick |= 0x0f ^ STICK_RIGHT;
+			break;
+		case XK_Up:
 		case XK_KP_8:
+			keypad_stick |= 0x0f ^ STICK_FORWARD;
+			break;
+		case XK_KP_1:
+		case XK_KP_3:
+		case XK_KP_5:
+		case XK_KP_7:
 		case XK_KP_9:
 			keypad_stick = STICK_CENTRE;
 			break;
@@ -648,7 +689,7 @@ int GetKeyCode(XEvent * event)
 		}
 		break;
 	}
-
+        KEYPRESSED = (keycode != AKEY_NONE);
 	return keycode;
 }
 
@@ -1430,6 +1471,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	XGCValues xgcvl;
 
 	int depth;
+	int colorstep;
 	int i, j;
 	int mode = 0;
 
@@ -1851,8 +1893,11 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	xv_set(canvas_paint_window(canvas),
 		   WIN_EVENT_PROC, event_proc,
-		   WIN_CONSUME_EVENTS, WIN_ASCII_EVENTS, WIN_MOUSE_BUTTONS, NULL,
+		   WIN_CONSUME_EVENTS, WIN_ASCII_EVENTS, WIN_MOUSE_BUTTONS, 
+		   WIN_VISIBILITY_NOTIFY, /* mmm */
+		   NULL,
 		   NULL);
+
 #endif
 
 #ifdef MOTIF
@@ -2204,7 +2249,7 @@ void Atari_Initialise(int *argc, char *argv[])
 											   NULL);
 
 		XtAddEventHandler(drawing_area,
-						  KeyPressMask | KeyReleaseMask,
+						  KeyPressMask | KeyReleaseMask | VisibilityChangeMask, /* mmm */
 						  False,
 						  motif_keypress, NULL);
 
@@ -2261,7 +2306,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	else
 		cmap = XDefaultColormapOfScreen(screen);
 
-	xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask;
+	xswda.event_mask = KeyPressMask | KeyReleaseMask | ExposureMask | VisibilityChangeMask /* mmm */;
 	xswda.colormap = cmap;
 
 	window = XCreateWindow(display,
@@ -2314,7 +2359,11 @@ void Atari_Initialise(int *argc, char *argv[])
 						   window_width, window_height, depth);
 #endif
 
-	for (i = 0; i < 256; i += 2) {
+	if (depth <= 8)
+		colorstep = 2;
+	else
+		colorstep = 1;
+	for (i = 0; i < 256; i += colorstep) {
 		XColor colour;
 
 		int rgb = colortable[i];
@@ -2328,12 +2377,12 @@ void Atari_Initialise(int *argc, char *argv[])
 							 cmap,
 							 &colour);
 
-		colours[i] = colour.pixel;
-		colours[i + 1] = colour.pixel;
+		for (j=0; j<colorstep; j++)
+			colours[i+j] = colour.pixel;
 
 #ifdef SHM
-		colour_translation_table[i] = colours[i];
-		colour_translation_table[i + 1] = colours[i + 1];
+		for (j=0; j<colorstep; j++)
+			colour_translation_table[i+j] = colours[i+j];
 #endif
 	}
 
@@ -2479,13 +2528,14 @@ void ScreenDump()
 void Atari_DisplayScreen(UBYTE * screen)
 {
 	static char status_line[64];
-	int update_status_line;
+	int update_status_line = FALSE;
 
 #ifdef SHM
+	if( invisible || !draw_display )   goto after_screen_update;  /* mmm */
         if(image->bits_per_pixel == 32)
         {
-                ULONG *ptr = image->data;
-                UBYTE *ptr2 = screen;
+                ulong *ptr = image->data;
+                ubyte *ptr2 = screen;
                 int i;
 
                 for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
@@ -2493,8 +2543,8 @@ void Atari_DisplayScreen(UBYTE * screen)
         }
         else if(image->bits_per_pixel == 16)
         {
-                UWORD *ptr = image->data;
-                UBYTE *ptr2 = screen;
+                uword *ptr = image->data;
+                ubyte *ptr2 = screen;
                 int i;
 
                 for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
@@ -2509,6 +2559,7 @@ void Atari_DisplayScreen(UBYTE * screen)
 	int xpos;
 	int ypos;
 
+	if( invisible || !draw_display )   goto after_screen_update; 
 	for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
 		for (xpos = 0; xpos < ATARI_WIDTH; xpos++) {
 			UBYTE colour;
@@ -2571,8 +2622,7 @@ void Atari_DisplayScreen(UBYTE * screen)
 	modified = FALSE;
 #endif
 
-	keypad_trig = 1;
-
+after_screen_update:
 	switch (x11_monitor) {
 	case MONITOR_SIO:
 		if (sio_status[0] != '\0') {
@@ -2673,6 +2723,84 @@ int Atari_Keyboard(void)
 	return keycode;
 }
 
+void experimental_mouse_joystick(int mode)	/* Don't use ;-) */
+{
+	Window root_return;
+	Window child_return;
+	int root_x_return;
+	int root_y_return;
+	int win_x_return;
+	int win_y_return;
+	int mask_return;
+
+	static int prev_x=-1,prev_y=-1;
+
+	XQueryPointer(display, window, &root_return, &child_return,
+				  &root_x_return, &root_y_return,
+				  &win_x_return, &win_y_return,
+				  &mask_return);
+
+	if (mode < 5) {
+		int dx,dy;
+		int dist,course,rc;
+		
+		if( prev_x<0 )	prev_x=root_x_return;
+		if( prev_y<0 )	prev_y=root_y_return;
+		dx=(root_x_return-prev_x)<<1;
+		dy=(root_y_return-prev_y)*3;
+#define Ms	8
+#define Mc	3	/* Mc/Mm = 2 45 deg.  <2 => >45 deg for x or y only */
+#define Mm	2
+		if( dx>Ms && dy>Ms )
+		{	if( dx*Mm>Mc*dy )
+				course = 0x08; /* RIGHT */
+			else if ( dx*Mc<dy*Mm )
+				course = 0x02; /* DOWN */
+			else	course = 0x0a; /* RIGHT DOWN */
+		} else if( dx<-Ms && dy<-Ms )
+		{	if( dx*Mm<Mc*dy )
+				course = 0x04; /* LEFT */
+			else if ( dx*Mc>dy*Mm )
+				course = 0x01; /* UP */
+			else	course = 0x05; /* LEFT UP */
+		} else if( dx<-Ms && dy>Ms )
+		{	if( -dx*Mm>Mc*dy )
+				course = 0x04; /* LEFT */
+			else if ( -dx*Mc<dy*Mm )
+				course = 0x02; /* DOWN */
+			else	course = 0x06; /* LEFT DOWN */
+		} else if( dx>Ms && dy<-Ms )
+		{	if( -dx*Mm<Mc*dy )
+				course = 0x08; /* RIGHT */
+			else if ( -dx*Mc>dy*Mm )
+				course = 0x01; /* UP */
+			else	course = 0x09; /* RIGHT UP */
+		}
+		else if( dx>Ms )
+				course = 0x08; /* RIGHT */
+		else if( dx<-Ms )
+				course = 0x04; /* LEFT */
+		else if( dy>Ms )
+				course = 0x02; /* DOWN */
+		else if( dy<-Ms )
+				course = 0x01; /* UP */
+		else	course=0;
+
+		rc=(((course&0x5)<<1)|((course&0xa)>>1));
+		rc&= ~mouse_stick;
+		mouse_stick|=rc;
+		course&=~(((rc&0x5)<<1)|((rc&0xa)>>1));
+		mouse_stick&=~course;
+
+		prev_x=root_x_return;
+		prev_y=root_y_return;
+	}
+	else {
+		if (mask_return)
+			mouse_stick &= 0xfb;
+	}
+}
+
 void mouse_joystick(int mode)
 {
 	Window root_return;
@@ -2711,6 +2839,11 @@ void mouse_joystick(int mode)
 			threshold = 96;
 		}
 
+		if( win_x_return<0 || win_x_return>center_x*2 ||
+		    win_y_return<0 || win_y_return>center_y*2 )
+			mouse_stick = 0x0f;
+		else
+		{
 		if (win_x_return < (center_x - threshold))
 			mouse_stick &= 0xfb;
 		if (win_x_return > (center_x + threshold))
@@ -2719,6 +2852,7 @@ void mouse_joystick(int mode)
 			mouse_stick &= 0xfe;
 		if (win_y_return > (center_y + threshold))
 			mouse_stick &= 0xfd;
+		}
 	}
 	else {
 		if (mask_return)
@@ -2846,7 +2980,24 @@ int Atari_TRIG(int num)
 						  &root_x_return, &root_y_return,
 						  &win_x_return, &win_y_return,
 						  &mask_return)) {
-			if (mask_return)
+			int mx,my;
+			if (windowsize == Small) {
+				mx = ATARI_WIDTH;
+				my = ATARI_HEIGHT;
+			}
+			else if (windowsize == Large) {
+				mx = (ATARI_WIDTH * 2) ;
+				my = (ATARI_HEIGHT * 2);
+			}
+			else {
+				mx = (ATARI_WIDTH * 3) ;
+				my = (ATARI_HEIGHT * 3);
+			}
+			if( win_x_return<0 || win_x_return>mx ||
+			    win_y_return<0 || win_y_return>my )
+				trig = 1;
+			else
+			if (mask_return & Button1Mask)
 				trig = 0;
 		}
 	}
@@ -2936,4 +3087,26 @@ int Atari_CONSOL(void)
 		temp = keyboard_consol;
 	}
 	return temp;
+}
+
+void Sound_Record( void )
+{
+#ifdef VOXWARE
+	static int record_num=0;
+	char buf[128];
+
+	if( sound_record<0 )
+	{	sprintf(buf,"%d.raw",record_num);
+		if( (sound_record=open(buf,O_RDWR|O_CREAT|O_TRUNC,0666))<0 )
+			printf("Can't write to file \"%s\"\n",buf);
+		else
+			printf("Recording sound to file \"%s\"\n",buf);
+	}
+	else
+	{	close( sound_record );
+		printf("Recording is stoped\n");
+		sound_record=-1;
+		record_num++;
+	}
+#endif /* VOXWARE */
 }

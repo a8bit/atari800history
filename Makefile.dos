@@ -1,10 +1,17 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-#CFLAGS		= -c -O2 -Wall -DGNU_C -DMONITOR_BREAK -DMONITOR_HINTS -DMONITOR_ASSEMBLER -DSET_LED -DBUFFERED_LOG
-CFLAGS		= -c -O2 -Wall -DGNU_C -DSET_LED -DBUFFERED_LOG
+CFLAGS		= -c -O2 -Wall -DGNU_C
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
+
+ifeq (atari800.djgpp,$(wildcard atari800.djgpp))
+include atari800.djgpp
+endif
+
+ifdef ZLIB_CAPABLE
+LDLIBS		+= -lz
+endif
 
 default :
 	@echo To build the Atari 800 Emulator, type:
@@ -20,15 +27,15 @@ default :
 	@echo To install the Emulator, type:
 
 basic :
-	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o sound.o"
+	@make atari800 CPPFLAGS="-DBASIC" OBJ="atari_basic.o sound.o"
 	@echo Finished.
 
 pdcurses :
-	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o sound.o"
+	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="$(LDLIBS) -lcurso" OBJ="atari_curses.o sound.o"
 	@echo Finished.
 
 vga :
-	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o vga_gfx.o"
+	@make atari800 CPPFLAGS="-DVGA" OBJ="atari_vga.o sound_dos.o pokeysnd.o sbdrv.o vga_gfx.o"
 	@echo Finished.
 
 #
@@ -53,7 +60,7 @@ INCLUDES        =       Makefile \
 			supercart.h \
 			platform.h
 
-config config.h	:	configure
+config config.h	:	configure config.in
 	configure
 
 configure	:	configure.o prompts.o
@@ -75,6 +82,7 @@ OBJECTS =       atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
+		binload.o \
 		list.o \
 		ataripcx.o \
 		log.o \
@@ -86,7 +94,7 @@ OBJECTS =       atari.o \
 atari800        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
-atari.o         :       atari.c $(INCLUDES)
+atari.o         :       atari.c $(INCLUDES) config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o           :       cpu.c $(INCLUDES)
@@ -118,6 +126,9 @@ supercart.o     :       supercart.c $(INCLUDES)
 
 ui.o            :       ui.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+binload.o       :       binload.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) binload.c
 
 list.o          :       list.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) list.c

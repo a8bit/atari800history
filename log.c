@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include "config.h"
 #include "log.h"
 
 char memory_log[MAX_LOG_SIZE]="";

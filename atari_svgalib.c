@@ -11,6 +11,7 @@
 #include "nas.h"
 #include "sound.h"
 #include "platform.h"
+#include "log.h"
 
 #ifdef JOYMOUSE
 #include <vgamouse.h>
@@ -84,6 +85,8 @@ static int stick0;
 static int consol;
 
 extern double deltatime;
+
+static int invisible=0;
 
 /*
    Interlace variables
@@ -354,7 +357,12 @@ int Atari_Keyboard(void)
 /* end of keyboard handler                                                  */
 /****************************************************************************/
 
-
+void invisible_start( void )
+{	invisible=1;
+}
+void invisible_stop( void )
+{	invisible=0;
+}
 
 void Atari_Initialise(int *argc, char *argv[])
 {
@@ -432,6 +440,13 @@ void Atari_Initialise(int *argc, char *argv[])
 		exit(1);
 	}
 	vga_setmode(VGAMODE);
+
+	if (vga_runinbackground_version() >= 1)
+	{	
+		vga_runinbackground(1);
+		vga_runinbackground(VGA_GOTOBACK,invisible_start);
+		vga_runinbackground(VGA_COMEFROMBACK,invisible_stop);
+	}
 
         initkb();
 
@@ -511,6 +526,10 @@ int Atari_Exit(int run_monitor)
 #ifdef VOXWARE
 		Voxware_Exit();
 #endif
+
+#ifdef BUFFERED_LOG
+        	Aflushlog();
+#endif
 	}
 
 	return restart;
@@ -542,6 +561,7 @@ void Atari_DisplayScreen(UBYTE * screen)
   }
 #endif
 
+  if( invisible || !draw_display )	goto after_screen_update; 
   vga_copytoplanar256(vbuf, ATARI_WIDTH,
 		      ((320 * 240) >> 2) * writepage
 		      , 320 >> 2, 320,
@@ -577,6 +597,7 @@ void Atari_DisplayScreen(UBYTE * screen)
 	else
 		vgamouse_strig = 1;
 #endif
+after_screen_update:
 
 #ifdef NAS
 	NAS_UpdateSound();
@@ -646,9 +667,10 @@ int Atari_TRIG(int num)
 			trig0 = 0;
 		else
 			trig0 = 1;
-
+/*
 		if (js_data.buttons & 0x02)
 			special_keycode = ' ';
+*/
 /*
    trig0 = (js_data.buttons & 0x0f) ? 0 : 1;
  */

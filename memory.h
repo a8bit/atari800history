@@ -1,3 +1,5 @@
+#include "config.h"
+
 #undef PAGED_MEM
 
 #define INLINE_GETBYTE

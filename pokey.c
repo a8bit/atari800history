@@ -15,9 +15,25 @@
 #include "platform.h"
 #include "statesav.h"
 
+#ifndef WIN32
+#include "config.h"
+#endif
+
+#ifdef SERIO_SOUND
+void Update_serio_sound( int out, UBYTE data );
+#endif
+
 #ifdef USE_DOSSOUND
 #include "pokeysnd.h"
 #endif
+
+#ifdef POKEY_UPDATE
+extern void pokey_update(void);
+#endif
+
+#ifndef NO_VOL_ONLY
+void Update_vol_only_sound( void );
+#endif  /* NO_VOL_ONLY */
 
 #define FALSE 0
 #define TRUE 1
@@ -98,6 +114,9 @@ UBYTE POKEY_GetByte(UWORD addr)
 		printf("AR RD: SERIN = %x, BUFRFL = %x, CHKSUM = %x, BUFR = %02x%02x, BFEN=%02x%02x, PC = %x\n",
 			 byte, memory[0x38], memory[0x23c], memory[0x1], memory[0x0],
 			   memory[0x23b], memory[0x23a], PC);
+#endif
+#ifdef SERIO_SOUND
+			Update_serio_sound(0,byte);
 #endif
 		break;
 	case _SKSTAT:
@@ -201,6 +220,9 @@ int POKEY_PutByte(UWORD addr, UBYTE byte)
 			if (POKEY_siocheck()) {
 				SIO_PutByte(byte);
 			}
+#ifdef SERIO_SOUND
+			Update_serio_sound(1,byte);
+#endif
 		}
 		break;
 	case _STIMER:
@@ -245,6 +267,18 @@ void POKEY_Initialise(int *argc, char *argv[])
 
 void POKEY_Scanline(void)
 {
+	static int prev_cpu_clock=0;
+	int dt=cpu_clock-prev_cpu_clock;
+	prev_cpu_clock=cpu_clock;
+
+#ifdef POKEY_UPDATE
+	pokey_update();
+#endif
+
+#ifndef NO_VOL_ONLY
+	Update_vol_only_sound();
+#endif  /* NO_VOL_ONLY */
+
 	if (DELAYED_SERIN_IRQ > 0) {
 		if (--DELAYED_SERIN_IRQ == 0) {
 			IRQST &= 0xdf;
@@ -301,28 +335,28 @@ void POKEY_Scanline(void)
 		}
 	}
 
-	if ((DivNIRQ[CHAN1] += DIV_15) > DivNMax[CHAN1]) {
-		DivNIRQ[CHAN1] = 0;
+	if ((DivNIRQ[CHAN1] += dt) > DivNMax[CHAN1] ) {
+		DivNIRQ[CHAN1] -= DivNMax[CHAN1];
 		if (IRQEN & 0x01) {
 			IRQST &= 0xfe;
 			GenerateIRQ();
 		}
 	}
 
-	if ((DivNIRQ[CHAN2] += DIV_15) > DivNMax[CHAN2]) {
-		DivNIRQ[CHAN2] = 0;
+	if ((DivNIRQ[CHAN2] += dt) > DivNMax[CHAN2] ) {
+		DivNIRQ[CHAN2] -= DivNMax[CHAN2];
 		if (IRQEN & 0x02) {
 			IRQST &= 0xfd;
 			GenerateIRQ();
 		}
 	}
 
-	if ((DivNIRQ[CHAN3] += DIV_15) > DivNMax[CHAN3]) {
-		DivNIRQ[CHAN3] = 0;
+	if ((DivNIRQ[CHAN3] += dt) > DivNMax[CHAN3] ) {
+		DivNIRQ[CHAN3] -= DivNMax[CHAN3];
 	}
 
-	if ((DivNIRQ[CHAN4] += DIV_15) > DivNMax[CHAN4]) {
-		DivNIRQ[CHAN4] = 0;
+	if ((DivNIRQ[CHAN4] += dt) > DivNMax[CHAN4] ) {
+		DivNIRQ[CHAN4] -= DivNMax[CHAN4];
 		if (IRQEN & 0x04) {
 			IRQST &= 0xfb;
 			GenerateIRQ();

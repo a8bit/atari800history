@@ -1,4 +1,5 @@
 #include "atari.h"
+#include "config.h"
 #include "cpu.h"
 #include "memory.h"
 #include "log.h"

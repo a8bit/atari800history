@@ -18,6 +18,7 @@
 #include <sys/farptr.h>
 #include <dos.h>
 #include <string.h>
+#include "config.h"
 #include "cpu.h"
 #include "colours.h"
 #include "ui.h"         /* for ui_is_active */
@@ -468,7 +469,7 @@ void key_delete(void)
 
 void SetupVgaEnvironment()
 {
-        int a, i; // r, g, b;
+        int a, i;
         union REGS rg;
         __dpmi_regs d_rg;
         UBYTE ctab[768];
@@ -971,10 +972,6 @@ int Atari_Exit(int run_monitor)
         /* restore to text mode */
         ShutdownVgaEnvironment();
 
-#ifdef BUFFERED_LOG
-        Aflushlog();
-#endif
-
         key_delete();                           /* enable keyboard in monitor */
 
         if (run_monitor)
@@ -991,6 +988,10 @@ int Atari_Exit(int run_monitor)
 
 #ifndef USE_DOSSOUND
         Sound_Exit();
+#endif
+
+#ifdef BUFFERED_LOG
+        Aflushlog();
 #endif
 
         return 0;
@@ -1015,8 +1016,10 @@ int Atari_Keyboard(void)
         int shift_mask;
 #ifdef AT_USE_ALLEGRO_JOY
         static int stillpressed;        /* is 5200 button 2 still pressed */
+#ifndef NEW_ALLEGRO312
         extern volatile int joy_left, joy_right, joy_up, joy_down;
         extern volatile int joy_b1, joy_b2, joy_b3, joy_b4;
+#endif
 #endif
         last_raw_key=raw_key;
 /*

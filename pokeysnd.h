@@ -40,6 +40,8 @@
 #ifndef _POKEYSOUND_H
 #define _POKEYSOUND_H
 
+#include "config.h"
+
 #ifndef _TYPEDEF_H
 #define _TYPEDEF_H
 
@@ -124,8 +126,8 @@
 extern "C" {
 #endif
 
-	/* #define SIGNED_SAMPLES *//* define for signed output */
-	/* #define CLIP           *//* required to force clipping */
+	/* #define SIGNED_SAMPLES */ /* define for signed output */
+	/* #define CLIP           */ /* required to force clipping */
 
 #ifdef  SIGNED_SAMPLES			/* if signed output selected */
 #define SAMP_MAX 127			/* then set signed 8-bit clipping ranges */

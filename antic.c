@@ -10,9 +10,7 @@
 #include "winatari.h"
 #else
 #include <unistd.h>				/* for rand() */
-#ifndef AMIGA
 #include "config.h"
-#endif
 #endif
 
 #include "atari.h"
@@ -29,10 +27,6 @@
 #define FALSE 0
 #define TRUE 1
 #define DO_DLI if ((IR & 0x80) && (NMIEN & 0x80)) {NMIST |=0x80;NMI();}
-
-#ifdef POKEY_UPDATE
-extern void pokey_update(void);
-#endif
 
 UBYTE CHACTL;
 UBYTE CHBASE;
@@ -73,6 +67,9 @@ int global_artif_mode;
 #define PF4_COLBK 0x08080808
 
 int ypos;
+
+unsigned int cpu_clock;			/* Global tacts counter */
+static unsigned int last_cpu_clock;/* local temporary conter for line sync */
 
 #define CPUL	114				/* 114 CPU cycles for 1 screenline */
 #define DMAR	9				/* 9 cycles for DMA refresh */
@@ -1762,9 +1759,6 @@ void do_antic()
 		j &= 0x0f;
 		/* if(j==lastline) DO_DLI */
 
-#ifdef POKEY_UPDATE
-		pokey_update();
-#endif
 		POKEY_Scanline();		/* check and generate IRQ */
 
 		/* if (!wsync_halt) GO(107); */
@@ -1773,6 +1767,7 @@ void do_antic()
 		dldmac = 0;				/* subsequent lines have none; */
 		/* PART 1 */
 
+		cpu_clock+=BEGL-begcyc;
 		unc = GO(begcyc + unc);	/* cycles for begin of each screen line */
 		allc = realcyc[anticm8 + first_line_flag + dmaw] - BEGL;
 		/* ^^^^^cycles for part 2; (realcyc is for parts 1+ 2. then -BEGL for 2 */
@@ -1783,8 +1778,10 @@ void do_antic()
 			NMIST |= 0x80;
 			NMI();
 		}
+		/* cpu_clock+=58-BEGL-allc; */		/* mmm */
 		unc = GO(allc + unc);
 		/* ^^PART 2.(after the DLI) */
+		if( !draw_display )	goto after_scanline;
 		new_pm_scanline();
 		temp_left_border_chars = left_border_chars;
 		switch (IR & 0x0f) {
@@ -1867,8 +1864,10 @@ void do_antic()
 		do_border();
 		left_border_chars = temp_left_border_chars;
 		/* memset(pm_scanline, 0, ATARI_WIDTH / 2); */ /* Perry disabled 98/03/14 */
+after_scanline:
 /* part 3 */
 		allc = CPUL - WSYNC - realcyc[anticm8 + first_line_flag + dmaw] - thislinecycles;
+		cpu_clock+=thislinecycles;
 		unc = GO(allc + unc);
 		thislinecycles = nextlinecycles;
 		first_line_flag = 0;
@@ -1876,6 +1875,7 @@ void do_antic()
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
 		ypos++;
+		last_cpu_clock=cpu_clock=last_cpu_clock+CPUL;	/* sync */
 		unc = GO(WSYNC - VCOUNTDELAY + unc);
 /* ^^^^ part 4. */
 
@@ -1973,13 +1973,12 @@ void ANTIC_RunDisplayList(void)
 
 	ypos = 0;
 	while (ypos < 8) {
-#ifdef POKEY_UPDATE
-		pokey_update();
-#endif
+		POKEY_Scanline();		/* check and generate IRQ */
 		unc = GO(CPUL - DMAR - WSYNC + unc);
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
 		ypos++;
+		last_cpu_clock=cpu_clock=last_cpu_clock+CPUL;	/* sync */
 		unc = GO(WSYNC - VCOUNTDELAY + unc);
 		/* GO (114); */
 	}
@@ -1987,6 +1986,7 @@ void ANTIC_RunDisplayList(void)
 
 	scrn_ptr = (UBYTE *) atari_screen;
 
+	last_cpu_clock=cpu_clock=last_cpu_clock+CPUL*(8-ypos);	/* sync */
 	ypos = 8;
 	vscrol_flag = FALSE;
 
@@ -2218,15 +2218,15 @@ void ANTIC_RunDisplayList(void)
 		NMI();
 	}
 
+	last_cpu_clock=cpu_clock=last_cpu_clock+CPUL*(248-ypos);/* sync */
 	ypos = 248;
 	while (ypos < (tv_mode == TV_PAL ? 312 : 262)) {
-#ifdef POKEY_UPDATE
-		pokey_update();
-#endif
+		POKEY_Scanline();		/* check and generate IRQ */
 		unc = GO(CPUL - WSYNC + unc - DMAR);
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
 		ypos++;
+		last_cpu_clock=cpu_clock=last_cpu_clock+CPUL;	/* sync */
 		unc = GO(WSYNC - VCOUNTDELAY + unc);
 	}
 }

@@ -96,11 +96,11 @@ int RtConfigLoad(char *rtconfig_filename)
 		char string[256];
 		char *ptr;
 
-		fgets(string, 256, fp);
+		fgets(string, sizeof(string), fp);
 
 		printf("Configuration Created by %s", string);
 
-		while (fgets(string, 256, fp)) {
+		while (fgets(string, sizeof(string), fp)) {
 			RemoveLF(string);
 			ptr = strchr(string, '=');
 			if (ptr) {

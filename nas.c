@@ -1,4 +1,5 @@
 #include <audio/audiolib.h>
+#include "config.h"
 
 #define FALSE 0
 #define TRUE 1

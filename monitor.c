@@ -14,11 +14,13 @@
 #endif
 
 #include "atari.h"
+#include "config.h"
 #include "cpu.h"
 #include "memory.h"
 #include "antic.h"
 #include "pia.h"
 #include "gtia.h"
+#include "prompts.h"
 
 #define FALSE   0
 #define TRUE    1
@@ -35,7 +37,7 @@ extern UWORD dlist;
 int tron = FALSE;
 #endif
 
-unsigned int disassemble(UWORD addr1);
+unsigned int disassemble(UWORD addr1, UWORD addr2);
 UWORD show_instruction(UWORD inad, int wid);
 
 static UWORD addr = 0;
@@ -373,10 +375,12 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
         }
 	if (show_inst)  /*this part will disassemble actual instruction & show some hints */
 	{
-	  UWORD value;
+	  UWORD value = 0;
 	  UBYTE optype;
 	  
-	  if (break_ret) printf("(return)\n");
+	  if (break_ret)
+	      printf("(return)\n");
+
 	  show_inst=0;
 	  show_instruction(regPC,20);
 	  optype=optype6502[memory[regPC]]>>4;
@@ -412,7 +416,6 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 	       value=memory[(UBYTE)(memory[regPC+1]+regX)];
 	       break;
 	    case 0x9:
-	       value=0;
 	       switch(memory[regPC])
 	       {
 	         case 0x10:  /*BPL*/
@@ -484,10 +487,8 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 
 		printf("> ");
 		fflush(stdout);
-		if (gets(s) == NULL) {	/* this never happens ??? */
-			printf("\n> CONT\n");
-			strcpy(s, "CONT");
-		}
+		fgets(s, sizeof(s), stdin);
+		RemoveLF(s);
 		if (s[0])
 			memcpy(old_s, s, sizeof(s));
 		else {
@@ -588,10 +589,8 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				nlines++;
 
 				if (nlines == 15) {
-					char gash[4];
-
 					printf("Press return to continue: ");
-					gets(gash);
+					getchar();
 					nlines = 0;
 				}
 			}
@@ -966,7 +965,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			UWORD addr1;
 			addr1 = addr;
 			get_hex(NULL, &addr1);
-			addr = disassemble(addr1);
+			addr = disassemble(addr1,0);
 		}
 		else if (strcmp(t, "ANTIC") == 0) {
 			printf("DMACTL=%02x    CHACTL=%02x    DLISTL=%02x    "
@@ -1032,9 +1031,8 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			printf("HISTORY                   - List last %i PC addresses\n",(int)REMEMBER_PC_STEPS);
 
                         printf("Press return to continue: ");
-                        { char gash[20];
-                          gets(gash);
-                        }
+                        getchar();
+
 			printf("JUMPS			  - List last %i locations of JMP/JSR\n",(int)REMEMBER_JMP_STEPS);
 			printf("G			  - execute 1 instruction\n");
 			printf("O			  - step over the instruction\n");
@@ -1061,7 +1059,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 	}
 }
 
-unsigned int disassemble(UWORD addr1)
+unsigned int disassemble(UWORD addr1, UWORD addr2)
 {
 	UWORD i;
 	int count;
@@ -1077,6 +1075,7 @@ unsigned int disassemble(UWORD addr1)
 			printf("%02X ", dGetByte((UWORD) (addr + i)));
 		printf("\n");
 		addr += addr1;
+		if( addr2!=0 && addr>=addr2 )	break;
 		count--;
 	}
 	return addr;
@@ -1139,9 +1138,8 @@ static char *instr6502[256] =
 #ifdef MONITOR_HINTS
 int find_symbol(UWORD addr)
 {
-  int lo,hi,mi;
+  int lo = 0, hi = symtable_size-1, mi = 0;
 
-  lo=0;hi=symtable_size-1;
   while (lo<hi)
   {
     mi=(lo+hi)/2;
@@ -1158,7 +1156,7 @@ int find_symbol(UWORD addr)
 UWORD show_instruction(UWORD inad, int wid)
 {
 	UBYTE instr;
-	UWORD value;
+	UWORD value = 0;
 	char dissbf[32];
 	int i;
 #ifdef MONITOR_HINTS
@@ -1240,7 +1238,7 @@ UWORD assembler(UWORD addr)
   char s[128];  /*input string*/
   char c[128];  /*converted input*/
   char *sp,*cp;
-  int i,value;
+  int i, value = 0;
   int oplen;
   int branch;
   
@@ -1248,7 +1246,9 @@ UWORD assembler(UWORD addr)
   while (TRUE)
   {
     printf("%X : ",(int)addr);
-    if (gets(s)==NULL || s[0]=='\0')
+    fgets(s, sizeof(s), stdin);
+    RemoveLF(s);
+    if (s[0]=='\0')
       return addr;
 
     for (sp=s;*sp!='\0';sp++) *sp=toupper(*sp); /*convert string to upper case*/

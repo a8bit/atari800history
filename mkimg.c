@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include "config.h"
 
 #define FALSE 0
 #define TRUE 1

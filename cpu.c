@@ -32,13 +32,15 @@
    for accesses to page 0 and page 1.
  */
 
-#include	<stdio.h>
-#include	<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>	/* for memmove() */
 
-#include	"atari.h"
-#include	"cpu.h"
-#include	"memory.h"
-#include	"statesav.h"
+#include "atari.h"
+#include "config.h"
+#include "cpu.h"
+#include "memory.h"
+#include "statesav.h"
 
 #ifdef CPUASS
 extern UBYTE IRQ;
@@ -2810,6 +2812,8 @@ int GO(int ncycles)
     goto next;
 
 	  next:
+		cpu_clock += cycles[insn];
+
 #ifdef MONITOR_BREAK
 		if (break_step) {
 			data = ESC_BREAK;
@@ -2825,7 +2829,9 @@ int GO(int ncycles)
 
 	UPDATE_GLOBAL_REGS;
 	if (wsync_halt && ncycles >= 0)
+	{	cpu_clock += ncycles;
 		return 0;				/* WSYNC stopped CPU */
+	}
 	return ncycles;
 }
 

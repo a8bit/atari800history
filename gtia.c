@@ -12,9 +12,7 @@
 #ifdef WIN32
 #include "windows.h"
 #else
-#ifndef AMIGA
 #include "config.h"
-#endif
 #endif
 
 #include "atari.h"
@@ -29,6 +27,10 @@
 
 #define FALSE 0
 #define TRUE 1
+
+#ifndef NO_CONSOL_SOUND
+void Update_consol_sound( int set );
+#endif /* NO_CONSOL_SOUND */
 
 int atari_speaker;
 int consol_mask;
@@ -174,14 +176,14 @@ UWORD m0123adr;
 
 static int PM_XPos[256];
 static UBYTE PM_Width[4] =
-{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; *//* 1/2 size pm scanline */
+{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; */ /* 1/2 size pm scanline */
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
 	int i;
 
 	for (i = 0; i < 256; i++)
-		PM_XPos[i] = (i - 0x20);	/*<< 1 *//* for 1/2 size pmscanline */
+		PM_XPos[i] = (i - 0x20);	/*<< 1 */ /* for 1/2 size pmscanline */
 
 	for (i = 0; i < 9; i++)
 		colour_lookup[i] = 0x00;
@@ -424,9 +426,9 @@ UBYTE GTIA_GetByte(UWORD addr)
 			next_console_value = 0x07;
 		}
 		else {
+                        /* 0x08 is because 'speaker is always 'on' '
+                           consol_mask is set by CONSOL (write) !PM! */
 			byte = (Atari_CONSOL()|0x08)&consol_mask;
-                        //0x08 is because 'speaker is always 'on' '
-                        //consol_mask is set by CONSOL (write) !PM!
 		}
 		break;
 	case _M0PF:
@@ -651,6 +653,9 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _CONSOL:
 		atari_speaker = !(byte & 0x08);
+#ifndef NO_CONSOL_SOUND
+		Update_consol_sound(1);
+#endif /* NO_CONSOL_SOUND */
 		consol_mask = (~byte)&0x0f;
 		break;
 	case _GRAFM:

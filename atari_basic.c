@@ -1,4 +1,5 @@
 #include "atari.h"
+#include "config.h"
 #include "monitor.h"
 
 #define FALSE 0

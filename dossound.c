@@ -26,7 +26,11 @@ static int stream_freq;
 AUDIOSTREAM *stream;
    
 void init_stream(){
-   stream = play_audio_stream(stream_len, 8, stream_freq , 255, 128);//255=vol 128=pan 8=bits
+#ifdef NEW_ALLEGRO312
+   stream = play_audio_stream(stream_len, 8, 0, stream_freq , 255, 128); /* 0 = no_stereo, 255=vol, 128=pan, 8=bits */
+#else
+   stream = play_audio_stream(stream_len, 8, stream_freq , 255, 128); /* 255=vol 128=pan 8=bits */
+#endif
    if (!stream) {
       printf("Error creating audio stream!\n");
       abort();

@@ -1,3 +1,5 @@
+#include "config.h"
+
 #define dGetByte(x) GetByte(x)
 
 #ifdef INLINE_GETBYTE

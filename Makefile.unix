@@ -16,6 +16,14 @@ BIN_PATH	= ${PREFIX}/bin
 LIB_PATH	= ${PREFIX}/lib
 MAN_PATH	= ${PREFIX}/man
 
+ifeq (.atari800,$(wildcard .atari800))
+include .atari800
+endif
+
+ifdef ZLIB_CAPABLE
+LDLIBS		+= -lz
+endif
+
 default :
 	@echo "To build the Atari 800 Emulator, type:"
 	@echo "make <version>"
@@ -41,61 +49,61 @@ default :
 basic :
 	make atari800 \
 		CPPFLAGS="-DBASIC" \
-		LDLIBS="-lm" \
 		OBJ="atari_basic.o"
 
 linux-svgalib :
 	make atari800 \
-		LDLIBS="-lvgagl -lvga -lm -lz -lrawkey" \
+		OTHER="-DSVGALIB" \
+		LDLIBS="$(LDLIBS) -lvga" \
 		OBJ="atari_svgalib.o"
 
 linux-svgalib-nas-obsolete :
 	make atari800 \
 		OTHER="-DNAS" \
 		LDFLAGS="-L/usr/X11/lib" \
-		LDLIBS="-lvgagl -lvga -lm -laudio -lXau" \
+		LDLIBS="$(LDLIBS) -lvga -laudio -lXau" \
 		OBJ="atari_svgalib.o nas.o"
 
 linux-x11-nas-obsolete :
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include -DNAS" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-laudio -lXau -lX11 -lm" \
+		LDLIBS="$(LDLIBS) -laudio -lXau -lX11" \
 		OBJ="atari_x11.o nas.o"
 
 linux-x11-nas-shm-obsolete :
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include -DNAS -DSHM" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-laudio -lXau -lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lXext" \
 		OBJ="atari_x11.o nas.o"
 
 linux-xview-nas-obsolete :
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW -DNAS" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11" \
 		OBJ="atari_x11.o nas.o"
 
 linux-xview-nas-shm-obsolete :
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lXext" \
 		OBJ="atari_x11.o nas.o"
 
 x11 :
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lX11" \
 		OBJ="atari_x11.o"
 
 x11-shm :
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include -DSHM" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -lX11 -lXext" \
 		OBJ="atari_x11.o"
 
 x11-nas-obsolete :
@@ -103,9 +111,9 @@ x11-nas-obsolete :
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include -DNAS" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-laudio -lXau -lX11 -lsocket -lnsl -lm" \
+		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 x11-nas-shm-obsolete :
@@ -113,33 +121,33 @@ x11-nas-shm-obsolete :
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
 	make atari800 \
-		CPPFLAGS="-I/usr/openwin/include -DNAS -DSHM" \
+		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
-		LDLIBS="-laudio -lXau -lX11 -lXext -lsocket -lnsl -lm" \
+		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lXext -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 hp9000-ansic-x11 :
 	make atari800 \
 		CC="cc" \
-		CPPFLAGS="-D_POSIX_SOURCE" \
+		CPPFLAGS="-DX11 -D_POSIX_SOURCE" \
 		CFLAGS="-c -O -Aa -I/usr/include/X11R5" \
 		LD="cc" \
 		LDFLAGS="-L/usr/lib/X11R5" \
-		LDLIBS="-lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lX11" \
 		OBJ="atari_x11.o"
 
 xview :
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11" \
 		OBJ="atari_x11.o"
 
 xview-shm :
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW -DSHM" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11 -lXext" \
 		OBJ="atari_x11.o"
 
 xview-nas-obsolete :
@@ -147,9 +155,9 @@ xview-nas-obsolete :
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW -DNAS" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lsocket -lnsl -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 xview-nas-shm-obsolete :
@@ -157,69 +165,69 @@ xview-nas-shm-obsolete :
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
 	make atari800 \
-		OTHER="-I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
+		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
-		LDLIBS="-lxview -lolgx -laudio -lXau -lX11 -lXext -lsocket -lnsl -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lXext -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 motif :
 	make atari800 \
-		OTHER="-I/opt/IXImd12s/include -DMOTIF" \
+		OTHER="-DX11 -I/opt/IXImd12s/include -DMOTIF" \
 		LDFLAGS="-L/opt/IXImd12s/lib" \
-		LDLIBS="-lXm -lXt -lX11 -lgen -lsocket -lm" \
+		LDLIBS="$(LDLIBS) -lXm -lXt -lX11 -lgen -lsocket" \
 		OBJ="atari_x11.o"
 
 curses :
 	make atari800 \
 		CPPFLAGS="-DCURSES" \
-		LDLIBS="-lcurses -lm" \
+		LDLIBS="$(LDLIBS) -lcurses" \
 		OBJ="atari_curses.o"
 
 sunos-curses :
 	make atari800 \
 		CPPFLAGS="-I/usr/5include -DCURSES" \
-		LDLIBS="-lcurses -lm" \
+		LDLIBS="$(LDLIBS) -lcurses" \
 		LDFLAGS="-L/usr/5lib" \
 		OBJ="atari_curses.o"
 
 linux-ncurses :
 	make atari800 \
 		CPPFLAGS="-I/usr/include/ncurses -DCURSES -DNCURSES" \
-		LDLIBS="-lncurses -lm" \
+		LDLIBS="$(LDLIBS) -lncurses" \
 		OBJ="atari_curses.o"
 
 freebsd-ncurses :
 	make atari800 \
 		CPPFLAGS="-I/usr/include/ncurses -DCURSES -DNCURSES" \
-		LDLIBS="-lncurses -lm" \
+		LDLIBS="$(LDLIBS) -lncurses" \
 		OBJ="atari_curses.o"
 
 freebsd-x11 :
 	make atari800 \
-		CPPFLAGS="-I/usr/X11R6/include" \
+		CPPFLAGS="-DX11 -I/usr/X11R6/include" \
 		LDFLAGS="-L/usr/X11R6/lib" \
-		LDLIBS="-lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lX11" \
 		OBJ="atari_x11.o"
 
 freebsd-x11-shm :
 	make atari800 \
-		CPPFLAGS="-I/usr/X11R6/include -DSHM" \
+		CPPFLAGS="-DX11 -I/usr/X11R6/include -DSHM" \
 		LDFLAGS="-L/usr/X11R6/lib" \
-		LDLIBS="-lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -lX11 -lXext" \
 		OBJ="atari_x11.o"
 
 freebsd-xview : 
 	make atari800 \
-		OTHER="-I/usr/X11R6/include -DXVIEW" \
+		OTHER="-DX11 -I/usr/X11R6/include -DXVIEW" \
 		LDFLAGS="-L/usr/X11R6/lib" \
-		LDLIBS="-lxview -lolgx -lX11 -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11" \
 		OBJ="atari_x11.o"
 
 freebsd-xview-shm :
 	make atari800 \
-		OTHER="-I/usr/X11R6/include -DXVIEW -DSHM" \
+		OTHER="-DX11 -I/usr/X11R6/include -DXVIEW -DSHM" \
 		LDFLAGS="-L/usr/X11R6/lib" \
-		LDLIBS="-lxview -lolgx -lX11 -lXext -lm" \
+		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11 -lXext" \
 		OBJ="atari_x11.o"
 
 #
@@ -245,7 +253,7 @@ INCLUDES	=	Makefile \
 			nas.h \
 			platform.h
 
-config config.h	:	configure
+config config.h	:	configure config.in
 	./configure
 
 configure	:	configure.o prompts.o
@@ -267,6 +275,7 @@ OBJECTS	=	atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
+		binload.o \
 		list.o \
 		sound.o \
 		pokeysnd.o \
@@ -280,7 +289,7 @@ OBJECTS	=	atari.o \
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
-atari.o		:	atari.c $(INCLUDES) prompts.h
+atari.o		:	atari.c $(INCLUDES) prompts.h config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o		:	cpu.c $(INCLUDES)
@@ -315,6 +324,9 @@ supercart.o	:	supercart.c $(INCLUDES)
 
 ui.o		:	ui.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+binload.o       :       binload.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) binload.c
 
 list.o		:	list.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) list.c

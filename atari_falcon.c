@@ -192,7 +192,7 @@ void set_colors(int new)
 		else
 			f030_coltable_ptr = f030coltable_backup;
 		Supexec(set_colors_on_f030);
-		// VsetRGB(0, 256, new ? RGBcoltable : RGBcoltable_backup);
+		/* VsetRGB(0, 256, new ? RGBcoltable : RGBcoltable_backup); */
 	}
 	else {
 		for(i=0; i<256; i++)
@@ -207,7 +207,7 @@ void save_original_colors(void)
 	if (reprogram_VIDEL) {
 		f030_coltable_ptr = f030coltable_backup;
 		Supexec(get_colors_on_f030);
-		// VgetRGB(0, 256, RGBcoltable_backup);
+		/* VgetRGB(0, 256, RGBcoltable_backup); */
 	}
 	else {
 		for(i=0; i<256; i++)

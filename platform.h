@@ -1,6 +1,8 @@
 #ifndef __PLATFORM__
 #define __PLATFORM__
 
+#include "config.h"
+
 /*
  * This include file defines prototypes for platforms specific functions.
  */

@@ -1,3 +1,5 @@
+#include "config.h"
+
 #ifdef PAGED_MEM
 #define dGetByte(x) GetByte(x)
 UBYTE GetByte(UWORD addr);

@@ -39,6 +39,7 @@ extern int DELAYED_XMTDONE_IRQ;
 #define TRUE    1
 
 #include "atari.h"
+#include "config.h"
 #include "cpu.h"
 #include "memory.h"
 #include "sio.h"
@@ -266,10 +267,23 @@ void SIO_DisableDrive(int diskno)
 	strcpy(sio_filename[diskno - 1], "Off");
 }
 
+#ifdef USE_NEW_BINLOAD
+extern int start_binloading;
+int BIN_loade_start( UBYTE *buffer );
+#endif /* USE_NEW_BINLOAD */
+
 void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 {
 	int size = sectorsize[unit];
 	ULONG offset = 0;
+
+#ifdef USE_NEW_BINLOAD
+	if( start_binloading )
+	{	if(sz)	*sz=128;
+		if(ofs)	*ofs=0;
+		return;
+	}
+#endif /* USE_NEW_BINLOAD */
 
 	switch (format[unit]) {
 	case XFD:
@@ -320,11 +334,14 @@ int SeekSector(int unit, int sector)
 	return size;
 }
 
-
 /* Unit counts from zero up */
 int ReadSector(int unit, int sector, UBYTE * buffer)
 {
 	int size;
+
+#ifdef USE_NEW_BINLOAD
+	if( start_binloading )	return(BIN_loade_start(buffer));
+#endif /* USE_NEW_BINLOAD */
 
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
@@ -564,6 +581,16 @@ int ReadStatusBlock(int unit, UBYTE * buffer)
  */
 int DriveStatus(int unit, UBYTE * buffer)
 {
+#ifdef USE_NEW_BINLOAD
+	if( start_binloading )
+	{	buffer[0] = 0;
+		buffer[1] = 64;
+		buffer[2] = 1;
+		buffer[3] = 0 ;
+		return 'C';
+	}
+#endif /* USE_NEW_BINLOAD */
+		
 	if (drive_status[unit] != Off) {
 		if (drive_status[unit] == ReadWrite) {
 			buffer[0] = (sectorsize[unit] == 256) ? (32 + 16) : (16);

@@ -4,6 +4,9 @@
 #ifdef WIN32
 #include "windows.h"
 #endif
+
+#include "config.h"
+
 /*
    =================================
    Define Data Types on Local System
@@ -51,12 +54,14 @@ typedef enum {
 extern TVmode tv_mode;
 extern Machine machine;
 extern int verbose;
+extern unsigned int cpu_clock;		/* Global tacts counter */
+extern int draw_display;		/* Draw actualy generated screen */
 
 #define FALSE	0
 #define TRUE	1
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9c"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9d"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -87,6 +92,9 @@ enum ESCAPE {
 	ESC_K_WRITE,
 	ESC_K_STATUS,
 	ESC_K_SPECIAL,
+
+	ESC_BINLOADER_CONT,
+
 /*
  * These are Escape codes for the normal device handlers.
  * Some are never used and some are only sometimes used.

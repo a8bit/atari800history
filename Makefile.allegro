@@ -1,13 +1,18 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
-#CFLAGS2         = -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
 #CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DUSE_DOSSOUND -DPOKEY_UPDATE -DCLIP -DPERRY_MODIFIED_POLY
-CFLAGS		= -c -g -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DUSE_DOSSOUND -DPOKEY_UPDATE -DCLIP -DSET_LED -DBUFFERED_LOG
-#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER
+CFLAGS		= -c -g -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DUSE_DOSSOUND -DPOKEY_UPDATE
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
+
+ifeq (atari800.djgpp,$(wildcard atari800.djgpp))
+include atari800.djgpp
+endif
+
+ifdef ZLIB_CAPABLE
+LDLIBS		+= -lz
+endif
 
 default :
 	@echo To build the Atari 800 Emulator, type:
@@ -23,15 +28,15 @@ default :
 	@echo To install the Emulator, type:
 
 basic :
-	@make atari800.exe CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
+	@make atari800.exe CPPFLAGS="-DBASIC" OBJ="atari_basic.o"
 	@echo Finished.
 
 pdcurses :
-	@make atari800.exe CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o"
+	@make atari800.exe CPPFLAGS="-DCURSES" LDLIBS="$(LDLIBS) -lcurso" OBJ="atari_curses.o"
 	@echo Finished.
 
 vga :
-	@make atari800.exe CPPFLAGS="-DVGA" LDLIBS="-lm -lalleg" OBJ="atari_vga.o vga_gfx.o"
+	@make atari800.exe CPPFLAGS="-DVGA" LDLIBS="$(LDLIBS) -lalleg" OBJ="atari_vga.o vga_gfx.o"
 	@echo Finished.
 
 #
@@ -56,7 +61,7 @@ INCLUDES        =       Makefile \
 			supercart.h \
 			platform.h
 
-config config.h	:	configure.exe
+config config.h	:	configure.exe config.in
 	configure.exe
 
 configure.exe	:	configure.o prompts.o
@@ -78,6 +83,7 @@ OBJECTS =       atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
+		binload.o \
 		list.o \
 		dossound.o \
 		pokeysnd.o	\
@@ -91,7 +97,7 @@ OBJECTS =       atari.o \
 atari800.exe        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800.exe
 
-atari.o         :       atari.c $(INCLUDES)
+atari.o         :       atari.c $(INCLUDES) config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o           :       cpu.c $(INCLUDES)
@@ -123,6 +129,9 @@ supercart.o     :       supercart.c $(INCLUDES)
 
 ui.o            :       ui.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+binload.o       :       binload.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) binload.c
 
 list.o          :       list.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) list.c

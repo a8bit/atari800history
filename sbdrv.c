@@ -57,6 +57,7 @@
 #include <conio.h>
 #include <time.h>
 #include <stdio.h>
+#include "config.h"
 #include "sbdrv.h"
 
 #define DSP_RESET         0x06

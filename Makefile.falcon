@@ -72,7 +72,7 @@ INCLUDES        =       config.h \
 			supercart.h \
 			platform.h
 
-config config.h	:	configure
+config config.h	:	configure config.in
 	./configure
 
 configure	:	configure.o prompts.o
@@ -94,6 +94,7 @@ OBJECTS =       atari.o \
 		prompts.o \
 		rtconfig.o \
 		ui.o \
+		binload.o \
 		list.o \
 		pokeysnd.o \
 		sound_falcon.o \
@@ -109,7 +110,7 @@ atari800        :       $(OBJECTS) $(OBJ)
 	fixstk 128k atari800
 	# strip atari800
 
-atari.o         :       atari.c $(INCLUDES)
+atari.o         :       atari.c $(INCLUDES) config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 cpu.o           :       cpu.c $(INCLUDES)
@@ -141,6 +142,9 @@ supercar.o     :       supercart.c $(INCLUDES)
 
 ui.o            :       ui.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+binload.o       :       binload.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) binload.c
 
 list.o          :       list.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) list.c

@@ -6,6 +6,7 @@
 #include <sys/farptr.h>
 #include <string.h>
 #include "atari.h"
+#include "config.h"
 
 #ifdef AT_USE_ALLEGRO
 #include <allegro.h>
@@ -106,8 +107,8 @@ UBYTE unmapPhysicalMemory(ULONG *linear)
   {
     meminfo.address=*linear;
     __dpmi_free_physical_address_mapping(&meminfo);
-  }  //when <1MB, suppose that it lies in regular DOS memory and does not
-     //requires freeing...
+  }  /* when <1MB, suppose that it lies in regular DOS memory and does not
+        requires freeing...  */
   *linear=0;
   return TRUE;
 }

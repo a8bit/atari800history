@@ -40,7 +40,11 @@
 
 int ui_is_active = FALSE;
 
+#ifdef USE_NEW_BINLOAD
+int BIN_loader( char *filename );
+#else
 int ReadAtariExe( char *filename );
+#endif
 
 static int current_disk_directory = 0;
 static char curr_disk_dir[MAX_FILENAME_LEN] = "";
@@ -118,6 +122,7 @@ int GetKeyPress(UBYTE * screen)
 		static int rep = KB_DELAY;
 		if (Atari_Keyboard() == AKEY_NONE) {
 			rep = KB_DELAY;
+			atari_sleep_ms(100);	/* mmm */
 			break;
 		}
 		if (rep == 0) {
@@ -1113,7 +1118,11 @@ int RunExe(UBYTE *screen)
 	if (!curr_exe_dir[0])
 	  strcpy(curr_exe_dir, atari_exe_dir);
 	if (FileSelector(screen, curr_exe_dir, exename)) {
+#ifdef USE_NEW_BINLOAD
+		ret = BIN_loader(exename);
+#else
 		ret = ReadAtariExe(exename);
+#endif
 		if (! ret) {
 			/* display log to a window */
 		}
@@ -1176,7 +1185,7 @@ void ui(UBYTE *screen)
 		"Select System",
 		"Disk Management",
 		"Cartridge Management",
-		"Run EXE directly",
+		"Run single BIN file directly",
 		"Save State",
 		"Load State",
 		"Back to emulated Atari",

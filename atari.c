@@ -11,6 +11,7 @@
 #else
 #include <sys/time.h>
 #include <unistd.h>
+#include "config.h"
 #endif
 
 #ifdef VMS
@@ -78,6 +79,13 @@ int pil_on = FALSE;
 int pil_on = FALSE;
 #endif
 
+#ifdef USE_NEW_BINLOAD
+int BIN_loader( char *filename );
+void BIN_loader_cont( void );
+#else
+int ReadAtariExe( char *filename );
+#endif
+
 int	os = 2;
 
 extern SaveVal( void *value, int size );
@@ -96,6 +104,7 @@ int cart_type = NO_CART;
 
 int countdown_rate = 4000;
 double deltatime;
+int draw_display=1;		/* Draw actualy generated screen */
 
 int Atari800_Exit(int run_monitor);
 void Atari800_Hardware(void);
@@ -130,7 +139,13 @@ void Warmstart(void)
 	NMIEN = 0x00;
 	NMIST = 0x00;
 	PORTA = 0x00;
-	PORTB = 0xff;
+/* After reset must by actived rom os */
+	if (mach_xlxe) {
+		PIA_PutByte(_PORTB, 0xff);	/* turn on operating system */
+	}
+	else
+		PORTB = 0xff;
+
 	CPU_Reset();
 }
 
@@ -162,12 +177,24 @@ int Initialise_Atari320XE(void)
 #include "monty.h"
 #endif
 
+#ifdef linux
+#ifdef REALTIME
+#include <sched.h>
+#endif /* REALTIME */
+#endif /* linux */
+
 int main(int argc, char **argv)
 {
 	int status;
 	int error = FALSE;
 	int diskno = 1;
 	int i, j;
+	char *run_direct=NULL;
+#ifdef linux
+#ifdef REALTIME
+	struct sched_param sp;
+#endif /* REALTIME */
+#endif /* linux */
 
 #ifdef WIN32
 	/* The Win32 version doesn't use configuration files, it reads values in from the Registry */
@@ -183,6 +210,13 @@ int main(int argc, char **argv)
 #else
 	char *rtconfig_filename = NULL;
 	int config = FALSE;
+
+#ifdef linux
+#ifdef REALTIME
+	sp.sched_priority = sched_get_priority_max(SCHED_RR);
+	sched_setscheduler(getpid(),SCHED_RR, &sp);
+#endif /* REALTIME */
+#endif /* linux */
 
 	for (i = j = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-configure") == 0)
@@ -311,6 +345,9 @@ int main(int argc, char **argv)
 			rom_filename = argv[++i];
 			cart_type = DB_SUPERCART;
 		}
+		else if (strcmp(argv[i], "-run") == 0) {
+			run_direct = argv[++i];
+		}
 		else if (strcmp(argv[i], "-refresh") == 0) {
 			sscanf(argv[++i], "%d", &refresh_rate);
 			if (refresh_rate < 1)
@@ -333,6 +370,7 @@ int main(int argc, char **argv)
 			Aprint("\t-rom16 fnm    Install standard 16K Cartridge");
 			Aprint("\t-oss fnm      Install OSS Super Cartridge");
 			Aprint("\t-db fnm       Install DB's 16/32K Cartridge (not for normal use)");
+			Aprint("\t-run fnm      Run file directly");
 			Aprint("\t-refresh num  Specify screen refresh rate");
 			Aprint("\t-nopatch      Don't patch SIO routine in OS");
 			Aprint("\t-nopatchall   Don't patch OS at all, H: device won't work");
@@ -576,6 +614,15 @@ int main(int argc, char **argv)
  * ======================================
  */
 
+	if( run_direct!=NULL )
+	{
+#ifdef USE_NEW_BINLOAD
+		BIN_loader(run_direct);
+#else
+		ReadAtariExe(run_direct);
+#endif
+	}
+
 #ifdef WIN32
 	if( update_registry )
 		WriteAtari800Registry( NULL );
@@ -784,6 +831,12 @@ void AtariEscape(UBYTE esc_code)
 		Device_HHINIT();
 		return;
 		break;
+#ifdef USE_NEW_BINLOAD
+	case ESC_BINLOADER_CONT:
+		BIN_loader_cont();
+		return;
+		break;
+#endif
 	}
 	/* for all codes that fall through the cases */
 	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
@@ -952,6 +1005,7 @@ void Atari800_Hardware(void)
 		static int test_val = 0;
 		int keycode;
 
+		draw_display=1;
 #ifndef BASIC
 /*
    colour_lookup[8] = colour_translation_table[COLBK];
@@ -1024,9 +1078,15 @@ void Atari800_Hardware(void)
 			test_val = 0;
 		}
 		else {
+#ifdef VERY_SLOW
 			for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
 				GO(114);
 			}
+#else
+			draw_display=0;
+			ANTIC_RunDisplayList();
+			Atari_DisplayScreen((UBYTE *) atari_screen);
+#endif
 		}
 #else
 		for (ypos = 0; ypos < ATARI_HEIGHT; ypos++) {
@@ -1064,7 +1124,7 @@ void Atari800_Hardware(void)
 		if( curtime>0 )
 		{	tp.tv_sec=  (int)(curtime);
 			tp.tv_usec= (int)((curtime-tp.tv_sec)*1000000);
-//printf("delta=%f sec=%d usec=%d\n",curtime,tp.tv_sec,tp.tv_usec);
+/* printf("delta=%f sec=%d usec=%d\n",curtime,tp.tv_sec,tp.tv_usec); */
 			select(1,NULL,NULL,NULL,&tp);
 		}
 		gettimeofday(&tp, NULL);

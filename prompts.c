@@ -9,7 +9,8 @@ void GetString(char *message, char *string)
 	char gash[128];
 
 	printf(message, string);
-	gets(gash);
+	fgets(gash, sizeof(gash), stdin);
+	RemoveLF(gash);
 	if (strlen(gash) > 0)
 		strcpy(string, gash);
 }
@@ -19,7 +20,8 @@ void GetNumber(char *message, int *num)
 	char gash[128];
 
 	printf(message, *num);
-	gets(gash);
+	fgets(gash, sizeof(gash), stdin);
+	RemoveLF(gash);
 	if (strlen(gash) > 0)
 		sscanf(gash, "\n%d", num);
 }
@@ -31,7 +33,8 @@ void YesNo(char *message, char *yn)
 
 	do {
 		printf(message, *yn);
-		gets(gash);
+		fgets(gash, sizeof(gash), stdin);
+		RemoveLF(gash);
 
 		if (strlen(gash) > 0)
 			t_yn = gash[0];

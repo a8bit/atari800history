@@ -37,6 +37,7 @@
 #include <workbench/workbench.h>
 
 #include "atari.h"
+#include "config.h"
 #include "colours.h"
 
 #define GAMEPORT0 0

@@ -1,9 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#ifndef AMIGA
 #include "config.h"
-#endif
 
 #ifdef VOXWARE
 #include <fcntl.h>
@@ -28,6 +26,7 @@ static int gain = 4;
 
 static int sound_enabled = TRUE;
 static int dsp_fd;
+int sound_record=-1;
 /*
 static int dsp_sample_rate_divisor = 35;
 static int AUDCTL = 0x00;
@@ -131,6 +130,8 @@ void Voxware_UpdateSound(void)
 	for (; i < fragstofill; i++) {
 		Pokey_process(dsp_buffer, sizeof(dsp_buffer));
 		write(dsp_fd, dsp_buffer, sizeof(dsp_buffer));
+		if( sound_record>=0 )
+			write(sound_record, dsp_buffer, sizeof(dsp_buffer));
 	}
 }
 

@@ -12,6 +12,7 @@
 #include <pc.h>
 #include <conio.h>
 
+#include "config.h"
 #include "pcjoy.h"
 
 /*color attributes*/
@@ -438,7 +439,7 @@ void read_config()
            "Execute this utility from atari800 dir after configuring it!\n");
     exit(1);
   }
-  while (fgets(string,256,fr))
+  while (fgets(string,sizeof(string),fr))
   {
     i=strlen(string);
     if (string[i-1]=='\n') string[i-1]='\0';
@@ -502,7 +503,7 @@ void save_config()
     fclose(fr);
     return;
   }
-  while (fgets(string,256,fr))
+  while (fgets(string,sizeof(string),fr))
   {
     if (strncmp(string,"JOYSTICK_",9)!=0 && strncmp(string,"KEYSET_",7)!=0)
       fputs(string,fw);  /*copy all lines except those with JOYSTICK_ and KEYSET_ parameters*/

@@ -183,3 +183,11 @@ Krzysztof Nikiel <krzych00@priv7.onet.pl>
 
 Jari Karppinen <jakarppi@mail.student.oulu.fi>
 - killed some warnings and bugs in source (like e.g. void main() in joycfg ;-)
+
+Marek Zelem <marek@fornax.elf.stuba.sk>
+- X11 keyboard
+- X11 screen (background => faster emulation)
+- digital (volume only) sound
+- console sound emulation
+- disk drive sound emulation
+- various fixes

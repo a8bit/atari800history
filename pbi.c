@@ -1,4 +1,5 @@
 #include "atari.h"
+#include "config.h"
 
 UBYTE PBI_GetByte(UWORD addr)
 {

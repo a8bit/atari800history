@@ -90,6 +90,11 @@
 #include <time.h>
 
 #include "pokeysnd.h"
+#include "atari.h"
+
+#ifndef WIN32
+#include "config.h"
+#endif
 
 /* CONSTANT DEFINITIONS */
 
@@ -208,6 +213,22 @@ extern int atari_speaker;
 
 static uint16 last_val = 0;		/* last output value */
 
+/* Volume only emulations declarations */
+#ifndef	NO_VOL_ONLY
+
+#define	SAMPBUF_MAX	2000
+int	sampbuf_val[SAMPBUF_MAX];	/* volume values */
+int	sampbuf_cnt[SAMPBUF_MAX];	/* relative start time */
+int	sampbuf_ptr = 0;		/* pointer to sampbuf */
+int	sampbuf_rptr = 0;		/* pointer to read from sampbuf */
+int	sampbuf_last = 0;		/* last absolute time */
+int	sampbuf_AUDV[4 * MAXPOKEYS];	/* prev. channel volume */
+int	sampbuf_lastval = 0;		/* last volume */
+int	sampout;			/* last out volume */
+uint16	samp_freq;
+int	samp_consol_val=0;		/* actual value of console sound */
+#endif	/* NO_VOL_ONLY */
+
 /*****************************************************************************/
 /* In my routines, I treat the sample output as another divide by N counter  */
 /* For better accuracy, the Samp_n_cnt has a fixed binary decimal point      */
@@ -256,13 +277,16 @@ void Pokey_sound_init(uint32 freq17, uint16 playback_freq, uint8 num_pokeys)
 	uint8 chan, chip;
 	int32 n;
 
+#ifndef	NO_VOL_ONLY
+	samp_freq=playback_freq;
+#endif	/* NO_VOL_ONLY */
 	/* fill the 17bit polynomial with random bits */
 	for (n = 0; n < POLY17_SIZE; n++) {
 		bit17[n] = rand() & 0x01;	/* fill poly 17 with random bits */
 	}
 
 	/* disable interrupts to handle critical sections */
-	/*    _disable(); *//* RSF - removed for portability 31-MAR-97 */
+	/*    _disable(); */ /* RSF - removed for portability 31-MAR-97 */
 
 	/* start all of the polynomial counters at zero */
 	Poly_adjust = 0;
@@ -295,7 +319,7 @@ void Pokey_sound_init(uint32 freq17, uint16 playback_freq, uint8 num_pokeys)
 	/* set the number of pokey chips currently emulated */
 	Num_pokeys = num_pokeys;
 
-	/*    _enable(); *//* RSF - removed for portability 31-MAR-97 */
+	/*    _enable(); */ /* RSF - removed for portability 31-MAR-97 */
 }
 
 
@@ -326,7 +350,7 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 	uint8 chip_offs;
 
 	/* disable interrupts to handle critical sections */
-	/*    _disable(); *//* RSF - removed for portability 31-MAR-97 */
+	/*    _disable(); */ /* RSF - removed for portability 31-MAR-97 */
 
 	/* calculate the chip_offs for the channel arrays */
 	chip_offs = chip << 2;
@@ -493,6 +517,27 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 	/* if channel is volume only, set current output */
 	for (chan = CHAN1; chan <= CHAN4; chan++) {
 		if (chan_mask & (1 << chan)) {
+#ifndef	NO_VOL_ONLY
+			if( (AUDC[chan + chip_offs] & VOL_ONLY) )
+			{
+				sampbuf_lastval+=AUDV[chan + chip_offs]-7*gain
+					-sampbuf_AUDV[chan + chip_offs];
+
+				sampbuf_val[sampbuf_ptr]=sampbuf_lastval;
+				sampbuf_AUDV[chan + chip_offs]=AUDV[chan + chip_offs]-7*gain;
+				sampbuf_cnt[sampbuf_ptr]=
+					(cpu_clock-sampbuf_last)*128*samp_freq/178979;
+				sampbuf_last=cpu_clock;
+				sampbuf_ptr++;
+				if( sampbuf_ptr>=SAMPBUF_MAX )
+					sampbuf_ptr=0;
+				if( sampbuf_ptr==sampbuf_rptr )
+				{	sampbuf_rptr++;
+					if( sampbuf_rptr>=SAMPBUF_MAX )
+						sampbuf_rptr=0;
+				}
+			}
+#endif	/* NO_VOL_ONLY */
 			/* I've disabled any frequencies that exceed the sampling
 			   frequency.  There isn't much point in processing frequencies
 			   that the hardware can't reproduce.  I've also disabled
@@ -501,7 +546,7 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 			/* if the channel is volume only */
 			/* or the channel is off (volume == 0) */
 			/* or the channel freq is greater than the playback freq */
-			if ((AUDC[chan + chip_offs] & VOL_ONLY) ||
+			if ( (AUDC[chan + chip_offs] & VOL_ONLY) ||
 				((AUDC[chan + chip_offs] & VOLUME_MASK) == 0) ||
 				(Div_n_max[chan + chip_offs] < (Samp_n_max >> 8))) {
 				/* indicate the channel is 'on' */
@@ -521,7 +566,7 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 		}
 	}
 
-	/*    _enable(); *//* RSF - removed for portability 31-MAR-97 */
+	/*    _enable(); */ /* RSF - removed for portability 31-MAR-97 */
 }
 
 
@@ -726,7 +771,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			}
 
 			/* check channel 1 filter (clocked by channel 3) */
-			if (AUDCTL[next_event >> 2] & CH1_FILTER) {
+			if ( AUDCTL[next_event >> 2] & CH1_FILTER) {
 				/* if we're processing channel 3 */
 				if ((next_event & 0x03) == CHAN3) {
 					/* check output of channel 1 on same chip */
@@ -740,7 +785,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			}
 
 			/* check channel 2 filter (clocked by channel 4) */
-			if (AUDCTL[next_event >> 2] & CH2_FILTER) {
+			if ( AUDCTL[next_event >> 2] & CH2_FILTER) {
 				/* if we're processing channel 4 */
 				if ((next_event & 0x03) == CHAN4) {
 					/* check output of channel 2 on same chip */
@@ -793,6 +838,26 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			iout = cur_val;
 #endif
 
+#ifndef	NO_VOL_ONLY
+			if( sampbuf_rptr!=sampbuf_ptr )
+			{ int l;
+				if( sampbuf_cnt[sampbuf_rptr]>0 )
+					sampbuf_cnt[sampbuf_rptr]-=1280;
+				while(  (l=sampbuf_cnt[sampbuf_rptr])<=0 )
+				{	sampout=sampbuf_val[sampbuf_rptr];
+					sampbuf_rptr++;
+					if( sampbuf_rptr>=SAMPBUF_MAX )
+						sampbuf_rptr=0;
+					if( sampbuf_rptr!=sampbuf_ptr )
+					{   
+					    sampbuf_cnt[sampbuf_rptr]+=l;
+					}
+					else	break;
+				}
+			}
+			iout+=sampout;
+#endif	/* NO_VOL_ONLY */
+
 #ifdef CLIP						/* if clipping is selected */
 			if (iout > SAMP_MAX) {	/* then check high limit */
 				*buffer++ = (uint8) SAMP_MAX;	/* and limit if greater */
@@ -816,4 +881,94 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			n--;
 		}
 	}
+#ifndef	NO_VOL_ONLY
+	if( sampbuf_rptr==sampbuf_ptr )
+		sampbuf_last=cpu_clock;
+#endif	/* NO_VOL_ONLY */
 }
+
+#ifdef SERIO_SOUND
+void Update_serio_sound( int out, UBYTE data )
+{
+#ifndef	NO_VOL_ONLY
+   int bits,pv,future;
+	pv=0;
+	future=0;
+	bits= (data<<1) | 0x200;
+	while( bits )
+	{
+		sampbuf_lastval-=pv;
+		pv=(bits&0x01)*8*4-4*4;	/* FIXME!!! - set volume from AUDV */
+		sampbuf_lastval+=pv;
+
+	sampbuf_val[sampbuf_ptr]=sampbuf_lastval;
+	sampbuf_cnt[sampbuf_ptr]=
+		(cpu_clock+future-sampbuf_last)*128*samp_freq/178979;
+	sampbuf_last=cpu_clock+future;
+	sampbuf_ptr++;
+	if( sampbuf_ptr>=SAMPBUF_MAX )
+		sampbuf_ptr=0;
+	if( sampbuf_ptr==sampbuf_rptr )
+	{	sampbuf_rptr++;
+		if( sampbuf_rptr>=SAMPBUF_MAX )
+			sampbuf_rptr=0;
+	}
+			/* 1789790/19200 = 93 */
+		future+=93;	/* ~ 19200 bit/s - FIXME!!! set speed form AUDF */
+		bits>>=1;
+	}
+	sampbuf_lastval-=pv;
+#endif	/* NO_VOL_ONLY */
+}
+#endif /* SERIO_SOUND */
+
+#ifndef NO_CONSOL_SOUND
+void Update_consol_sound( int set )
+{ 
+#ifndef	NO_VOL_ONLY
+  static int prev_atari_speaker=0;
+  static unsigned int prev_cpu_clock=0;
+  int d;
+	if( !set && samp_consol_val==0 )	return;
+	sampbuf_lastval-=samp_consol_val;
+	if( prev_atari_speaker!=atari_speaker )
+	{	samp_consol_val=atari_speaker*8*4-7*4;	/* gain */
+		prev_cpu_clock=cpu_clock;
+	}
+	else if( !set )
+	{	d=cpu_clock - prev_cpu_clock;
+		if( d<114 )
+		{	sampbuf_lastval+=samp_consol_val;   return;	}
+		while( d>=114 /* CPUL */ )
+		{	samp_consol_val=samp_consol_val*99/100;
+			d-=114;
+		}
+		prev_cpu_clock=cpu_clock-d;
+	}
+	sampbuf_lastval+=samp_consol_val;
+	prev_atari_speaker=atari_speaker;
+
+	sampbuf_val[sampbuf_ptr]=sampbuf_lastval;
+	sampbuf_cnt[sampbuf_ptr]=
+		(cpu_clock-sampbuf_last)*128*samp_freq/178979;
+	sampbuf_last=cpu_clock;
+	sampbuf_ptr++;
+	if( sampbuf_ptr>=SAMPBUF_MAX )
+		sampbuf_ptr=0;
+	if( sampbuf_ptr==sampbuf_rptr )
+	{	sampbuf_rptr++;
+		if( sampbuf_rptr>=SAMPBUF_MAX )
+			sampbuf_rptr=0;
+	}
+#endif	/* NO_VOL_ONLY */
+}
+#endif /* NO_CONSOL_SOUND */
+
+#ifndef	NO_VOL_ONLY
+void Update_vol_only_sound( void )
+{
+#ifndef NO_CONSOL_SOUND
+	Update_consol_sound(0);	/* mmm */
+#endif /* NO_CONSOL_SOUND */
+}
+#endif	/* NO_VOL_ONLY */

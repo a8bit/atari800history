@@ -1,3 +1,110 @@
+Changes in 0.9.9d
+-----------------
+ Almost all changes in this version came from Marek Zelem. Thanks to him
+ we got digital sound effects (including keyboard clicking sound and other
+ sound effects) in all ports of Atari800 now. This is very cool.
+ Also svgalib and X11 support were improved. And a new binary loader was added.
+
++ New features for end users:
+  - digital (volume only) sound (finally!)
+  - emulation of console and disk drive sound
+  - improved keyboard, joystick and screen support under X11
+  - REALTIME mode for Linux - might speed up the emulator a bit
+  - new routine for direct loading of single binary files
+  - new cmdline command '-run program' that runs a program when emulator starts
+  - fixed a bug in XL/XE mode after warmstart
+
+List of changes for programmers:
+
+o keyboard in X11 didn't generate KEYPRESSED - fixed. Also second joystick
+  emulation was fixed. AKEY_HELP added. <Marek>
+
+o support for REALTIME process under Linux added. This is disabled by default
+  since it might hog the whole operating system. On slower systems this might
+  increase the emulator speed so test it out if you run on a 486. <Marek>
+
+o atari_sleep_ms(100) added to ui() into cycle for reading pressed keys.
+  Emulator thus doesn't hog the operating system while waiting for a keypress.
+  This is essential when Atari800 runs in REALTIME mode under Linux.  <Marek>
+
+o digital sound (samples) emulation was added. It's enabled by default but
+  you can disable it by defining NO_VOL_ONLY (who would disable it, anyway?)
+  For better syncing a new global var cpu_clock was added. It's updated in
+  cpu.c, cpu_nogoto.c after every instruction (cpu_m68k.s is not updated yet)
+  This cpu_clock measures the number of physical ticks since the emulation
+  started. <Marek>
+
+o console sound emulation added (keyboard clicking sound and the beep that
+  is produced by writting to CONSOL register). Can be disabled by a #define
+  <Marek>
+
+o disk I/O transfer sound emulation added (can be disabled by a #define).
+  Hardcoded for 19200 bps for now. <Marek>
+
+o the cmdline option '-refresh <num>' defines how often the screen is to
+  be generated. Previously if num > 1 the screen generating was skipped
+  (num-1) times but also interrupts weren't generated, no sound was produced
+  and CPU ran a bit faster (full 114 cycles per screen line which is not
+  possible under normal circumstances). Seems like this was meant for the
+  BASIC or CURSES emulations.
+  In this version the code for num > 1 was changed so that all interrupts
+  are still generated, sound works OK and CPU runs at the right speed.
+  Just the screen is not generated (antic.c) and not drawn (only in x11.c
+  and svgalib.c for now - other platforms will be updated ASAP).
+  This is driven by global var 'draw_display'.
+  This new approach can be disabled anytime by defining VERY_SLOW. <Marek>
+
+o Warm Start on 800XL/XE fixed - turns on the ROM OS now. <Marek>
+
+o new BIN file loader added. Does not need a temporary .ATR disk image.
+  Should be much better than the original attempt. Define USE_NEW_BINLOAD
+  and test it out. <Marek>
+
+o atari_x11.c: if screen is not visible do not update the emulated screen.
+  Improves speed and is useful e.g. for listening the Atari800 music. Simply
+  cover the emulator window with another window and the emulation runs faster.
+  <Marek>
+
+o atari_svgalib.c: support for running on an inactive virtual console, if
+  allowed by the underlying svgalib. <Marek>
+
+o sound recording added. Global variable 'sound_record' contains a file
+  descriptor. If it's valid the played sound is written to the file.
+  It's up to atari_*.c to turn the sound recording on/off. So far supported
+  by CTRL-F8 under X11 only. <Marek>
+
+o atari_x11.c and joystick: if the mouse is not over the Atari800 window
+  (doesn't have the input focus) the joystick is not read.
+  Also a preliminary 'experimental_mouse_joystick()' was added. As the name
+  says this is an experiment of joystick emulation using the mouse. Not used
+  yet. <Marek>
+
+o trace-ing in monitor: doesn't display 24 insns after a single step. <Marek>
+
+o Jari Karppinen sent a patch for new Allegro lib (v3.12)
+
+o Christian Groessler sent a little patch for joystick under Linux
+
+o all gets() were replaced by fgets() since the compiler complained.
+
+o new configure stuff - configure.c, config.in, config.h and Makefiles
+  Marek rewrote the configure stuff and introduced the config.in file. This
+  is a great idea (something the emulator source needed for a long time).
+  I tried to improve it even more (getting the idea from Linux kernel config
+  stuff). It's not perfect yet but the main purpose - allow people to see
+  and change all used #defines - works now. Also, my idea was to allow people
+  to compile with or without ZLIB without editing the Makefiles and adding
+  #define and -lz. This works too. Of course there's still a lot of work left,
+  for example the (premise) as Marek calls it could allow logical operators 
+  like OR, NOT and AND (using C symbols |, !, & or even ||, &&)
+
+  The .atari800 file format has been changed. The positive thing is that it's
+  now compatible between all platforms. The negative thing is that I had to
+  move it from $HOME dir into the current source dir in order to get the
+  include of Makefile working under DOS. I don't know make and Makefiles well
+  so all fixes are welcome.
+
+
 Changes in 0.9.9c
 -----------------
 

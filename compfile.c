@@ -17,11 +17,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#ifdef __MSDOS__
 #include <unistd.h>	/* for close(), write() */
+#ifdef __MSDOS__
 #include <io.h>
 #endif
 #include "atari.h"
+#include "config.h"
 #include "log.h"
 #ifdef ZLIB_CAPABLE
 #include "zlib.h"

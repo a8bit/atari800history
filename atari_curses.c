@@ -5,6 +5,7 @@
 #endif
 
 #include "atari.h"
+#include "config.h"
 #include "cpu.h"
 #include "monitor.h"
 

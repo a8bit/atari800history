@@ -39,6 +39,7 @@
 #define	TRUE	1
 
 #include	"atari.h"
+#include "config.h"
 #include	"cpu.h"
 
 /*
@@ -418,6 +419,7 @@ int GO(int ncycles)
 		}
 #endif
 		ncycles -= cycles[memory[PC]];
+		cpu_clock += cycles[insn];
 		
 		switch (memory[PC++]) {
 		case 0x00:	/* BRK */
@@ -3000,6 +3002,8 @@ next:
 	
 	UPDATE_GLOBAL_REGS;
 	if (wsync_halt && ncycles >= 0)
+	{	cpu_clock += ncycles;
 		return 0;				/* WSYNC stopped CPU */
+	}
 	return ncycles;
 }

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "atari.h"
+#include "config.h"
 #include "colours.h"
 
 static int pcx_no=-1;

@@ -4,13 +4,21 @@ LIB_PATH	= ${PREFIX}/lib
 MAN_PATH	= ${PREFIX}/man
 
 CC		= gcc
-CFLAGS		= -c -Wall
-CPPFLAGS	= -c -Wall
+CFLAGS		= -c -O2 -Wall
+CPPFLAGS	= -c -O2 -Wall
 LD		= gcc
 LDFLAGS		= -s $(LIBDIRS)
-DEFS		= -DGNU_C -DZLIB_CAPABLE
-LIBS		= -lm -lz
-INCLUDE		=
+DEFS		= -DGNU_C
+LDLIBS		= -lm -L/usr/lib
+INCLUDE		= -I/usr/X11R6/include
+
+ifeq (.atari800,$(wildcard .atari800))
+include .atari800
+endif
+
+ifdef ZLIB_CAPABLE
+LDLIBS		+= -lz
+endif
 
 OBJECTS	=	atari.o \
 		cpu.o \
@@ -25,6 +33,7 @@ OBJECTS	=	atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
+		binload.o \
 		list.o \
 		sound.o \
 		pokeysnd.o \
@@ -53,19 +62,19 @@ all :
 svga:
 	make atari800 \
 	OBJECTS="$(OBJECTS) atari_svgalib.o" \
-	LIBS="$(LIBS) -lvga" \
-	DEFS="$(DEFS) -DSET_LED" \
+	LDLIBS="$(LDLIBS) -lvga" \
+	DEFS="$(DEFS)" \
 	INCLUDE="$(INCLUDE)"
 
 x11:
 	make atari800 \
 	OBJECTS="$(OBJECTS) atari_x11.o" \
-	LIBS="$(LIBS) -L/usr/X11R6/lib -lX11" \
-	DEFS="$(DEFS)" \
+	LDLIBS="$(LDLIBS) -L/usr/X11R6/lib -lX11" \
+	DEFS="$(DEFS) -DX11" \
 	INCLUDE="$(INCLUDE)"
 
 atari800: $(OBJECTS)
-	$(LD) $(LDFLAGS) $(OBJECTS) $(LIBS) -o $@
+	$(LD) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
 
 %.o: %.c
 	${CC} -c $(DEFS) $(INCLUDE) ${CFLAGS} $<
@@ -73,7 +82,7 @@ atari800: $(OBJECTS)
 %.o: %.cpp
 	${CC} -c $(DEFS) $(INCLUDE) ${CPPFLAGS} $<
 
-config config.h	:	configure
+config config.h	:	configure config.in
 	./configure
 
 configure	:	configure.o prompts.o
@@ -102,7 +111,7 @@ antic.o: config.h atari.h rt-config.h cpu.h memory.h memory-d.h gtia.h
 antic.o: antic.h pokey.h sio.h log.h statesav.h
 atari.o: atari.h cpu.h memory.h memory-d.h antic.h gtia.h pia.h pokey.h
 atari.o: supercart.h devices.h sio.h monitor.h platform.h prompts.h
-atari.o: rt-config.h ui.h ataripcx.h log.h statesav.h
+atari.o: rt-config.h ui.h ataripcx.h log.h statesav.h config.h
 atari_amiga.o: atari.h colours.h
 atari_basic.o: atari.h monitor.h
 atari_curses.o: atari.h cpu.h monitor.h
@@ -147,4 +156,5 @@ statesav.o: atari.h log.h
 supercart.o: atari.h cpu.h memory.h memory-d.h log.h
 ui.o: rt-config.h atari.h cpu.h memory.h memory-d.h platform.h prompts.h
 ui.o: gtia.h sio.h list.h ui.h log.h statesav.h
+binload.o: atari.h cpu.h memory-d.h pia.h
 vga_gfx.o: atari.h
