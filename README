@@ -8,7 +8,7 @@ Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.9
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.9.8 of my Atari 800, 800XL, 130XE and 5200 emulator
+This is the version 0.9.9 of my Atari 800, 800XL, 130XE and 5200 emulator
 for Unix, Amiga, MS-DOS, MS-Windows and Atari TT/Falcon. My main objective
 is to create a freely distributable portable emulator (i.e. with source
 code available). It can be configured to run in the following ways :-

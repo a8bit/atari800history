@@ -550,8 +550,8 @@ BOOL SetupSound(void)
 #else
 						ahi_request->ahir_Type            = AHIST_M8S;
 #endif
-						ahi_request->ahir_Volume          = 0x10000;          // Full volume
-						ahi_request->ahir_Position        = 0x8000;           // Centered
+						ahi_request->ahir_Volume          = 0x10000;          /* Full volume */
+						ahi_request->ahir_Position        = 0x8000;           /* Centered */
 						ahi_request->ahir_Link            = NULL;
 	
 						if((ahi_soundreq[0] = (struct AHIRequest*)AllocVec(sizeof(struct AHIRequest),MEMF_PUBLIC)))
@@ -2242,7 +2242,7 @@ int Atari_PORT (int num)
 }
 
 /**************************************************************************
- Initialize the Atari Prefs to sensible values
+ Handle Joystick Triggers
 **************************************************************************/
 int Atari_TRIG (int num)
 {
@@ -2267,6 +2267,14 @@ int Atari_POT (int num)
 int Atari_CONSOL (void)
 {
 	return consol;
+}
+
+/**************************************************************************
+ ...
+**************************************************************************/
+int Atari_PEN(int vertical)
+{
+	return vertical?0xff:0;
 }
 
 /**************************************************************************
@@ -2307,8 +2315,22 @@ void Atari_AUDCTL(int byte)
 #endif
 }
 
+void Sound_Pause(void)
+{
+	if (SoundEnabled)
+	{
+	}
+}
+
+void Sound_Continue(void)
+{
+	if (SoundEnabled)
+	{
+	}
+}
+
 /**************************************************************************
- Process some sound data (not used currently
+ Process some sound data (not used currently)
 **************************************************************************/
 void pokey_update(void)
 {

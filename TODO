@@ -1,12 +1,6 @@
 This is a list of things that need to be done
 ---------------------------------------------
-o update Makefiles with the new diskled 
-
-o add Paddle support to all architectures
-
-o add Sound_Pause() to all architectures
-
-o merge common parts of VGA, SVGALIB, X11 and AtariFalcon keyboard stuff
+o merge common parts of VGA, SVGALIB and AtariFalcon keyboard stuff
   into one source file named like atari_keyboard.c.
 
 o sound recording should store the sound in the .WAV format and should
@@ -25,6 +19,9 @@ o simplify and correct synchronization code in main emulator loop - some
   people still complain that the emulator is slower than the original Atari.
 
 o update the m68k assembler version of cpu.c
+
+o replace #ifdef _alpha_ with something like #ifdef 64BIT and update
+  Makefile/config.h so it defines 64BIT for all 64bit architectures
 
 o clean up the source and start using GNU autoconfig stuff
 

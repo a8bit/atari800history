@@ -52,6 +52,7 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "log.h"
 #include "statesav.h"
 #include "diskled.h"
+#include "colours.h"
 
 #ifdef USE_NEW_BINLOAD
 #include "binload.h"
@@ -382,6 +383,8 @@ int main(int argc, char **argv)
 			if (refresh_rate < 1)
 				refresh_rate = 1;
 		}
+		else if (strcmp(argv[i], "-palette") == 0)
+			read_palette(argv[++i]);
 		else if (strcmp(argv[i], "-help") == 0) {
 			Aprint("\t-configure    Update Configuration File");
 			Aprint("\t-config fnm   Specify Alternate Configuration File");
@@ -403,6 +406,7 @@ int main(int argc, char **argv)
 			Aprint("\t-refresh num  Specify screen refresh rate");
 			Aprint("\t-nopatch      Don't patch SIO routine in OS");
 			Aprint("\t-nopatchall   Don't patch OS at all, H: device won't work");
+			Aprint("\t-palette fnm  Use external palette");
 			Aprint("\t-a            Use A OS");
 			Aprint("\t-b            Use B OS");
 			Aprint("\t-c            Enable RAM between 0xc000 and 0xd000");
@@ -886,13 +890,6 @@ int Atari800_Exit(int run_monitor)
 UBYTE Atari800_GetByte(UWORD addr)
 {
 	UBYTE byte = 0xff;
-/*
-   ============================================================
-   GTIA, POKEY, PIA and ANTIC do not fully decode their address
-   ------------------------------------------------------------
-   PIA (At least) is fully decoded when emulating the XL/XE
-   ============================================================
- */
 	switch (addr & 0xff00) {
 	case 0x4f00:
 		bounty_bob1(addr);
@@ -903,28 +900,22 @@ UBYTE Atari800_GetByte(UWORD addr)
 		byte = 0;
 		break;
 	case 0xd000:				/* GTIA */
-		byte = GTIA_GetByte((UWORD)(addr - 0xd000));
+	case 0xc000:				/* GTIA - 5200 */
+		byte = GTIA_GetByte(addr);
 		break;
 	case 0xd200:				/* POKEY */
-		byte = POKEY_GetByte((UWORD)(addr - 0xd200));
+	case 0xe800:				/* POKEY - 5200 */
+	case 0xeb00:				/* POKEY - 5200 */
+		byte = POKEY_GetByte(addr);
 		break;
 	case 0xd300:				/* PIA */
-		byte = PIA_GetByte((UWORD)(addr - 0xd300));
+		byte = PIA_GetByte(addr);
 		break;
 	case 0xd400:				/* ANTIC */
-		byte = ANTIC_GetByte((UWORD)(addr - 0xd400));
+		byte = ANTIC_GetByte(addr);
 		break;
 	case 0xd500:				/* RTIME-8 */
-		byte = SuperCart_GetByte((UWORD)(addr - 0xd500));
-		break;
-	case 0xc000:				/* GTIA - 5200 */
-		byte = GTIA_GetByte((UWORD)(addr - 0xc000));
-		break;
-	case 0xe800:				/* POKEY - 5200 */
-		byte = POKEY_GetByte((UWORD)(addr - 0xe800));
-		break;
-	case 0xeb00:				/* POKEY - 5200 */
-		byte = POKEY_GetByte((UWORD)(addr - 0xeb00));
+		byte = SuperCart_GetByte(addr);
 		break;
 	default:
 		break;
@@ -935,13 +926,6 @@ UBYTE Atari800_GetByte(UWORD addr)
 
 void Atari800_PutByte(UWORD addr, UBYTE byte)
 {
-/*
-   ============================================================
-   GTIA, POKEY, PIA and ANTIC do not fully decode their address
-   ------------------------------------------------------------
-   PIA (At least) is fully decoded when emulating the XL/XE
-   ============================================================
- */
 	switch (addr & 0xff00) {
 	case 0x4f00:
 		bounty_bob1(addr);
@@ -950,28 +934,22 @@ void Atari800_PutByte(UWORD addr, UBYTE byte)
 		bounty_bob2(addr);
 		break;
 	case 0xd000:				/* GTIA */
+	case 0xc000:				/* GTIA - 5200 */
 		GTIA_PutByte(addr, byte);
 		break;
 	case 0xd200:				/* POKEY */
-		POKEY_PutByte((UWORD)(addr - 0xd200), byte);
+	case 0xe800:				/* POKEY - 5200 AAA added other pokey space */
+	case 0xeb00:				/* POKEY - 5200 */
+		POKEY_PutByte(addr, byte);
 		break;
 	case 0xd300:				/* PIA */
-		PIA_PutByte((UWORD)(addr - 0xd300), byte);
+		PIA_PutByte(addr, byte);
 		break;
 	case 0xd400:				/* ANTIC */
 		ANTIC_PutByte(addr, byte);
 		break;
 	case 0xd500:				/* Super Cartridges */
-		SuperCart_PutByte((UWORD)(addr), byte);
-		break;
-	case 0xc000:				/* GTIA - 5200 */
-		GTIA_PutByte((UWORD)(addr - 0xc000), byte);
-		break;
-	case 0xe800:				/* POKEY - 5200 AAA added other pokey space */
-		POKEY_PutByte((UWORD)(addr - 0xe800), byte);
-		break;
-	case 0xeb00:				/* POKEY - 5200 */
-		POKEY_PutByte((UWORD)(addr - 0xeb00), byte);
+		SuperCart_PutByte(addr, byte);
 		break;
 	default:
 		break;
@@ -1023,7 +1001,6 @@ void Atari800_Hardware(void)
 	static ULONG nextclock = 0;	/* put here a non-zero value to enable speed regulator */
 #endif
 	static long emu_too_fast = 0;	/* automatically enable/disable snailmeter */
-	static int last_key = -1;	/* no key is pressed */
 
 	nframes = 0;
 	gettimeofday(&tp, &tzp);
@@ -1031,14 +1008,12 @@ void Atari800_Hardware(void)
 	fps = 0.0;
 
 	while (TRUE) {
+#ifndef BASIC
 		static int test_val = 0;
+		static int last_key = -1;	/* no key is pressed */
 		int keycode;
 
 		draw_display=1;
-#ifndef BASIC
-/*
-   colour_lookup[8] = colour_translation_table[COLBK];
- */
 
 		keycode = Atari_Keyboard();
 

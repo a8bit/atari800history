@@ -1,3 +1,107 @@
+Changes in 0.9.9j (pre-1.0)
+-----------------
+
+o Amiga port is compilable (Pen, Sound Start/Stop) <Sebastian>
+
+o Unix port is compilable (Pen, Sound Start/Stop) <cpg>
+
+o Atari Falcon port is not compilable yet! I left the patches at home :-(
+  <my fault>
+
+o Makefile.unix: call sub-makes with "$(MAKE)" instead of "make". Helps on
+  machines where GNU make is not named "make" <cpg>
+
+o atari.h: set ULONG and SLONG to be unsigned int on Alpha machines,
+  as longs there are 8 bytes (64bit). See also TODO file. <cpg>
+
+o pokeysnd.c: fixed unaligned accesses. Tested on Alpha (= little endian) <cpg>
+
+o UI: the order of options changed. <Raster>
+
+o UI: driven by hotkeys diirectly from emulation <Raster>
+  Currently DOS and Linux SVGALIB versions only:
+  * Hot keys (with left ALT):
+  ALT+D	Disk management
+  ALT+C	Cartridge management
+  ALT+R	Run BIN file
+  ALT+Y	Select system
+  ALT+O	Sound Mono/Stereo
+  ALT+S	Save state
+  ALT+L	Load state
+  ALT+A	About
+  (by pressing ESC you go back to emulation)
+
+  Other platforms: set alt_function (defined in ui.c) to MENU_xxx (see
+  atari.h) and call the UI.
+  Example for Disk Management:
+    alt_function = MENU_DISK;
+    keycode = AKEY_UI;
+
+And the usual huge list of changes from Piotr follows
+-----------------------------------------------------
+o DD XFD images fixed - now both 128- and 256-byte boot sectors supported
+
+o cpu.c can be now compiled for using switch() - cpu_nogoto.c is no longer
+  necessary (PetR: use -DNO_GOTO when compiling)
+
+o many 6502's unofficial opcodes fixed
+
+o 'DMACLT' typo in symtable fixed
+
+ANTIC/GTIA fixes:
+
+o collisions in hi-res fixed - now Chicken and Super Bunny work
+
+o horizontal scroll in modes 8 and 9 fixed
+
+o PM5 in GTIA 11 fixed
+
+o mode 2 / GTIA 11 fixed
+
+o mode 2 / GTIA 10 implemented
+
+o PMG flickering made more accurate
+
+o some optimizations in ANTIC - mostly for hi-res modes (drawn with words)
+  and for blank lines (drawn with memset, if possible)
+
+o simplified Save/Load State in ANTIC and GTIA (Petr: ==> state files are no
+  longer compatible with previous versions (actually the compatibility's been
+  broken a few versions ago already))
+
+o artifacting works now on long aligning and big endian machines
+  (Petr: seems like big endian machines have to define -DANTIC_BIG_ENDIAN for
+   proper compiling).
+
+o DMA for DL fixed
+
+o color table fix:
+- now table is defined as global and compiled to separate object, so it exists
+  once in executable (previously was static - included by both
+  platform-specific stuff and ataripcx)
+- '-palette filename' command line option allows loading external palette file.
+  Palette should be in '.act' file format, which is supported by Photoshop.
+  Format is very simple - 256 times (R,G,B), single byte per component.
+  I've implemented this option because I think color table should be fixed.
+  At the moment luminaces 14 and 15 are identical and other luminaces
+  aren't also linear. I include a palette created by me - fox.act. It has
+  linear luminaces, however it is ugly compared to current Atari800 palette
+  - default.act. It would be great if someone could create realistic palette,
+  best by grabbing graphics from real machine with a video card.
+
+o fixes for BASIC version
+
+o mode f / GTIA 11 colours fixed
+
+o delayed GTIA 11 - colours are propagated to next line. Now
+  graphics using dark GTIA 11 lines for colouring gray images is really
+  colourful, like on real Atari
+
+o emulation of a GTIA bug. While turning off GTIA mode while displaying
+  hi-res mode, GTIA doesn't back to hi-res, but starts generating 4-colour
+  graphics. This fixes title screen in 'Studio Dream' demo.
+
+
 Changes in 0.9.9i (pre-1.0)
 -----------------
 

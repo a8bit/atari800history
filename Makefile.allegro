@@ -92,7 +92,9 @@ OBJECTS =       atari.o \
 		compfile.o \
 		memory.o  \
 		pbi.o \
-		statesav.o
+		statesav.o \
+		diskled.o \
+		colours.o
 
 atari800.exe        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800.exe

@@ -12,6 +12,7 @@
 #define SIGNED_SAMPLES
 /*#define STEREO*/
 /*#define VERY_SLOW*/
+#define SET_LED
 
 #define USE_NEW_BINLOAD
 

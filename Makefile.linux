@@ -44,7 +44,8 @@ OBJECTS	=	atari.o \
 		memory.o \
 		pbi.o \
 		statesav.o \
-		diskled.o
+		diskled.o \
+		colours.o
 
 all :
 	@echo "To build the Atari 800 Emulator, type:"

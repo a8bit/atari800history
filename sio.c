@@ -45,14 +45,12 @@ extern int DELAYED_SEROUT_IRQ;
 void CopyFromMem(int to, UBYTE *, int size);
 void CopyToMem(UBYTE *, ATPtr from, int size);
 
-/*
- * it seems, there are two different ATR formats with different handling for
- * DD sectors
- */
-static int atr_format[MAX_DRIVES];
+/* Both ATR and XFD images can have 128- and 256-byte boot sectors */
+static int boot_sectorsize[MAX_DRIVES];
 
+/* Format is also size of header :-) */
 typedef enum Format {
-	XFD, ATR
+	XFD = 0, ATR = 16
 } Format;
 
 static Format format[MAX_DRIVES];
@@ -186,47 +184,49 @@ int SIO_Mount(int diskno, char *filename)
 
 		strcpy(sio_filename[diskno - 1], filename);
 
+		boot_sectorsize[diskno - 1] = 128;
+
 		if ((header.magic1 == MAGIC1) && (header.magic2 == MAGIC2)) {
 			format[diskno - 1] = ATR;
 
 			if (header.writeprotect)
 				drive_status[diskno - 1] = ReadOnly;
 
-			sectorcount[diskno - 1] = header.hiseccounthi << 24 |
-				header.hiseccountlo << 16 |
-				header.seccounthi << 8 |
-				header.seccountlo;
-
 			sectorsize[diskno - 1] = header.secsizehi << 8 |
 				header.secsizelo;
 
-			sectorcount[diskno - 1] /= 8;
+			/* ATR header contains length in 16-byte chunks */
+			/* First compute number of 128-byte chunks */
+			sectorcount[diskno - 1] = (header.hiseccounthi << 24 |
+				header.hiseccountlo << 16 |
+				header.seccounthi << 8 |
+				header.seccountlo) >> 3;
+
+			/* Fix if double density */
 			if (sectorsize[diskno - 1] == 256) {
-				sectorcount[diskno - 1] += 3;	/* Compensate for first 3 sectors */
-				sectorcount[diskno - 1] /= 2;
-			}
-
-			/* ok, try to check if it's a SIO2PC ATR */
-			{
-				ULONG len = (sectorcount[diskno - 1] - 3) * sectorsize[diskno - 1] + 16 + 3*128;
-				if (file_length == len)
-					atr_format[diskno - 1] = SIO2PC_ATR;
+				if (sectorcount[diskno - 1] & 1)
+					sectorcount[diskno - 1] += 3;		/* 128-byte boot sectors */
 				else
-					atr_format[diskno - 1] = OTHER_ATR;
+					boot_sectorsize[diskno - 1] = 256;	/* 256-byte boot sectors */
+				sectorcount[diskno - 1] >>= 1;
 			}
-
 #ifdef DEBUG
 			Aprint("ATR: sectorcount = %d, sectorsize = %d",
 				   sectorcount[diskno - 1],
 				   sectorsize[diskno - 1]);
-			Aprint("%s ATR\n", atr_format[diskno - 1] == SIO2PC_ATR ? "SIO2PC" : "???");
 #endif
 		}
 		else {
 			format[diskno - 1] = XFD;
-			/* XFD might be of double density ! (PS) */
-			sectorsize[diskno - 1] = (file_length > (1040 * 128)) ? 256 : 128;
-			sectorcount[diskno - 1] = file_length / sectorsize[diskno - 1];
+
+			if (file_length <= (1040 * 128))
+				sectorsize[diskno - 1] = 128;	/* single density */
+			else {
+				sectorsize[diskno - 1] = 256;	/* double density */
+				if ((file_length & 0xff) == 0)
+					boot_sectorsize[diskno - 1] = 256;
+			}
+			sectorcount[diskno - 1] = 3 + (file_length - 3 * boot_sectorsize[diskno - 1]) / sectorsize[diskno - 1];
 		}
 	}
 	else {
@@ -268,8 +268,8 @@ int BIN_loade_start( UBYTE *buffer );
 
 void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 {
-	int size = sectorsize[unit];
-	ULONG offset = 0;
+	int size;
+	ULONG offset;
 
 #ifdef USE_NEW_BINLOAD
 	if( start_binloading )
@@ -279,23 +279,14 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 	}
 #endif /* USE_NEW_BINLOAD */
 
-	switch (format[unit]) {
-	case XFD:
-		offset = (sector - 1) * size;
-		break;
-	case ATR:
-		if (sector < 4)
-			/* special case for first three sectors in ATR image */
-			size = 128;
-		if (atr_format[unit] == SIO2PC_ATR && sector >= 4)
-			offset = (sector - 4) * size + 16 + 3*128;
-		else
-			offset = (sector - 1) * size + 16;
-		break;
-	default:
-		Aprint("Fatal Error in atari_sio.c");
-		Atari800_Exit(FALSE);
-		return;
+	if (sector < 4) {
+		/* special case for first three sectors in ATR and XFD image */
+		size = 128;
+		offset = format[unit] + (sector - 1) * boot_sectorsize[unit];
+	}
+	else {
+		size = sectorsize[unit];
+		offset = format[unit] + 3 * boot_sectorsize[unit] + (sector - 4) * size;
 	}
 
 	if (sz)

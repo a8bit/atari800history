@@ -603,3 +603,8 @@ int Atari_CONSOL(void)
 {
 	return consol;
 }
+
+int Atari_PEN(int vertical)
+{
+	return 0;
+}

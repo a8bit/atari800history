@@ -91,18 +91,10 @@ extern UBYTE COLPF2;
 extern UBYTE COLPF3;
 extern UBYTE COLBK;
 extern UBYTE GRACTL;
-extern UBYTE M0PF;
-extern UBYTE M1PF;
-extern UBYTE M2PF;
-extern UBYTE M3PF;
 extern UBYTE M0PL;
 extern UBYTE M1PL;
 extern UBYTE M2PL;
 extern UBYTE M3PL;
-extern UBYTE P0PF;
-extern UBYTE P1PF;
-extern UBYTE P2PF;
-extern UBYTE P3PF;
 extern UBYTE P0PL;
 extern UBYTE P1PL;
 extern UBYTE P2PL;
@@ -110,7 +102,6 @@ extern UBYTE P3PL;
 extern UBYTE PRIOR;
 extern UBYTE VDELAY;
 
-extern UBYTE colour_lookup[9];
 extern int colour_translation_table[256];
 extern int next_console_value;
 

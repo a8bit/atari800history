@@ -20,13 +20,21 @@
 #else
 #define	SBYTE signed char
 #define	SWORD signed short int
+#ifndef __alpha__
 #define	SLONG signed long int
+#else
+#define	SLONG signed int
+#endif
 #endif
 
 #define	UBYTE unsigned char
 #define	UWORD unsigned short int
 #ifndef WIN32
+#ifndef __alpha__
 #define	ULONG unsigned long int
+#else
+#define	ULONG unsigned int
+#endif
 #endif
 
 #ifndef O_BINARY				/* flag for binary files on MS-DOS */
@@ -49,13 +57,17 @@ extern Machine machine;
 extern int verbose;
 extern int draw_display;		/* Draw actualy generated screen */
 
+#ifndef FALSE
 #define FALSE	0
+#endif
+#ifndef TRUE
 #define TRUE	1
+#endif
 
 #define ATARI_WIDTH  384
 #define ATARI_HEIGHT 240
 
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9i"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9j"
 
 extern int xpos;
 extern int xpos_limit;
@@ -373,6 +385,28 @@ struct ATR_Header {
 
 /* Following keys cannot be read with both shift and control pressed:
    J K L ; + * Z X C V B F1 F2 F3 F4 HELP	 */
+
+
+/*
+   ==============
+   menu functions
+   ==============
+ */
+
+#define MENU_DISK		0
+#define MENU_CARTRIDGE	1		
+#define MENU_RUN		2
+#define MENU_SYSTEM		3
+#define MENU_SOUND		4
+#define MENU_SAVESTATE	5
+#define MENU_LOADSTATE	6
+#define MENU_BACK		7
+#define MENU_RESETW		8
+#define MENU_RESETC		9
+#define MENU_ABOUT		10
+#define MENU_EXIT		11
+
+
 
 void EnablePILL(void);
 int Insert_8K_ROM(char *filename);

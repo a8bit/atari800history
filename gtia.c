@@ -1,53 +1,33 @@
-/*
- * Scanline Generation
- * Player Missile Graphics
- * Collision Detection
- * Playfield Priorities
- * Issues cpu cycles during frame redraw.
- */
+/* GTIA emulation --------------------------------- */
+/* Original Author:                                 */
+/*              David Firth                         */
+/* Clean ups and optimizations:                     */
+/*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
+/* Last changes: 26th April 2000                    */
+/* ------------------------------------------------ */
 
-#include <stdio.h>
 #include <string.h>
 
-#ifdef WIN32
-#include "windows.h"
-#else
-#include "config.h"
-#endif
-
-#include "atari.h"
-#include "cpu.h"
-#include "pia.h"
-#include "pokey.h"
-#include "gtia.h"
 #include "antic.h"
+#include "config.h"
+#include "gtia.h"
 #include "platform.h"
-#include "sio.h"
 #include "statesav.h"
 
 #ifndef NO_CONSOL_SOUND
-void Update_consol_sound( int set );
-#endif /* NO_CONSOL_SOUND */
+void Update_consol_sound(int set);
+#endif
 
-int atari_speaker;
-int consol_mask;
-extern int rom_inserted;
-extern int mach_xlxe;
+/* GTIA Registers ---------------------------------------------------------- */
 
-UBYTE COLBK;
-UBYTE COLPF0;
-UBYTE COLPF1;
-UBYTE COLPF2;
-UBYTE COLPF3;
-UBYTE COLPM0;
-UBYTE COLPM1;
-UBYTE COLPM2;
-UBYTE COLPM3;
-UBYTE GRAFM;
-UBYTE GRAFP0;
-UBYTE GRAFP1;
-UBYTE GRAFP2;
-UBYTE GRAFP3;
+UBYTE M0PL;
+UBYTE M1PL;
+UBYTE M2PL;
+UBYTE M3PL;
+UBYTE P0PL;
+UBYTE P1PL;
+UBYTE P2PL;
+UBYTE P3PL;
 UBYTE HPOSP0;
 UBYTE HPOSP1;
 UBYTE HPOSP2;
@@ -61,25 +41,34 @@ UBYTE SIZEP1;
 UBYTE SIZEP2;
 UBYTE SIZEP3;
 UBYTE SIZEM;
-UBYTE M0PF;
-UBYTE M1PF;
-UBYTE M2PF;
-UBYTE M3PF;
-UBYTE M0PL;
-UBYTE M1PL;
-UBYTE M2PL;
-UBYTE M3PL;
-UBYTE P0PF;
-UBYTE P1PF;
-UBYTE P2PF;
-UBYTE P3PF;
-UBYTE P0PL;
-UBYTE P1PL;
-UBYTE P2PL;
-UBYTE P3PL;
+UBYTE GRAFP0;
+UBYTE GRAFP1;
+UBYTE GRAFP2;
+UBYTE GRAFP3;
+UBYTE GRAFM;
+UBYTE COLPM0;
+UBYTE COLPM1;
+UBYTE COLPM2;
+UBYTE COLPM3;
+UBYTE COLPF0;
+UBYTE COLPF1;
+UBYTE COLPF2;
+UBYTE COLPF3;
+UBYTE COLBK;
 UBYTE PRIOR;
 UBYTE VDELAY;
 UBYTE GRACTL;
+
+/* Internal GTIA state ----------------------------------------------------- */
+
+int atari_speaker;
+int next_console_value = 7;			/* for 'hold OPTION during reboot' */
+UBYTE consol_mask;
+extern int rom_inserted;
+extern int mach_xlxe;
+void set_prior(UBYTE byte);			/* in antic.c */
+
+/* Player/Missile stuff ---------------------------------------------------- */
 
 extern UBYTE player_dma_enabled;
 extern UBYTE missile_dma_enabled;
@@ -87,17 +76,6 @@ extern UBYTE player_gra_enabled;
 extern UBYTE missile_gra_enabled;
 extern UBYTE player_flickering;
 extern UBYTE missile_flickering;
-
-/*
-   *****************************************************************
-   *                                *
-   *    Section         :   Player Missile Graphics *
-   *    Original Author     :   David Firth     *
-   *    Date Written        :   28th May 1995       *
-   *    Version         :   1.0         *
-   *                                *
-   *****************************************************************
- */
 
 static int global_hposp0;
 static int global_hposp1;
@@ -107,26 +85,38 @@ static int global_hposm0;
 static int global_hposm1;
 static int global_hposm2;
 static int global_hposm3;
+
 static int global_sizep0 = 2;
 static int global_sizep1 = 2;
 static int global_sizep2 = 2;
 static int global_sizep3 = 2;
-static int global_sizem[] =
+static int global_sizem[4] =
 {2, 2, 2, 2};
 
+static UBYTE PM_Width[4] =
+{1, 2, 1, 4};
 
-/*
-   =========================================
-   Width of each bit within a Player/Missile
-   =========================================
- */
+/* Meaning of bits in pm_scanline and pf_colls:
+bit 0 - Player 0
+bit 1 - Player 1
+bit 2 - Player 2
+bit 3 - Player 3
+bit 4 - Missile 0
+bit 5 - Missile 1
+bit 6 - Missile 2
+bit 7 - Missile 3
+*/
 
-UBYTE pm_scanline[ATARI_WIDTH];
+UBYTE pm_scanline[ATARI_WIDTH / 2];	/* there's a byte for every *pair* of pixels */
+UBYTE pm_dirty = TRUE;
 
-UBYTE colour_lookup[9];
-UBYTE pf_colls[9];
+UBYTE pf_colls[9];					/* collisions with playfield */
+
+/* Colours ----------------------------------------------------------------- */
+
 int colour_translation_table[256];
-#define R_BLACK 23
+
+/* Indexes in cl_word - 0..8 are COLPM0..COLBK */
 #define R_COLPM0OR1 9
 #define R_COLPM2OR3 10
 #define R_COLPM0_OR_PF0 11
@@ -142,70 +132,63 @@ int colour_translation_table[256];
 #define R_COLPM3_OR_PF3 21
 #define R_COLPM2OR3_OR_PF3 22
 #define R_BLACK 23
+
+extern UWORD hires_lookup_l[128];
+extern ULONG lookup_gtia9[16];
+extern ULONG lookup_gtia11[16];
 extern UWORD cl_word[24];
-#define L_PM0 (0*5-4)
-#define L_PM1 (1*5-4)
-#define L_PM01 (2*5-4)
-#define L_PM2 (3*5-4)
-#define L_PM3 (4*5-4)
-#define L_PM23 (5*5-4)
-/*6-11 are 0-5 +6 to mean 5th player as well*/
-#define L_PMNONE (12*5-4)
-#define L_PM5PONLY (13*5-4) /*these should be the last two*/
-#define NUM_PLAYER_TYPES 14
-extern UBYTE prior_table[5*NUM_PLAYER_TYPES * 16];
-extern UBYTE cur_prior[5*NUM_PLAYER_TYPES];
-extern signed char *new_pm_lookup;
-extern signed char pm_lookup_normal[256];
-extern signed char pm_lookup_multi[256];
-extern signed char pm_lookup_5p[256];
-extern signed char pm_lookup_multi_5p[256];
 
-int next_console_value = 7;
+void setup_gtia9_11(void) {
+	int i;
+	ULONG count9 = 0;
+	ULONG count11 = 0;
+	lookup_gtia11[0] = lookup_gtia9[0] & 0xf0f0f0f0;
+	for (i = 1; i < 16; i++) {
+		lookup_gtia9[i] = lookup_gtia9[0] | (count9 += 0x01010101);
+		lookup_gtia11[i] = lookup_gtia9[0] | (count11 += 0x10101010);
+	}
+}
 
-static UBYTE PM_Width[4] =
-{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; */ /* 1/2 size pm scanline */
+/* Initialization ---------------------------------------------------------- */
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
-	int i;
-
-	for (i = 0; i < 9; i++)
-		colour_lookup[i] = 0x00;
-
 	PRIOR = 0x00;
+	memset(cl_word, 0, sizeof(cl_word));
+	lookup_gtia9[0] = 0;
+	setup_gtia9_11();
 }
+
+/* Prepare PMG scanline ---------------------------------------------------- */
 
 void new_pm_scanline(void)
 {
-	static int dirty = TRUE;
-	if (dirty) {
+/* Clear if necessary */
+	if (pm_dirty) {
 		memset(pm_scanline, 0, ATARI_WIDTH / 2);
-		dirty = FALSE;
+		pm_dirty = FALSE;
 	}
 
-/*
-   =============================
-   Display graphics for Players
-   =============================
- */
+/* Draw Players */
 
-#define DO_PLAYER(n)	if (GRAFP##n) {	\
-	UBYTE grafp = GRAFP##n;				\
-	int sizep = global_sizep##n;		\
-	unsigned hposp = global_hposp##n;	\
-	dirty = TRUE;						\
-	do {								\
-		if (grafp & 0x80) {				\
-			int j;						\
-			for (j = 0; j < sizep; j++, hposp++)	\
-				if ( hposp < ATARI_WIDTH / 2 )	\
+#define DO_PLAYER(n)	if (GRAFP##n) {				\
+	UBYTE grafp = GRAFP##n;							\
+	int sizep = global_sizep##n;					\
+	unsigned hposp = global_hposp##n;				\
+	pm_dirty = TRUE;								\
+	do {											\
+		if (grafp & 0x80) {							\
+			int j = sizep;							\
+			do {									\
+				if (hposp < ATARI_WIDTH / 2)		\
 					P##n##PL |= pm_scanline[hposp] |= 1 << n;	\
-		}								\
-		else							\
-			hposp += sizep;				\
-		grafp <<= 1;					\
-	} while (grafp);					\
+				hposp++;							\
+			} while (--j);							\
+		}											\
+		else										\
+			hposp += sizep;							\
+		grafp <<= 1;								\
+	} while (grafp);								\
 }
 
 	DO_PLAYER(0)
@@ -213,11 +196,7 @@ void new_pm_scanline(void)
 	DO_PLAYER(2)
 	DO_PLAYER(3)
 
-/*
-   =============================
-   Display graphics for Missiles
-   =============================
- */
+/* Draw Missiles */
 
 #define DO_MISSILE(n,p,m,r,l)	if (GRAFM & m) {	\
 	if (GRAFM & r) {								\
@@ -243,7 +222,7 @@ void new_pm_scanline(void)
 }
 
 	if (GRAFM) {
-		dirty = TRUE;
+		pm_dirty = TRUE;
 		DO_MISSILE(3,0x80,0xc0,0x80,0x40)
 		DO_MISSILE(2,0x40,0x30,0x20,0x10)
 		DO_MISSILE(1,0x20,0x0c,0x08,0x04)
@@ -251,24 +230,13 @@ void new_pm_scanline(void)
 	}
 }
 
+/* GTIA registers ---------------------------------------------------------- */
 
 UBYTE GTIA_GetByte(UWORD addr)
 {
 	UBYTE byte = 0x0f;	/* write-only registers return 0x0f */
 
-	addr &= 0x1f;
-	switch (addr) {
-	case _CONSOL:
-		if (next_console_value != 7) {
-			byte = (next_console_value|0x08)&consol_mask;
-			next_console_value = 0x07;
-		}
-		else {
-                        /* 0x08 is because 'speaker is always 'on' '
-                           consol_mask is set by CONSOL (write) !PM! */
-			byte = (Atari_CONSOL()|0x08)&consol_mask;
-		}
-		break;
+	switch (addr & 0x1f) {
 	case _M0PF:
 		byte = (pf_colls[4] & 0x10) >> 4;
 		byte |= (pf_colls[5] & 0x10) >> 3;
@@ -292,19 +260,6 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte |= (pf_colls[5] & 0x80) >> 6;
 		byte |= (pf_colls[6] & 0x80) >> 5;
 		byte |= (pf_colls[7] & 0x80) >> 4;
-		break;
-	case _M0PL:
-		byte = M0PL & 0x0f;		/* AAA fix for galaxian. easier to do it here. */
-
-		break;
-	case _M1PL:
-		byte = M1PL & 0x0f;
-		break;
-	case _M2PL:
-		byte = M2PL & 0x0f;
-		break;
-	case _M3PL:
-		byte = M3PL & 0x0f;
 		break;
 	case _P0PF:
 		byte = (pf_colls[4] & 0x01);
@@ -330,28 +285,34 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte |= (pf_colls[6] & 0x08) >> 1;
 		byte |= (pf_colls[7] & 0x08);
 		break;
+	case _M0PL:
+		byte = M0PL & 0x0f;		/* AAA fix for galaxian. easier to do it here. */
+		break;
+	case _M1PL:
+		byte = M1PL & 0x0f;
+		break;
+	case _M2PL:
+		byte = M2PL & 0x0f;
+		break;
+	case _M3PL:
+		byte = M3PL & 0x0f;
+		break;
 	case _P0PL:
 		byte = (P1PL & 0x01) << 1;	/* mask in player 1 */
-		byte |= (P2PL & 0x01) << 2;		/* mask in player 2 */
-		byte |= (P3PL & 0x01) << 3;		/* mask in player 3 */
+		byte |= (P2PL & 0x01) << 2;	/* mask in player 2 */
+		byte |= (P3PL & 0x01) << 3;	/* mask in player 3 */
 		break;
 	case _P1PL:
-		byte = (P1PL & 0x01);	/* mask in player 0 */
-		byte |= (P2PL & 0x02) << 1;		/* mask in player 2 */
-		byte |= (P3PL & 0x02) << 2;		/* mask in player 3 */
+		byte = (P1PL & 0x01);		/* mask in player 0 */
+		byte |= (P2PL & 0x02) << 1;	/* mask in player 2 */
+		byte |= (P3PL & 0x02) << 2;	/* mask in player 3 */
 		break;
 	case _P2PL:
-		byte = (P2PL & 0x03);	/*mask in player 0 and 1 */
-		byte |= (P3PL & 0x04) << 1;		/*mask in player 3 */
+		byte = (P2PL & 0x03);		/* mask in player 0 and 1 */
+		byte |= (P3PL & 0x04) << 1;	/* mask in player 3 */
 		break;
 	case _P3PL:
-		byte = P3PL & 0x07;		/* mask in player 0,1, and 2 */
-		break;
-	case _PAL:
-		if (tv_mode == TV_PAL)
-			byte = 0x01;
-		else
-			byte = 0x0f;
+		byte = P3PL & 0x07;			/* mask in player 0,1, and 2 */
 		break;
 	case _TRIG0:
 		byte = Atari_TRIG(0);
@@ -372,6 +333,24 @@ UBYTE GTIA_GetByte(UWORD addr)
 			/* extremely important patch - thanks to this hundred of games start running (BruceLee) */
 			byte = rom_inserted;
 		break;
+	case _PAL:
+		if (tv_mode == TV_PAL)
+			byte = 0x01;
+		/* 0x0f is default */
+		/* else
+			byte = 0x0f; */
+		break;
+	case _CONSOL:
+		if (next_console_value != 7) {
+			byte = (next_console_value | 0x08) & consol_mask;
+			next_console_value = 0x07;
+		}
+		else {
+			/* 0x08 is because 'speaker is always 'on' '
+			consol_mask is set by CONSOL (write) !PM! */
+			byte = (Atari_CONSOL() | 0x08) & consol_mask;
+		}
+		break;
 	}
 
 	return byte;
@@ -380,22 +359,26 @@ UBYTE GTIA_GetByte(UWORD addr)
 void GTIA_PutByte(UWORD addr, UBYTE byte)
 {
 	UWORD cword;
-	addr &= 0x1f;
-	switch (addr) {
+	switch (addr & 0x1f) {
 	case _COLBK:
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLBK = byte;
-		cword = colour_lookup[8] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[8] = cword;
+		if (cword != (UWORD) (lookup_gtia9[0]) ) {
+			lookup_gtia9[0] = cword | (cword << 16);
+			if (PRIOR & 0x40)
+				setup_gtia9_11();
+		}
 		break;
 	case _COLPF0:
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF0 = byte;
-		cword = colour_lookup[4] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[4] = cword;
 		cl_word[R_COLPM0_OR_PF0] = cl_word[0] | cword;
 		cl_word[R_COLPM1_OR_PF0] = cl_word[1] | cword;
@@ -405,19 +388,21 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF1 = byte;
-		cword = colour_lookup[5] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[5] = cword;
 		cl_word[R_COLPM0_OR_PF1] = cl_word[0] | cword;
 		cl_word[R_COLPM1_OR_PF1] = cl_word[1] | cword;
 		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cword;
+		((UBYTE *)hires_lookup_l)[0x80] = ((UBYTE *)hires_lookup_l)[0x41] = byte & 0x0f;
+		hires_lookup_l[0x60] = cword & 0xf0f;
 		break;
 	case _COLPF2:
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF2 = byte;
-		cword = colour_lookup[6] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[6] = cword;
 		cl_word[R_COLPM2_OR_PF2] = cl_word[0] | cword;
 		cl_word[R_COLPM3_OR_PF2] = cl_word[1] | cword;
@@ -427,8 +412,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPF3 = byte;
-		cword = colour_lookup[7] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[7] = cword;
 		cl_word[R_COLPM2_OR_PF3] = cl_word[0] | cword;
 		cl_word[R_COLPM3_OR_PF3] = cl_word[1] | cword;
@@ -438,8 +423,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM0 = byte;
-		cword = colour_lookup[0] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[0] = cword;
 		cl_word[R_COLPM0OR1] = cl_word[1] | cword;
 		cl_word[R_COLPM0_OR_PF0] = cl_word[4] | cword;
@@ -451,8 +436,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM1 = byte;
-		cword = colour_lookup[1] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[1] = cword;
 		cl_word[R_COLPM0OR1] = cl_word[0] | cword;
 		cl_word[R_COLPM1_OR_PF0] = cl_word[4] | cword;
@@ -464,8 +449,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM2 = byte;
-		cword = colour_lookup[2] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[2] = cword;
 		cl_word[R_COLPM2OR3] = cl_word[3] | cword;
 		cl_word[R_COLPM2_OR_PF2] = cl_word[6] | cword;
@@ -477,8 +462,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
 
 		COLPM3 = byte;
-		cword = colour_lookup[3] = colour_translation_table[byte];
-		cword = cword | (cword << 8);
+		cword = colour_translation_table[byte];
+		cword |= cword << 8;
 		cl_word[3] = cword;
 		cl_word[R_COLPM2OR3] = cl_word[2] | cword;
 		cl_word[R_COLPM3_OR_PF2] = cl_word[6] | cword;
@@ -490,8 +475,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		atari_speaker = !(byte & 0x08);
 #ifndef NO_CONSOL_SOUND
 		Update_consol_sound(1);
-#endif /* NO_CONSOL_SOUND */
-		consol_mask = (~byte)&0x0f;
+#endif
+		consol_mask = (~byte) & 0x0f;
 		break;
 	case _GRAFM:
 		GRAFM = byte;
@@ -509,8 +494,6 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		GRAFP3 = byte;
 		break;
 	case _HITCLR:
-		M0PF = M1PF = M2PF = M3PF = 0;
-		P0PF = P1PF = P2PF = P3PF = 0;
 		M0PL = M1PL = M2PL = M3PL = 0;
 		P0PL = P1PL = P2PL = P3PL = 0;
 		pf_colls[4] = pf_colls[5] = pf_colls[6] = pf_colls[7] = 0;
@@ -550,9 +533,9 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 	case _SIZEM:
 		SIZEM = byte;
 		global_sizem[0] = PM_Width[byte & 0x03];
-		global_sizem[1] = PM_Width[(byte & 0x0C) >> 2];
+		global_sizem[1] = PM_Width[(byte & 0x0c) >> 2];
 		global_sizem[2] = PM_Width[(byte & 0x30) >> 4];
-		global_sizem[3] = PM_Width[(byte & 0xC0) >> 6];
+		global_sizem[3] = PM_Width[(byte & 0xc0) >> 6];
 		break;
 	case _SIZEP0:
 		SIZEP0 = byte;
@@ -571,23 +554,10 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 		global_sizep3 = PM_Width[byte & 0x03];
 		break;
 	case _PRIOR:
-		switch (byte & 0x30) {
-		case 0x00:
-	       	        new_pm_lookup=pm_lookup_normal;
-			break;
-		case 0x10:
-       	        	new_pm_lookup=pm_lookup_5p;
-			break;
-		case 0x20:
-        	        new_pm_lookup=pm_lookup_multi;
-			break;
-		case 0x30:
-        	        new_pm_lookup=pm_lookup_multi_5p;
-			break;
-		}
-		if ((byte ^ PRIOR) & 0x0f)
-			memcpy(&cur_prior, &prior_table[( (byte&0x0f)*(NUM_PLAYER_TYPES*5) )], NUM_PLAYER_TYPES*5);
+		set_prior(byte);
 		PRIOR = byte;
+		if (PRIOR & 0x40)
+			setup_gtia9_11();
 		break;
 	case _VDELAY:
 		VDELAY = byte;
@@ -602,22 +572,10 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 	}
 }
 
+/* State ------------------------------------------------------------------- */
+
 void GTIAStateSave( void )
 {
-	SaveUBYTE( &COLBK, 1 );
-	SaveUBYTE( &COLPF0, 1 );
-	SaveUBYTE( &COLPF1, 1 );
-	SaveUBYTE( &COLPF2, 1 );
-	SaveUBYTE( &COLPF3, 1 );
-	SaveUBYTE( &COLPM0, 1 );
-	SaveUBYTE( &COLPM1, 1 );
-	SaveUBYTE( &COLPM2, 1 );
-	SaveUBYTE( &COLPM3, 1 );
-	SaveUBYTE( &GRAFM, 1 );
-	SaveUBYTE( &GRAFP0, 1 );
-	SaveUBYTE( &GRAFP1, 1 );
-	SaveUBYTE( &GRAFP2, 1 );
-	SaveUBYTE( &GRAFP3, 1 );
 	SaveUBYTE( &HPOSP0, 1 );
 	SaveUBYTE( &HPOSP1, 1 );
 	SaveUBYTE( &HPOSP2, 1 );
@@ -626,63 +584,46 @@ void GTIAStateSave( void )
 	SaveUBYTE( &HPOSM1, 1 );
 	SaveUBYTE( &HPOSM2, 1 );
 	SaveUBYTE( &HPOSM3, 1 );
+	SaveUBYTE( &M0PL, 1 );
+	SaveUBYTE( &M1PL, 1 );
+	SaveUBYTE( &M2PL, 1 );
+	SaveUBYTE( &M3PL, 1 );
+	SaveUBYTE( &P0PL, 1 );
+	SaveUBYTE( &P1PL, 1 );
+	SaveUBYTE( &P2PL, 1 );
+	SaveUBYTE( &P3PL, 1 );
 	SaveUBYTE( &SIZEP0, 1 );
 	SaveUBYTE( &SIZEP1, 1 );
 	SaveUBYTE( &SIZEP2, 1 );
 	SaveUBYTE( &SIZEP3, 1 );
 	SaveUBYTE( &SIZEM, 1 );
-	SaveUBYTE( &M0PF, 1 );
-	SaveUBYTE( &M1PF, 1 );
-	SaveUBYTE( &M2PF, 1 );
-	SaveUBYTE( &M3PF, 1 );
-	SaveUBYTE( &M0PL, 1 );
-	SaveUBYTE( &M1PL, 1 );
-	SaveUBYTE( &M2PL, 1 );
-	SaveUBYTE( &M3PL, 1 );
-	SaveUBYTE( &P0PF, 1 );
-	SaveUBYTE( &P1PF, 1 );
-	SaveUBYTE( &P2PF, 1 );
-	SaveUBYTE( &P3PF, 1 );
-	SaveUBYTE( &P0PL, 1 );
-	SaveUBYTE( &P1PL, 1 );
-	SaveUBYTE( &P2PL, 1 );
-	SaveUBYTE( &P3PL, 1 );
+	SaveUBYTE( &GRAFP0, 1 );
+	SaveUBYTE( &GRAFP1, 1 );
+	SaveUBYTE( &GRAFP2, 1 );
+	SaveUBYTE( &GRAFP3, 1 );
+	SaveUBYTE( &GRAFM, 1 );
+	SaveUBYTE( &COLPM0, 1 );
+	SaveUBYTE( &COLPM1, 1 );
+	SaveUBYTE( &COLPM2, 1 );
+	SaveUBYTE( &COLPM3, 1 );
+	SaveUBYTE( &COLPF0, 1 );
+	SaveUBYTE( &COLPF1, 1 );
+	SaveUBYTE( &COLPF2, 1 );
+	SaveUBYTE( &COLPF3, 1 );
+	SaveUBYTE( &COLBK, 1 );
 	SaveUBYTE( &PRIOR, 1 );
 	SaveUBYTE( &VDELAY, 1 );
 	SaveUBYTE( &GRACTL, 1 );
 
-	SaveINT( &global_hposp0, 1 );
-	SaveINT( &global_hposp1, 1 );
-	SaveINT( &global_hposp2, 1 );
-	SaveINT( &global_hposp3, 1 );
-	SaveINT( &global_hposm0, 1 );
-	SaveINT( &global_hposm1, 1 );
-	SaveINT( &global_hposm2, 1 );
-	SaveINT( &global_hposm3, 1 );
-	SaveINT( &global_sizep0, 1 );
-	SaveINT( &global_sizep1, 1 );
-	SaveINT( &global_sizep2, 1 );
-	SaveINT( &global_sizep3, 1 );
-	SaveINT( &global_sizem[0], 4 );
+	SaveUBYTE( &consol_mask, 1 );
+	SaveUBYTE( &pf_colls[0], 9 );
+
+	SaveINT( &atari_speaker, 1 );
 	SaveINT( &next_console_value, 1 );
 }
 
 void GTIAStateRead( void )
 {
-	ReadUBYTE( &COLBK, 1 );
-	ReadUBYTE( &COLPF0, 1 );
-	ReadUBYTE( &COLPF1, 1 );
-	ReadUBYTE( &COLPF2, 1 );
-	ReadUBYTE( &COLPF3, 1 );
-	ReadUBYTE( &COLPM0, 1 );
-	ReadUBYTE( &COLPM1, 1 );
-	ReadUBYTE( &COLPM2, 1 );
-	ReadUBYTE( &COLPM3, 1 );
-	ReadUBYTE( &GRAFM, 1 );
-	ReadUBYTE( &GRAFP0, 1 );
-	ReadUBYTE( &GRAFP1, 1 );
-	ReadUBYTE( &GRAFP2, 1 );
-	ReadUBYTE( &GRAFP3, 1 );
 	ReadUBYTE( &HPOSP0, 1 );
 	ReadUBYTE( &HPOSP1, 1 );
 	ReadUBYTE( &HPOSP2, 1 );
@@ -691,43 +632,71 @@ void GTIAStateRead( void )
 	ReadUBYTE( &HPOSM1, 1 );
 	ReadUBYTE( &HPOSM2, 1 );
 	ReadUBYTE( &HPOSM3, 1 );
+	ReadUBYTE( &M0PL, 1 );
+	ReadUBYTE( &M1PL, 1 );
+	ReadUBYTE( &M2PL, 1 );
+	ReadUBYTE( &M3PL, 1 );
+	ReadUBYTE( &P0PL, 1 );
+	ReadUBYTE( &P1PL, 1 );
+	ReadUBYTE( &P2PL, 1 );
+	ReadUBYTE( &P3PL, 1 );
 	ReadUBYTE( &SIZEP0, 1 );
 	ReadUBYTE( &SIZEP1, 1 );
 	ReadUBYTE( &SIZEP2, 1 );
 	ReadUBYTE( &SIZEP3, 1 );
 	ReadUBYTE( &SIZEM, 1 );
-	ReadUBYTE( &M0PF, 1 );
-	ReadUBYTE( &M1PF, 1 );
-	ReadUBYTE( &M2PF, 1 );
-	ReadUBYTE( &M3PF, 1 );
-	ReadUBYTE( &M0PL, 1 );
-	ReadUBYTE( &M1PL, 1 );
-	ReadUBYTE( &M2PL, 1 );
-	ReadUBYTE( &M3PL, 1 );
-	ReadUBYTE( &P0PF, 1 );
-	ReadUBYTE( &P1PF, 1 );
-	ReadUBYTE( &P2PF, 1 );
-	ReadUBYTE( &P3PF, 1 );
-	ReadUBYTE( &P0PL, 1 );
-	ReadUBYTE( &P1PL, 1 );
-	ReadUBYTE( &P2PL, 1 );
-	ReadUBYTE( &P3PL, 1 );
+	ReadUBYTE( &GRAFP0, 1 );
+	ReadUBYTE( &GRAFP1, 1 );
+	ReadUBYTE( &GRAFP2, 1 );
+	ReadUBYTE( &GRAFP3, 1 );
+	ReadUBYTE( &GRAFM, 1 );
+	ReadUBYTE( &COLPM0, 1 );
+	ReadUBYTE( &COLPM1, 1 );
+	ReadUBYTE( &COLPM2, 1 );
+	ReadUBYTE( &COLPM3, 1 );
+	ReadUBYTE( &COLPF0, 1 );
+	ReadUBYTE( &COLPF1, 1 );
+	ReadUBYTE( &COLPF2, 1 );
+	ReadUBYTE( &COLPF3, 1 );
+	ReadUBYTE( &COLBK, 1 );
 	ReadUBYTE( &PRIOR, 1 );
 	ReadUBYTE( &VDELAY, 1 );
 	ReadUBYTE( &GRACTL, 1 );
 
-	ReadINT( &global_hposp0, 1 );
-	ReadINT( &global_hposp1, 1 );
-	ReadINT( &global_hposp2, 1 );
-	ReadINT( &global_hposp3, 1 );
-	ReadINT( &global_hposm0, 1 );
-	ReadINT( &global_hposm1, 1 );
-	ReadINT( &global_hposm2, 1 );
-	ReadINT( &global_hposm3, 1 );
-	ReadINT( &global_sizep0, 1 );
-	ReadINT( &global_sizep1, 1 );
-	ReadINT( &global_sizep2, 1 );
-	ReadINT( &global_sizep3, 1 );
-	ReadINT( &global_sizem[0], 4 );
+	ReadUBYTE( &consol_mask, 1 );
+	ReadUBYTE( &pf_colls[0], 9 );
+
+	ReadINT( &atari_speaker, 1 );
 	ReadINT( &next_console_value, 1 );
+
+	GTIA_PutByte(_HPOSP0, HPOSP0);
+	GTIA_PutByte(_HPOSP1, HPOSP1);
+	GTIA_PutByte(_HPOSP2, HPOSP2);
+	GTIA_PutByte(_HPOSP3, HPOSP3);
+	GTIA_PutByte(_HPOSM0, HPOSM0);
+	GTIA_PutByte(_HPOSM1, HPOSM1);
+	GTIA_PutByte(_HPOSM2, HPOSM2);
+	GTIA_PutByte(_HPOSM3, HPOSM3);
+	GTIA_PutByte(_SIZEP0, SIZEP0);
+	GTIA_PutByte(_SIZEP1, SIZEP1);
+	GTIA_PutByte(_SIZEP2, SIZEP2);
+	GTIA_PutByte(_SIZEP3, SIZEP3);
+	GTIA_PutByte(_SIZEM, SIZEM);
+	GTIA_PutByte(_GRAFP0, GRAFP0);
+	GTIA_PutByte(_GRAFP1, GRAFP1);
+	GTIA_PutByte(_GRAFP2, GRAFP2);
+	GTIA_PutByte(_GRAFP3, GRAFP3);
+	GTIA_PutByte(_GRAFM, GRAFM);
+	GTIA_PutByte(_COLPM0, COLPM0);
+	GTIA_PutByte(_COLPM1, COLPM1);
+	GTIA_PutByte(_COLPM2, COLPM2);
+	GTIA_PutByte(_COLPM3, COLPM3);
+	GTIA_PutByte(_COLPF0, COLPF0);
+	GTIA_PutByte(_COLPF1, COLPF1);
+	GTIA_PutByte(_COLPF2, COLPF2);
+	GTIA_PutByte(_COLPF3, COLPF3);
+	GTIA_PutByte(_COLBK, COLBK);
+	GTIA_PutByte(_PRIOR, PRIOR);
+	GTIA_PutByte(_GRACTL, GRACTL);
+	pm_dirty = TRUE;
 }

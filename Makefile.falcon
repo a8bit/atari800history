@@ -103,7 +103,9 @@ OBJECTS =       atari.o \
 		compfile.o \
 		memory.o \
 		pbi.o \
-		statesav.o
+		statesav.o \
+		diskled.o \
+		colours.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800

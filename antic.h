@@ -35,7 +35,8 @@ extern UBYTE VSCROL;
 extern int ypos;
 extern UBYTE wsync_halt;
 
-extern UBYTE *scrn_ptr;
+extern int global_artif_mode;
+
 extern ULONG *atari_screen;
 #ifdef BITPL_SCR
 extern ULONG *atari_screen_b;
@@ -48,5 +49,8 @@ void ANTIC_Reset(void);
 void ANTIC_RunDisplayList(void);
 UBYTE ANTIC_GetByte(UWORD addr);
 void ANTIC_PutByte(UWORD addr, UBYTE byte);
+
+/* always call artif_init after changing global_artif_mode */
+void artif_init(void);
 
 #endif

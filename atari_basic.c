@@ -2,23 +2,15 @@
 #include "config.h"
 #include "monitor.h"
 
-#define FALSE 0
-#define TRUE 1
-
-int Atari_Initialise(int *argc, char *argv[])
+void Atari_Initialise(int *argc, char *argv[])
 {
 }
 
 int Atari_Exit(int run_monitor)
 {
-	int restart;
-
 	if (run_monitor)
-		restart = monitor();
-	else
-		restart = FALSE;
-
-	return restart;
+		return monitor();
+	return FALSE;
 }
 
 int Atari_Keyboard(void)
@@ -44,4 +36,9 @@ int Atari_POT(int num)
 int Atari_CONSOL(void)
 {
 	return 7;
+}
+
+int Atari_PEN(int vertical)
+{
+	return vertical ? 0xff : 0;
 }

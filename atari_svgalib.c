@@ -42,6 +42,7 @@ static struct JS_DATA_TYPE js_data;
 #include <vgakeyboard.h>
 
 extern int SHIFT_KEY, KEYPRESSED;
+extern int alt_function;
 static int pause_hit = 0;
 static UBYTE kbhits[NR_KEYS];
 static int kbcode = 0;
@@ -193,7 +194,29 @@ int Atari_Keyboard(void)
         SHIFT_KEY = (kbhits[SCANCODE_LEFTSHIFT]
                    | kbhits[SCANCODE_RIGHTSHIFT]) ? 1 : 0;
 
-        /* need to set shift mask here to aviod conflict with PC layout */
+		alt_function = -1;		/* no alt function */
+		if (kbhits[0x38]) {		/* left Alt key is pressed */
+			if (kbcode == SCANCODE_R)
+				alt_function = MENU_RUN;		/* ALT+R .. Run file */
+			else if (kbcode == SCANCODE_Y)
+				alt_function = MENU_SYSTEM;		/* ALT+Y .. Select system */
+			else if (kbcode == SCANCODE_O)
+				alt_function = MENU_SOUND;		/* ALT+O .. mono/stereo sound */
+			else if (kbcode == SCANCODE_A)
+				alt_function = MENU_ABOUT;		/* ALT+A .. About */
+			else if (kbcode == SCANCODE_S)
+				alt_function = MENU_SAVESTATE;	/* ALT+S .. Save state */
+			else if (kbcode == SCANCODE_D)
+				alt_function = MENU_DISK;		/* ALT+D .. Disk management */
+			else if (kbcode == SCANCODE_L)
+				alt_function = MENU_LOADSTATE;	/* ALT+L .. Load state */
+			else if (kbcode == SCANCODE_C)
+				alt_function = MENU_CARTRIDGE;	/* ALT+C .. Cartridge management */
+		}
+		if (alt_function != -1)
+			return AKEY_UI;
+
+        /* need to set shift mask here to avoid conflict with PC layout */
         keycode = (SHIFT_KEY ? 0x40 : 0)
         	| ((kbhits[SCANCODE_LEFTCONTROL]
                    | kbhits[SCANCODE_RIGHTCONTROL]) ? 0x80 : 0);

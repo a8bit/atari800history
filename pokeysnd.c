@@ -96,6 +96,25 @@
 #include "config.h"
 #endif
 
+#ifdef UNALIGNED_LONG_OK
+#  define READ_U32(x)    (*(uint32 *)(x))
+#  define WRITE_U32(x,d) (*(uint32 *)(x)=(d))
+#else
+#  ifdef POKEYSND_BIG_ENDIAN
+#    define READ_U32(x) (((*(unsigned char *)(x)) << 24) | ((*((unsigned char *)(x)+1)) << 16) | \
+                        ((*((unsigned char *)(x)+2)) << 8) | ((*((unsigned char *)(x)+3))))
+#    define WRITE_U32(x,d) ((*(unsigned char *)(x)) = (((d)>>24)&255), (*((unsigned char *)(x)+1)) = \
+                           (((d)>>16)&255), (*((unsigned char *)(x)+2)) = (((d)>>8)&255), \
+                           (*((unsigned char *)(x)+3)) = ((d)&255), d)
+#  else
+#    define READ_U32(x) ((*(unsigned char *)(x)) | ((*((unsigned char *)(x)+1)) << 8) | \
+                        ((*((unsigned char *)(x)+2)) << 16) | ((*((unsigned char *)(x)+3)) << 24))
+#    define WRITE_U32(x,d) ((*(unsigned char *)(x)) = ((d)&255), (*((unsigned char *)(x)+1)) = \
+                           (((d)>>8)&255), (*((unsigned char *)(x)+2)) = (((d)>>16)&255), \
+                           (*((unsigned char *)(x)+3)) = (((d)>>24)&255), d)
+#  endif
+#endif
+
 /* CONSTANT DEFINITIONS */
 
 /* definitions for AUDCx (D201, D203, D205, D207) */
@@ -639,7 +658,7 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 void Pokey_process(register uint8 * buffer, register uint16 n)
 {
 	register uint32 *div_n_ptr;
-	register uint32 *samp_cnt_w_ptr;
+	register uint8 *samp_cnt_w_ptr;
 	register uint32 event_min;
 	register uint8 next_event;
 #ifdef CLIP						/* if clipping is selected */
@@ -661,9 +680,9 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 
 	/* set a pointer to the whole portion of the samp_n_cnt */
 #ifdef POKEYSND_BIG_ENDIAN
-	samp_cnt_w_ptr = (uint32 *) ((uint8 *) (&Samp_n_cnt[0]) + 3);
+	samp_cnt_w_ptr = ((uint8 *) (&Samp_n_cnt[0]) + 3);
 #else
-	samp_cnt_w_ptr = (uint32 *) ((uint8 *) (&Samp_n_cnt[0]) + 1);
+	samp_cnt_w_ptr = ((uint8 *) (&Samp_n_cnt[0]) + 1);
 #endif
 
 	/* set a pointer for optimization */
@@ -732,7 +751,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 
 		/* find next smallest event (either sample or chan 1-4) */
 		next_event = SAMPLE;
-		event_min = *samp_cnt_w_ptr;
+		event_min = READ_U32(samp_cnt_w_ptr);
 
 		div_n_ptr = Div_n_cnt;
 
@@ -783,7 +802,8 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 			count--;
 		} while (count);
 
-		*samp_cnt_w_ptr -= event_min;
+
+                WRITE_U32(samp_cnt_w_ptr,READ_U32(samp_cnt_w_ptr) - event_min);
 
 		/* since the polynomials require a mod (%) function which is
 		   division, I don't adjust the polynomials on the SAMPLE events,

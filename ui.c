@@ -29,6 +29,8 @@
 
 extern int refresh_rate;
 
+int alt_function = -1;		/* alt function init */
+
 #define FILENAME_SIZE	32
 
 #if defined(VGA) || defined(ATARI)
@@ -660,9 +662,9 @@ List *GetDirectory(char *directory)
 		}
 		(letter[0])++;
 	}
-#endif
 #ifdef __DJGPP__
 	_djstat_flags = s_backup;	/*return the original state */
+#endif
 #endif
 
 #endif
@@ -1217,17 +1219,17 @@ void ui(UBYTE *screen)
 
 	char *menu[] =
 	{
-		"About the Emulator",
-		"Select System",
 		"Disk Management",
 		"Cartridge Management",
-		"Sound Mono/Stereo",
 		"Run single BIN file directly",
+		"Select System",
+		"Sound Mono/Stereo",
 		"Save State",
 		"Load State",
 		"Back to emulated Atari",
 		"Power On Reset (Warm Start)",
 		"Power Off Reset (Cold Start)",
+		"About the Emulator",
 		"Exit Emulator"
 	};
 	const int nitems = sizeof(menu) / sizeof(menu[0]);
@@ -1252,27 +1254,37 @@ void ui(UBYTE *screen)
 		TitleScreen(screen, ATARI_TITLE);
 		Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
 
-		option = Select(screen, option, nitems, menu,
-						nitems, 1, 1, 4, FALSE, &ascii);
+		if (alt_function<0)
+		{
+			option = Select(screen, option, nitems, menu,
+							nitems, 1, 1, 4, FALSE, &ascii);
+		}
+		else
+		{
+			option = alt_function;
+			alt_function = -1;
+			done = TRUE;
+		}
 
 		switch (option) {
 		case -2:
 		case -1:		/* ESC key */
 			done = TRUE;
 			break;
-		case 0:
-			AboutEmulator(screen);
-			break;
-		case 1:
-			SelectSystem(screen);
-			break;
-		case 2:
+		case MENU_DISK:
 			DiskManagement(screen);
 			break;
-		case 3:
+		case MENU_CARTRIDGE:
 			CartManagement(screen);
 			break;
-		case 4:
+		case MENU_RUN:
+			if (RunExe(screen))
+				done = TRUE;	/* reboot immediately */
+			break;
+		case MENU_SYSTEM:
+			SelectSystem(screen);
+			break;
+		case MENU_SOUND:
 			{
 				char *msg;
 #ifdef STEREO
@@ -1288,28 +1300,27 @@ void ui(UBYTE *screen)
 				GetKeyPress(screen);
 			}
 			break;
-		case 5:
-			if (RunExe(screen))
-				done = TRUE;	/* reboot immediately */
-			break;
-		case 6:
+		case MENU_SAVESTATE:
 			SaveState(screen);
 			break;
-		case 7:
+		case MENU_LOADSTATE:
 			LoadState(screen);
 			break;
-		case 8:
+		case MENU_BACK:
 			done = TRUE;	/* back to emulator */
 			break;
-		case 9:
+		case MENU_RESETW:
 			Warmstart();
 			done = TRUE;	/* reboot immediately */
 			break;
-		case 10:
+		case MENU_RESETC:
 			Coldstart();
 			done = TRUE;	/* reboot immediately */
 			break;
-		case 11:
+		case MENU_ABOUT:
+			AboutEmulator(screen);
+			break;
+		case MENU_EXIT:
 #ifdef WIN32
 			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
 			hThread = 0L;

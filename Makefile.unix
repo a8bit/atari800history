@@ -47,60 +47,60 @@ default :
 	@echo "make install"
 
 basic :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DBASIC" \
 		OBJ="atari_basic.o"
 
 linux-svgalib :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DSVGALIB" \
 		LDLIBS="$(LDLIBS) -lvga" \
 		OBJ="atari_svgalib.o"
 
 linux-svgalib-nas-obsolete :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DNAS" \
 		LDFLAGS="-L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lvga -laudio -lXau" \
 		OBJ="atari_svgalib.o nas.o"
 
 linux-x11-nas-obsolete :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -laudio -lXau -lX11" \
 		OBJ="atari_x11.o nas.o"
 
 linux-x11-nas-shm-obsolete :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lXext" \
 		OBJ="atari_x11.o nas.o"
 
 linux-xview-nas-obsolete :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11" \
 		OBJ="atari_x11.o nas.o"
 
 linux-xview-nas-shm-obsolete :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lXext" \
 		OBJ="atari_x11.o nas.o"
 
 x11 :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -lX11" \
 		OBJ="atari_x11.o"
 
 x11-shm :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -lX11 -lXext" \
@@ -110,7 +110,7 @@ x11-nas-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lsocket -lnsl" \
@@ -120,14 +120,14 @@ x11-nas-shm-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/openwin/include -DNAS -DSHM" \
 		LDFLAGS="-L/usr/X11/lib -L/usr/openwin/lib" \
 		LDLIBS="$(LDLIBS) -laudio -lXau -lX11 -lXext -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 hp9000-ansic-x11 :
-	make atari800 \
+	$(MAKE) atari800 \
 		CC="cc" \
 		CPPFLAGS="-DX11 -D_POSIX_SOURCE" \
 		CFLAGS="-c -O -Aa -I/usr/include/X11R5" \
@@ -137,14 +137,14 @@ hp9000-ansic-x11 :
 		OBJ="atari_x11.o"
 
 xview :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11" \
 		OBJ="atari_x11.o"
 
 xview-shm :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11 -lXext" \
@@ -154,7 +154,7 @@ xview-nas-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lsocket -lnsl" \
@@ -164,67 +164,67 @@ xview-nas-shm-obsolete :
 	@echo "******************************************************"
 	@echo "* Remove -lsocket and -lnsl if they produce an error *"
 	@echo "******************************************************"
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/openwin/include -DXVIEW -DNAS -DSHM" \
 		LDFLAGS="-L/usr/openwin/lib -L/usr/X11/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -laudio -lXau -lX11 -lXext -lsocket -lnsl" \
 		OBJ="atari_x11.o nas.o"
 
 motif :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/opt/IXImd12s/include -DMOTIF" \
 		LDFLAGS="-L/opt/IXImd12s/lib" \
 		LDLIBS="$(LDLIBS) -lXm -lXt -lX11 -lgen -lsocket" \
 		OBJ="atari_x11.o"
 
 curses :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DCURSES" \
 		LDLIBS="$(LDLIBS) -lcurses" \
 		OBJ="atari_curses.o"
 
 sunos-curses :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-I/usr/5include -DCURSES" \
 		LDLIBS="$(LDLIBS) -lcurses" \
 		LDFLAGS="-L/usr/5lib" \
 		OBJ="atari_curses.o"
 
 linux-ncurses :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-I/usr/include/ncurses -DCURSES -DNCURSES" \
 		LDLIBS="$(LDLIBS) -lncurses" \
 		OBJ="atari_curses.o"
 
 freebsd-ncurses :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-I/usr/include/ncurses -DCURSES -DNCURSES" \
 		LDLIBS="$(LDLIBS) -lncurses" \
 		OBJ="atari_curses.o"
 
 freebsd-x11 :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/X11R6/include" \
 		LDFLAGS="-L/usr/X11R6/lib" \
 		LDLIBS="$(LDLIBS) -lX11" \
 		OBJ="atari_x11.o"
 
 freebsd-x11-shm :
-	make atari800 \
+	$(MAKE) atari800 \
 		CPPFLAGS="-DX11 -I/usr/X11R6/include -DSHM" \
 		LDFLAGS="-L/usr/X11R6/lib" \
 		LDLIBS="$(LDLIBS) -lX11 -lXext" \
 		OBJ="atari_x11.o"
 
 freebsd-xview : 
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/X11R6/include -DXVIEW" \
 		LDFLAGS="-L/usr/X11R6/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11" \
 		OBJ="atari_x11.o"
 
 freebsd-xview-shm :
-	make atari800 \
+	$(MAKE) atari800 \
 		OTHER="-DX11 -I/usr/X11R6/include -DXVIEW -DSHM" \
 		LDFLAGS="-L/usr/X11R6/lib" \
 		LDLIBS="$(LDLIBS) -lxview -lolgx -lX11 -lXext" \
@@ -285,7 +285,8 @@ OBJECTS	=	atari.o \
 		memory.o \
 		pbi.o \
 		statesav.o \
-		diskled.o
+		diskled.o \
+		colours.o
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800

@@ -100,6 +100,8 @@ extern int ATKEYPRESSED;
 
 static int SHIFT_LEFT = FALSE;
 static int SHIFT_RIGHT = FALSE;
+static int alt_key = FALSE;
+extern int alt_function;
 static int norepkey = FALSE;    /* for "no repeat" of some keys !RS! */
 
 static int PC_keyboard = TRUE;
@@ -330,6 +332,10 @@ void key_handler(void)
                 case 0x36:
                         SHIFT_RIGHT = !key_leave;
                         break;
+				case 0x38:
+						alt_key = !key_leave;					/*ALT KEY*/
+						if (!alt_key) alt_function = -1;		/* no alt function */
+						break;
                 case 0x1d:
                 case 0x9d:
                         control = !key_leave;
@@ -1427,13 +1433,25 @@ int Atari_Keyboard(void)
                 keycode |= AKEY_e;
                 break;
         case 0x13:
-                keycode |= AKEY_r;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_RUN;			/* ALT+R .. Run file */
+				}
+				else
+	                keycode |= AKEY_r;
                 break;
         case 0x14:
                 keycode |= AKEY_t;
                 break;
         case 0x15:
-                keycode |= AKEY_y;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_SYSTEM;			/* ALT+Y .. Select system */
+				}
+				else
+	                keycode |= AKEY_y;
                 break;
         case 0x16:
                 keycode |= AKEY_u;
@@ -1442,7 +1460,13 @@ int Atari_Keyboard(void)
                 keycode |= AKEY_i;
                 break;
         case 0x18:
-                keycode |= AKEY_o;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_SOUND;			/* ALT+O .. mono/stereo sound */
+				}
+				else
+	                keycode |= AKEY_o;
                 break;
         case 0x19:
                 keycode |= AKEY_p;
@@ -1469,13 +1493,31 @@ int Atari_Keyboard(void)
                 break;
 
         case 0x1e:
-                keycode |= AKEY_a;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_ABOUT;			/* ALT+A .. About */
+				}
+				else
+					keycode |= AKEY_a;
                 break;
         case 0x1f:
-                keycode |= AKEY_s;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_SAVESTATE;			/* ALT+S .. Save state */
+				}
+				else
+	                keycode |= AKEY_s;
                 break;
         case 0x20:
-                keycode |= AKEY_d;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_DISK;			/* ALT+D .. Disk management */
+				}
+				else
+	                keycode |= AKEY_d;
                 break;
         case 0x21:
                 keycode |= AKEY_f;
@@ -1493,7 +1535,13 @@ int Atari_Keyboard(void)
                 keycode |= AKEY_k;
                 break;
         case 0x26:
-                keycode |= AKEY_l;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;
+					alt_function = MENU_LOADSTATE;			/* ALT+L .. Load state */
+				}
+				else
+	                keycode |= AKEY_l;
                 break;
         case 0x27:
                 keycode |= AKEY_SEMICOLON;
@@ -1524,7 +1572,13 @@ int Atari_Keyboard(void)
                 keycode |= AKEY_x;
                 break;
         case 0x2e:
-                keycode |= AKEY_c;
+				if (alt_key)
+				{
+					keycode = AKEY_UI;			
+					alt_function = MENU_CARTRIDGE;			/* ALT+C .. Cartridge management */
+				}
+				else
+	                keycode |= AKEY_c;
                 break;
         case 0x2f:
                 keycode |= AKEY_v;

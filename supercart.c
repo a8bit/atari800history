@@ -1,9 +1,6 @@
-#include <stdlib.h>
 #include <time.h>
 
 #include "atari.h"
-#include "config.h"
-#include "cpu.h"
 #include "memory.h"
 #include "log.h"
 
@@ -65,7 +62,7 @@ void fillarray()
 UBYTE SuperCart_GetByte(UWORD addr)
 {
 	/* Aprint("d5xx read @ 0x%x", addr); */
-	if (addr == 0xb8 || addr == 0xb9) {
+	if (addr == 0xd5b8 || addr == 0xd5b9) {
 		fillarray();
 		switch(rtime_state) {
 		case 0:

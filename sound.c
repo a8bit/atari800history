@@ -184,6 +184,14 @@ void Atari_AUDCTL(int byte)
 }
 
 #else
+void Sound_Pause(void)
+{
+}
+
+void Sound_Continue(void)
+{
+}
+
 void Atari_AUDC(int channel, int byte)
 {
 }

@@ -8,7 +8,7 @@ CPUDEF= #CPUASS
 
 AMIGAOBJS=atari_amiga.o amiga/async.o amiga/amiga_asm.o amiga/support.o
 
-OBJS=antic.o atari.o ataripcx.o binload.o compfile.o devices.o gtia.o \
+OBJS=antic.o atari.o ataripcx.o binload.o compfile.o devices.o diskled.o gtia.o \
      list.o log.o memory-d.o monitor.o pia.o pokey.o pokeysnd.o prompts.o \
      rt-config.o sio.o statesav.o supercart.o ui.o
 
@@ -48,6 +48,8 @@ binload.o: binload.c
 compfile.o: compfile.c
 
 devices.o: devices.c atari.h cpu.h devices.h rt-config.h
+
+diskled.o: diskled.c diskled.h
 
 gtia.o: gtia.c atari.h cpu.h pia.h pokey.h gtia.h antic.h platform.h
 

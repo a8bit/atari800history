@@ -3140,3 +3140,8 @@ void Sound_Record( void )
 	}
 #endif /* VOXWARE */
 }
+
+int Atari_PEN(int vertical)
+{
+	return 0;
+}
