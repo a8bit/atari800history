@@ -650,7 +650,7 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x21:				/* Single Density Format */
-			SizeOfSector(unit, sector, &realsize, NULL);
+			realsize = 128;
 			if (realsize == length) {
 				result = FormatSingle(unit, DataBuffer);
 				if (result == 'C')
@@ -660,7 +660,7 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x22:				/* Enhanced Density Format */
-			SizeOfSector(unit, sector, &realsize, NULL);
+			realsize = 128;
 			if (realsize == length) {
 				result = FormatEnhanced(unit, DataBuffer);
 				if (result == 'C')

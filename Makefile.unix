@@ -46,7 +46,7 @@ basic :
 
 linux-svgalib :
 	make atari800 \
-		LDLIBS="-lvgagl -lvga -lm -lz" \
+		LDLIBS="-lvgagl -lvga -lm -lz -lrawkey" \
 		OBJ="atari_svgalib.o"
 
 linux-svgalib-nas-obsolete :

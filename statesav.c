@@ -197,25 +197,28 @@ void ReadUWORD( UWORD *data, int num )
 
 void SaveINT( int *data, int num )
 {
-	unsigned char signbit = 0;
-
-	if( !StateFile || nFileError != Z_OK )
-		return;
-
-	if( *data < 0 )
-		signbit = 0x80;
-
 	/* INTs are always saved as 32bits (4 bytes) in the file. They can be any size
 	   on the platform however. The sign bit is clobbered into the fourth byte saved
 	   for each int; on read it will be extended out to its proper position for the
 	   native INT size */
 	while( num > 0 )
 	{
+		unsigned char signbit = 0;
 		unsigned int	temp;
 		UBYTE	byte;
 		int result;
+		int temp0;
 
-		temp = (unsigned int)*data;
+		if( !StateFile || nFileError != Z_OK )
+		  return;
+
+		temp0 = *data;
+		if (temp0 < 0)
+		{
+		  temp0 = -temp0;
+		  signbit = 0x80;
+		}
+		temp = (unsigned int)temp0;
 
 		byte = temp & 0xff;
 		result = GZWRITE( StateFile, &byte, 1 );
@@ -245,11 +248,9 @@ void SaveINT( int *data, int num )
 			num = 0;
 			continue;
 		}
-
 		temp >>= 8;
-		byte = temp & 0xff;
-		/* Possible sign bit is always saved on fourth byte */
-		byte &= signbit;
+
+		byte = (temp & 0x7f) | signbit;
 		result = GZWRITE( StateFile, &byte, 1 );
 		if( result == 0 )
 		{
@@ -257,7 +258,6 @@ void SaveINT( int *data, int num )
 			num = 0;
 			continue;
 		}
-
 		num--;
 		data++;
 	}

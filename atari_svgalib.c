@@ -357,7 +357,19 @@ int Atari_Keyboard(void)
 
 /* Now testing function keys and some specials */
 
-	if ( is_key_pressed(FUNC_KEY(1)) ) keycode = AKEY_UI;
+	if ( is_key_pressed(FUNC_KEY(1)) )
+	{
+		if (is_key_pressed(LEFT_CTRL)) {
+			GCK = TRUE; 
+			keycode = AKEY_NONE;
+		}
+		else if (is_key_pressed(LEFT_SHIFT)) {
+			GCK = FALSE;
+			keycode = AKEY_NONE;
+		}
+		else
+			keycode = AKEY_UI;
+	}
 
 	else if ( is_key_pressed(FUNC_KEY(2)) ) {
 		consol &= 0x03;
@@ -381,13 +393,18 @@ int Atari_Keyboard(void)
 	    keycode = AKEY_WARMSTART;           /* F5 */
 	}
 
-	else if ( is_key_pressed(FUNC_KEY(6)) ) keycode = AKEY_PIL;
+	else if ( is_key_pressed(FUNC_KEY(6)) )
+	{
+		if (machine == Atari)
+			keycode = AKEY_PIL;
+		else
+			keycode = AKEY_HELP;
+	}
 	      
 	else if ( is_key_pressed(FUNC_KEY(7)) ) keycode = AKEY_BREAK;
 
 	else if ( is_key_pressed(FUNC_KEY(8)) ) {
-	  keycode = AKEY_NONE;
-	  GCK = !GCK ;
+		keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;	/* invoke monitor */
 	}
 	else if ( is_key_pressed(FUNC_KEY(9)) ) keycode = AKEY_EXIT;
 
