@@ -1,4 +1,3 @@
-
 /*
  * Scanline Generation
  * Player Missile Graphics
@@ -21,20 +20,18 @@
 #include "gtia.h"
 #include "antic.h"
 #include "platform.h"
+#include "sio.h"
 
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: gtia.c,v 1.20 1998/02/21 14:57:10 david Exp $";
-
+static char *rcsid = "$Id: gtia.c,v 1.17 1997/02/15 13:57:11 david Exp $";
+int atari_speaker;
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
 extern int rom_inserted;
 
-#ifdef CPUASS
-extern void color_scanline(UBYTE *, UWORD *);
-#endif
 
 UBYTE COLBK;
 UBYTE COLPF0;
@@ -82,6 +79,13 @@ UBYTE P3PL;
 UBYTE PRIOR;
 UBYTE GRACTL;
 
+extern UBYTE player_dma_enabled;
+extern UBYTE missile_dma_enabled;
+extern UBYTE player_gra_enabled;
+extern UBYTE missile_gra_enabled;
+extern UBYTE player_flickering;
+extern UBYTE missile_flickering;
+
 /*
    *****************************************************************
    *                                *
@@ -105,14 +109,9 @@ static int global_sizep0 = 2;
 static int global_sizep1 = 2;
 static int global_sizep2 = 2;
 static int global_sizep3 = 2;
-static int global_sizem0 = 2;
-static int global_sizem1 = 2;
-static int global_sizem2 = 2;
-static int global_sizem3 = 2;
+static int global_sizem[] =
+{2, 2, 2, 2};
 
-#ifdef DIRECT_VIDEO
-static UBYTE colour_to_pf[256];
-#endif
 
 /*
    =========================================
@@ -120,11 +119,38 @@ static UBYTE colour_to_pf[256];
    =========================================
  */
 
-static UBYTE pm_scanline[ATARI_WIDTH];
+UBYTE pm_scanline[ATARI_WIDTH];
 
 UBYTE colour_lookup[9];
-UWORD colour_lookup16[9<<8];
+UBYTE pf_colls[9];
 int colour_translation_table[256];
+#define R_BLACK 23
+#define R_COLPM0OR1 9
+#define R_COLPM2OR3 10
+#define R_COLPM0_OR_PF0 11
+#define R_COLPM1_OR_PF0 12
+#define R_COLPM0OR1_OR_PF0 13
+#define R_COLPM0_OR_PF1 14
+#define R_COLPM1_OR_PF1 15
+#define R_COLPM0OR1_OR_PF1 16
+#define R_COLPM2_OR_PF2 17
+#define R_COLPM3_OR_PF2 18
+#define R_COLPM2OR3_OR_PF2 19
+#define R_COLPM2_OR_PF3 20
+#define R_COLPM3_OR_PF3 21
+#define R_COLPM2OR3_OR_PF3 22
+#define R_BLACK 23
+extern UWORD cl_word[24];
+#define L_PM0 (0*5-4)
+#define L_PM1 (1*5-4)
+#define L_PM01 (2*5-4)
+#define L_PM2 (3*5-4)
+#define L_PM3 (4*5-4)
+#define L_PM23 (5*5-4)
+extern int new_pm_lookup[16];
+extern UBYTE prior_table[35 * 16];
+extern UBYTE cur_prior[35];
+extern UBYTE p5_mask;
 
 int next_console_value = 7;
 
@@ -136,159 +162,23 @@ UWORD m0123adr;
 
 static int PM_XPos[256];
 static UBYTE PM_Width[4] =
-{2, 4, 2, 8};
+{1, 2, 1, 4};					/*{ 2, 4, 2, 8}; *///1/2 size pm scanline
 
 void GTIA_Initialise(int *argc, char *argv[])
 {
 	int i;
 
 	for (i = 0; i < 256; i++)
-		PM_XPos[i] = (i - 0x20) << 1;
-
-#ifdef DIRECT_VIDEO
-	printf("GTIA: Screen Generation compiled with DIRECT_VIDEO\n");
-
-	for (i = 0; i < 256; i++)
-		colour_to_pf[i] = 0x00;
-#endif
+		PM_XPos[i] = (i - 0x20);	/*<< 1 *///for 1/2 size pmscanline
 
 	for (i = 0; i < 9; i++)
 		colour_lookup[i] = 0x00;
 
-	for (i = 0; i < (9<<8); i++)
-		colour_lookup16[i] = 0x0000;
-
 	PRIOR = 0x00;
 }
 
-UBYTE WhichColourReg(int pf_pixel, int player, int missile)
+void new_pm_scanline(void)
 {
-	UBYTE colreg;
-
-	switch (PRIOR & 0x1f) {
-	case 0x01:					/* RIVER RAID */
-		if (missile < player)
-			colreg = missile;
-		else
-			colreg = player;
-		break;
-	case 0x02:					/* MOUNTAIN KING */
-		if (player < 2) {
-			colreg = player;
-		}
-		else if (pf_pixel < 7) {
-			colreg = pf_pixel;
-		}
-		else if (pf_pixel == 7) {
-			if (missile != 0xff)
-				colreg = missile;
-			else
-				colreg = pf_pixel;
-		}
-		else if (player < 4) {
-			colreg = player;
-		}
-		else {
-			colreg = pf_pixel;
-		}
-		break;
-	case 0x04:
-		if (pf_pixel > 7) {
-			if (missile < player)
-				colreg = missile;
-			else
-				colreg = player;
-		}
-		else {
-			colreg = pf_pixel;
-		}
-		break;
-	case 0x08:					/* RALLY SPEEDWAY */
-		if (pf_pixel > 5) {
-			if (missile < player)
-				colreg = missile;
-			else
-				colreg = player;
-		}
-		else {
-			colreg = pf_pixel;
-		}
-		break;
-	case 0x11:					/* PAC-MAN, STAR RAIDERS, ASTEROIDS, FROGGER DELUXE, KANGAROO */
-		if (player != 0xff)
-			colreg = player;
-		else if (pf_pixel > 7)
-			colreg = 7;			/* Missile using COLPF3 */
-		else
-			colreg = pf_pixel;
-		break;
-	case 0x12:					/* ZONE RANGER */
-		if (player < 2) {
-			colreg = player;
-		}
-		else if (pf_pixel < 7) {
-			colreg = pf_pixel;
-		}
-		else if (pf_pixel == 7) {
-			if (missile != 0xff)
-				colreg = missile;
-			else
-				colreg = pf_pixel;
-		}
-		else if (player < 4) {
-			colreg = player;
-		}
-		else {
-			colreg = pf_pixel;
-		}
-		break;
-	case 0x14:					/* ATARI CHESS, FORT APOCALYPSE */
-		if (missile != 0xff) {
-			if (pf_pixel > 7)
-				colreg = 7;		/* Missile using COLPF3 */
-			else
-				colreg = pf_pixel;
-		}
-		else {
-			if (pf_pixel > 7)
-				colreg = player;
-			else
-				colreg = pf_pixel;
-		}
-		break;
-	case 0x18:					/* THE LAST STARTFIGHTER */
-		if (pf_pixel > 5) {
-			if (missile < player)
-				colreg = 7;		/* Missile using COLPF3 */
-			else
-				colreg = player;
-		}
-		else {
-			colreg = pf_pixel;
-		}
-		break;
-	default:
-		printf("Unsupported PRIOR = %02x\n", PRIOR);
-	case 0x00:
-		if (missile < player)
-			colreg = missile;
-		else
-			colreg = player;
-		break;
-	}
-
-	return colreg;
-}
-
-void PM_ScanLine(void)
-{
-	static UBYTE pf_collision_bit[9] =
-	{
-		0x00, 0x00, 0x00, 0x00,
-		0x01, 0x02, 0x04, 0x08,
-		0x00
-	};
-
 	int dirty = FALSE;
 
 /*
@@ -309,16 +199,10 @@ void PM_ScanLine(void)
 				int j;
 
 				for (j = 0; j < sizep0; j++) {
-					if ((hposp0 >= 0) && (hposp0 < ATARI_WIDTH)) {
-						UBYTE playfield = scrn_ptr[hposp0];
-
-#ifdef DIRECT_VIDEO
-						playfield = colour_to_pf[playfield];
-#endif
-
+					if ((hposp0 >= 0) && (hposp0 < ATARI_WIDTH / 2)) {
+						UBYTE playfield = scrn_ptr[hposp0 << 1];
 						pm_scanline[hposp0] |= 0x01;
-
-						P0PF |= pf_collision_bit[playfield];
+						P0PL |= pm_scanline[hposp0];
 					}
 					hposp0++;
 				}
@@ -348,16 +232,10 @@ void PM_ScanLine(void)
 				int j;
 
 				for (j = 0; j < sizep1; j++) {
-					if ((hposp1 >= 0) && (hposp1 < ATARI_WIDTH)) {
-						UBYTE playfield = scrn_ptr[hposp1];
-
-#ifdef DIRECT_VIDEO
-						playfield = colour_to_pf[playfield];
-#endif
-
+					if ((hposp1 >= 0) && (hposp1 < ATARI_WIDTH / 2)) {
+						UBYTE playfield = scrn_ptr[hposp1 << 1];
 						pm_scanline[hposp1] |= 0x02;
-
-						P1PF |= pf_collision_bit[playfield];
+						P1PL |= pm_scanline[hposp1];
 					}
 					hposp1++;
 				}
@@ -387,16 +265,10 @@ void PM_ScanLine(void)
 				int j;
 
 				for (j = 0; j < sizep2; j++) {
-					if ((hposp2 >= 0) && (hposp2 < ATARI_WIDTH)) {
-						UBYTE playfield = scrn_ptr[hposp2];
-
-#ifdef DIRECT_VIDEO
-						playfield = colour_to_pf[playfield];
-#endif
-
+					if ((hposp2 >= 0) && (hposp2 < ATARI_WIDTH / 2)) {
+						UBYTE playfield = scrn_ptr[hposp2 << 1];
 						pm_scanline[hposp2] |= 0x04;
-
-						P2PF |= pf_collision_bit[playfield];
+						P2PL |= pm_scanline[hposp2];
 					}
 					hposp2++;
 				}
@@ -426,16 +298,10 @@ void PM_ScanLine(void)
 				int j;
 
 				for (j = 0; j < sizep3; j++) {
-					if ((hposp3 >= 0) && (hposp3 < ATARI_WIDTH)) {
-						UBYTE playfield = scrn_ptr[hposp3];
-
-#ifdef DIRECT_VIDEO
-						playfield = colour_to_pf[playfield];
-#endif
-
+					if ((hposp3 >= 0) && (hposp3 < ATARI_WIDTH / 2)) {
+						UBYTE playfield = scrn_ptr[hposp3 << 1];
 						pm_scanline[hposp3] |= 0x08;
-
-						P3PF |= pf_collision_bit[playfield];
+						P3PL |= pm_scanline[hposp3];
 					}
 					hposp3++;
 				}
@@ -447,98 +313,63 @@ void PM_ScanLine(void)
 			grafp3 = grafp3 << 1;
 		}
 	}
+
 /*
    =============================
    Display graphics for Missiles
    =============================
  */
 	if (GRAFM) {
+		UBYTE grafm = GRAFM;
 		int hposm0 = global_hposm0;
 		int hposm1 = global_hposm1;
 		int hposm2 = global_hposm2;
 		int hposm3 = global_hposm3;
-		int i, mask;
+		int i;
 
 		dirty = TRUE;
 
-		for (i = 0, mask = 0x80; i < 8; i++) {
-			if (GRAFM & mask) {
+		for (i = 0; i < 8; i++) {
+			if (grafm & 0x80) {
 				int j;
 
-/*        for (j=0;j<sizem;j++) */
-				{
+				for (j = 0; j < global_sizem[3 - (i >> 1)]; j++) {
 					switch (i & 0x06) {
 					case 0x00:
-						for (j = 0; j < global_sizem3; j++) {
-							if ((hposm3 >= 0) && (hposm3 < ATARI_WIDTH)) {
-								UBYTE playfield = scrn_ptr[hposm3];
-								UBYTE player = pm_scanline[hposm3];
-
-#ifdef DIRECT_VIDEO
-								playfield = colour_to_pf[playfield];
-#endif
-
-								pm_scanline[hposm3] |= 0x80;
-
-								M3PF |= pf_collision_bit[playfield];
-								M3PL |= player;
-							}
-							hposm3++;
+						if ((hposm3 >= 0) && (hposm3 < ATARI_WIDTH / 2)) {
+							UBYTE playfield = scrn_ptr[hposm3 << 1];
+							UBYTE player = pm_scanline[hposm3];
+							pm_scanline[hposm3] |= 0x80;
+							M3PL |= player;
 						}
+						hposm3++;
 						break;
 					case 0x02:
-						for (j = 0; j < global_sizem2; j++) {
-							if ((hposm2 >= 0) && (hposm2 < ATARI_WIDTH)) {
-								UBYTE playfield = scrn_ptr[hposm2];
-								UBYTE player = pm_scanline[hposm2];
-
-#ifdef DIRECT_VIDEO
-								playfield = colour_to_pf[playfield];
-#endif
-
-								pm_scanline[hposm2] |= 0x40;
-
-								M2PF |= pf_collision_bit[playfield];
-								M2PL |= player;
-							}
-							hposm2++;
+						if ((hposm2 >= 0) && (hposm2 < ATARI_WIDTH / 2)) {
+							UBYTE playfield = scrn_ptr[hposm2 << 1];
+							UBYTE player = pm_scanline[hposm2];
+							pm_scanline[hposm2] |= 0x40;
+							M2PL |= player;
 						}
+						hposm2++;
 						break;
 					case 0x04:
-						for (j = 0; j < global_sizem1; j++) {
-							if ((hposm1 >= 0) && (hposm1 < ATARI_WIDTH)) {
-								UBYTE playfield = scrn_ptr[hposm1];
-								UBYTE player = pm_scanline[hposm1];
-
-#ifdef DIRECT_VIDEO
-								playfield = colour_to_pf[playfield];
-#endif
-
-								pm_scanline[hposm1] |= 0x20;
-
-								M1PF |= pf_collision_bit[playfield];
-								M1PL |= player;
-							}
-							hposm1++;
+						if ((hposm1 >= 0) && (hposm1 < ATARI_WIDTH / 2)) {
+							UBYTE playfield = scrn_ptr[hposm1 << 1];
+							UBYTE player = pm_scanline[hposm1];
+							pm_scanline[hposm1] |= 0x20;
+							M1PL |= player;
 						}
+						hposm1++;
 						break;
 					case 0x06:
-						for (j = 0; j < global_sizem0; j++) {
-							if ((hposm0 >= 0) && (hposm0 < ATARI_WIDTH)) {
-								UBYTE playfield = scrn_ptr[hposm0];
-								UBYTE player = pm_scanline[hposm0];
-
-#ifdef DIRECT_VIDEO
-								playfield = colour_to_pf[playfield];
-#endif
-
-								pm_scanline[hposm0] |= 0x10;
-
-								M0PF |= pf_collision_bit[playfield];
-								M0PL |= player;
-							}
-							hposm0++;
+						if ((hposm0 >= 0) && (hposm0 < ATARI_WIDTH / 2)) {
+							UBYTE playfield = scrn_ptr[hposm0 << 1];
+							UBYTE player = pm_scanline[hposm0];
+							pm_scanline[hposm0] |= 0x10;
+							M0PL |= player;
 						}
+						hposm0++;
 						break;
 					}
 				}
@@ -546,293 +377,25 @@ void PM_ScanLine(void)
 			else {
 				switch (i & 0x06) {
 				case 0x00:
-					hposm3 += global_sizem3;
+					hposm3 += global_sizem[3];
 					break;
 				case 0x02:
-					hposm2 += global_sizem2;
+					hposm2 += global_sizem[2];
 					break;
 				case 0x04:
-					hposm1 += global_sizem1;
+					hposm1 += global_sizem[1];
 					break;
 				case 0x06:
-					hposm0 += global_sizem0;
+					hposm0 += global_sizem[0];
 					break;
 				}
 			}
 
-			mask = mask >> 1;
+			grafm = grafm << 1;
 		}
-	}
-/*
-   ======================================
-   Plot Player/Missile Data onto Scanline
-   ======================================
- */
-	if (dirty) {
-		static int which_pm_lookup[16] =
-		{
-			0xff,				/* 0000 - None */
-			0x00,				/* 0001 - Player 0 */
-			0x01,				/* 0010 - Player 1 */
-			0x00,				/* 0011 - Player 0 */
-			0x02,				/* 0100 - Player 2 */
-			0x00,				/* 0101 - Player 0 */
-			0x01,				/* 0110 - Player 1 */
-			0x00,				/* 0111 - Player 0 */
-			0x03,				/* 1000 - Player 3 */
-			0x00,				/* 1001 - Player 0 */
-			0x01,				/* 1010 - Player 1 */
-			0x00,				/* 1011 - Player 0 */
-			0x02,				/* 1100 - Player 2 */
-			0x00,				/* 1101 - Player 0 */
-			0x01,				/* 1110 - Player 1 */
-			0x00				/* 1111 - Player 0 */
-		};
-
-		int xpos;
-
-		for (xpos = 0; xpos < ATARI_WIDTH; xpos++) {
-			UBYTE pm_pixel;
-
-			pm_pixel = pm_scanline[xpos];
-			if (pm_pixel) {
-				UBYTE pf_pixel;
-				UBYTE colreg;
-				UBYTE player;
-				int which_player;
-				int which_missile;
-
-				pf_pixel = scrn_ptr[xpos];
-#ifdef DIRECT_VIDEO
-				pf_pixel = colour_to_pf[pf_pixel];
-#endif
-				player = pm_pixel & 0x0f;
-
-				if (player & 0x01)
-					P0PL |= player;
-				if (player & 0x02)
-					P1PL |= player;
-				if (player & 0x04)
-					P2PL |= player;
-				if (player & 0x08)
-					P3PL |= player;
-
-				which_player = which_pm_lookup[pm_pixel & 0x0f];
-				which_missile = which_pm_lookup[(pm_pixel >> 4) & 0x0f];
-
-				colreg = WhichColourReg(pf_pixel, which_player, which_missile);
-
-#ifdef DIRECT_VIDEO
-				scrn_ptr[xpos] = colour_lookup[colreg];
-#else
-				scrn_ptr[xpos] = colreg;
-#endif
-			}
-		}
-
-		memset(pm_scanline, 0, ATARI_WIDTH);
 	}
 }
 
-void Atari_ScanLine(void)
-{
-	int i;
-
-	if (DELAYED_SERIN_IRQ > 0) {
-		if (--DELAYED_SERIN_IRQ == 0) {
-			if (IRQEN & 0x20) {
-#ifdef DEBUG2
-				printf("SERIO: SERIN Interrupt triggered\n");
-#endif
-				IRQST &= 0xdf;
-				IRQ = 1;
-			}
-#ifdef DEBUG2
-			else {
-				printf("SERIO: SERIN Interrupt missed\n");
-			}
-#endif
-		}
-	}
-
-	if (DELAYED_SEROUT_IRQ > 0) {
-		if (--DELAYED_SEROUT_IRQ == 0) {
-			if (IRQEN & 0x10) {
-#ifdef DEBUG2
-				printf("SERIO: SEROUT Interrupt triggered\n");
-#endif
-				IRQST &= 0xef;
-				IRQ = 1;
-			}
-#ifdef DEBUG2
-			else {
-				printf("SERIO: SEROUT Interrupt missed\n");
-			}
-#endif
-		}
-	}
-
-	if (DELAYED_XMTDONE_IRQ > 0) {
-		if (--DELAYED_XMTDONE_IRQ == 0) {
-			if (IRQEN & 0x08) {
-#ifdef DEBUG2
-				printf("SERIO: XMTDONE Interrupt triggered\n");
-#endif
-				IRQST &= 0xf7;
-				IRQ = 1;
-			}
-#ifdef DEBUG2
-			else {
-				printf("SERIO: XMTDONE Interrupt missed\n");
-			}
-#endif
-		}
-	}
-
-#ifdef DIRECT_VIDEO
-	for (i = 0; i < dmactl_xmin_noscroll; i++)
-		scrn_ptr[i] = colour_lookup[8];
-
-	for (i = dmactl_xmax_noscroll; i < ATARI_WIDTH; i++)
-		scrn_ptr[i] = colour_lookup[8];
-#else
-	for (i = 0; i < dmactl_xmin_noscroll; i++)
-		scrn_ptr[i] = PF_COLBK;
-
-	for (i = dmactl_xmax_noscroll; i < ATARI_WIDTH; i++)
-		scrn_ptr[i] = PF_COLBK;
-#endif
-
-	PM_ScanLine();
-
-	if (PRIOR & 0xc0) {
-		UBYTE *t_scrn_ptr1;		/* Input Pointer */
-		UBYTE *t_scrn_ptr2;		/* Output Pointer */
-		int xpos;
-		int nibble = 0;			/* initialise value, just for sure */
-
-		t_scrn_ptr1 = scrn_ptr;
-		t_scrn_ptr2 = scrn_ptr;
-
-		for (xpos = 0; xpos < ATARI_WIDTH; xpos++) {
-			UBYTE pf_pixel;
-			UBYTE colour = 0;	/* initialise value, just for sure */
-
-			pf_pixel = *t_scrn_ptr1++;
-#ifdef DIRECT_VIDEO
-			pf_pixel = colour_to_pf[pf_pixel];
-#endif
-
-			if ((xpos & 0x03) == 0x00)
-				nibble = 0;
-
-			nibble <<= 1;
-
-			if (pf_pixel == PF_COLPF1)
-				nibble += 1;
-
-			if ((xpos & 0x03) == 0x03) {
-				switch (PRIOR & 0xc0) {
-				case 0x40:
-					colour = colour_translation_table[(COLBK & 0xf0) | nibble];
-					break;
-				case 0x80:
-					if (nibble >= 8)
-						nibble -= 9;
-					colour = colour_lookup[nibble];
-					break;
-				case 0xc0:
-					colour = colour_translation_table[(nibble << 4) | (COLBK & 0x0f)];
-					break;
-				}
-
-				*t_scrn_ptr2++ = colour;
-				*t_scrn_ptr2++ = colour;
-				*t_scrn_ptr2++ = colour;
-				*t_scrn_ptr2++ = colour;
-			}
-		}
-
-		scrn_ptr = t_scrn_ptr2;
-	}
-#ifndef DIRECT_VIDEO
-	else {
-#ifdef CPUASS
-		color_scanline(scrn_ptr, colour_lookup16);
-#else
-/* original, slow code 
-		UBYTE *t_scrn_ptr;
-		int xpos;
-
-		t_scrn_ptr = scrn_ptr;
-
-		for (xpos = 0; xpos < ATARI_WIDTH; xpos += 8) {
-			UBYTE colreg;
-			UBYTE colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-
-			colreg = *t_scrn_ptr;
-			colour = colour_lookup[colreg];
-			*t_scrn_ptr++ = colour;
-		}
-*/
-		UWORD *t_scrn_ptr;
-		int xpos;
-
-		t_scrn_ptr = (UWORD *)scrn_ptr;
-
-		for (xpos = 0; xpos < ATARI_WIDTH; xpos += 8) {
-			UWORD colreg16;
-			UWORD colour16;
-
-			colreg16 = *t_scrn_ptr;
-			colour16 = colour_lookup16[colreg16];
-			*t_scrn_ptr++ = colour16;
-
-			colreg16 = *t_scrn_ptr;
-			colour16 = colour_lookup16[colreg16];
-			*t_scrn_ptr++ = colour16;
-
-			colreg16 = *t_scrn_ptr;
-			colour16 = colour_lookup16[colreg16];
-			*t_scrn_ptr++ = colour16;
-
-			colreg16 = *t_scrn_ptr;
-			colour16 = colour_lookup16[colreg16];
-			*t_scrn_ptr++ = colour16;
-		}
-#endif	/* CPUASS */
-#endif	/* !DIRECT_VIDEO */
-		scrn_ptr += ATARI_WIDTH;
-	}
-}
 
 UBYTE GTIA_GetByte(UWORD addr)
 {
@@ -850,52 +413,82 @@ UBYTE GTIA_GetByte(UWORD addr)
 		}
 		break;
 	case _M0PF:
-		byte = M0PF;
+		byte = (pf_colls[4] & 0x10) >> 4;
+		byte |= (pf_colls[5] & 0x10) >> 3;
+		byte |= (pf_colls[6] & 0x10) >> 2;
+		byte |= (pf_colls[7] & 0x10) >> 1;
 		break;
 	case _M1PF:
-		byte = M1PF;
+		byte = (pf_colls[4] & 0x20) >> 5;
+		byte |= (pf_colls[5] & 0x20) >> 4;
+		byte |= (pf_colls[6] & 0x20) >> 3;
+		byte |= (pf_colls[7] & 0x20) >> 2;
 		break;
 	case _M2PF:
-		byte = M2PF;
+		byte = (pf_colls[4] & 0x40) >> 6;
+		byte |= (pf_colls[5] & 0x40) >> 5;
+		byte |= (pf_colls[6] & 0x40) >> 4;
+		byte |= (pf_colls[7] & 0x40) >> 3;
 		break;
 	case _M3PF:
-		byte = M3PF;
+		byte = (pf_colls[4] & 0x80) >> 7;
+		byte |= (pf_colls[5] & 0x80) >> 6;
+		byte |= (pf_colls[6] & 0x80) >> 5;
+		byte |= (pf_colls[7] & 0x80) >> 4;
 		break;
 	case _M0PL:
-		byte = M0PL;
+		byte = M0PL & 0x0f;		//AAA fix for galaxian. easier to do it here.
+
 		break;
 	case _M1PL:
-		byte = M1PL;
+		byte = M1PL & 0x0f;
 		break;
 	case _M2PL:
-		byte = M2PL;
+		byte = M2PL & 0x0f;
 		break;
 	case _M3PL:
-		byte = M3PL;
+		byte = M3PL & 0x0f;
 		break;
 	case _P0PF:
-		byte = P0PF;
+		byte = (pf_colls[4] & 0x01);
+		byte |= (pf_colls[5] & 0x01) << 1;
+		byte |= (pf_colls[6] & 0x01) << 2;
+		byte |= (pf_colls[7] & 0x01) << 3;
 		break;
 	case _P1PF:
-		byte = P1PF;
+		byte = (pf_colls[4] & 0x02) >> 1;
+		byte |= (pf_colls[5] & 0x02);
+		byte |= (pf_colls[6] & 0x02) << 1;
+		byte |= (pf_colls[7] & 0x02) << 2;
 		break;
 	case _P2PF:
-		byte = P2PF;
+		byte = (pf_colls[4] & 0x04) >> 2;
+		byte |= (pf_colls[5] & 0x04) >> 1;
+		byte |= (pf_colls[6] & 0x04);
+		byte |= (pf_colls[7] & 0x04) << 1;
 		break;
 	case _P3PF:
-		byte = P3PF;
+		byte = (pf_colls[4] & 0x08) >> 3;
+		byte |= (pf_colls[5] & 0x08) >> 2;
+		byte |= (pf_colls[6] & 0x08) >> 1;
+		byte |= (pf_colls[7] & 0x08);
 		break;
 	case _P0PL:
-		byte = P0PL & 0xfe;
+		byte = (P1PL & 0x01) << 1;	/* mask in player 1 */
+		byte |= (P2PL & 0x01) << 2;		/* mask in player 2 */
+		byte |= (P3PL & 0x01) << 3;		/* mask in player 3 */
 		break;
 	case _P1PL:
-		byte = P1PL & 0xfd;
+		byte = (P1PL & 0x01);	/* mask in player 0 */
+		byte |= (P2PL & 0x02) << 1;		/* mask in player 2 */
+		byte |= (P3PL & 0x02) << 2;		/* mask in player 3 */
 		break;
 	case _P2PL:
-		byte = P2PL & 0xfb;
+		byte = (P2PL & 0x03);	/*mask in player 0 and 1 */
+		byte |= (P3PL & 0x04) << 1;		/*mask in player 3 */
 		break;
 	case _P3PL:
-		byte = P3PL & 0xf7;
+		byte = P3PL & 0x07;		/* mask in player 0,1, and 2 */
 		break;
 	case _PAL:
 		if (tv_mode == PAL)
@@ -910,13 +503,13 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte = Atari_TRIG(1);
 		break;
 	case _TRIG2:
-		if (machine == Atari)
+		if ((machine != AtariXL) && (machine != AtariXE))
 			byte = Atari_TRIG(2);
 		else
 			byte = 0;
 		break;
 	case _TRIG3:
-		if (machine == Atari)
+		if ((machine != AtariXL) && (machine != AtariXE))
 			byte = Atari_TRIG(3);
 		else
 			/* extremely important patch - thanks to this hundred of games start running (BruceLee) */
@@ -925,88 +518,122 @@ UBYTE GTIA_GetByte(UWORD addr)
 	case _GRACTL:
 		byte = 0x0f;			/* according to XL-it! this helps some games */
 		break;
-	default:
-		byte = 0;				/* just for sure */
 	}
 
 	return byte;
 }
 
-void setcolreg(int pf, UBYTE colour)
-{
-#ifdef DIRECT_VIDEO
-	colour_to_pf[colour_lookup[pf]] = 0x00;
-
-	colour_lookup[pf] = colour_translation_table[colour];
-	while (colour_to_pf[colour_lookup[pf]] != 0) {
-		colour++;
-		colour_lookup[pf] = colour_translation_table[colour];
-	}
-
-	colour_to_pf[colour_lookup[pf]] = pf;
-#else
-	int i;
-
-	colour_lookup[pf] = colour_translation_table[colour];
-
-	for (i = 0; i < 9; i++) {
-		colour_lookup16[(pf << 8) + i] &= 0x00ff;
-		colour_lookup16[(pf << 8) + i] |= colour_translation_table[colour] << 8;
-		colour_lookup16[pf + (i << 8)] &= 0xff00;
-		colour_lookup16[pf + (i << 8)] |= colour_translation_table[colour];
-	}
-#endif
-}
-
 int GTIA_PutByte(UWORD addr, UBYTE byte)
 {
+	UWORD cword;
 	addr &= 0xff1f;
 	switch (addr) {
 	case _COLBK:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLBK = byte;
-		setcolreg(8, byte);
+		cword = colour_lookup[8] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[8] = cword;
 		break;
 	case _COLPF0:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPF0 = byte;
-		setcolreg(4, byte);
+		cword = colour_lookup[4] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[4] = cword;
+		cl_word[R_COLPM0_OR_PF0] = cl_word[0] | cword;
+		cl_word[R_COLPM1_OR_PF0] = cl_word[1] | cword;
+		cl_word[R_COLPM0OR1_OR_PF0] = cl_word[R_COLPM0OR1] | cword;
 		break;
 	case _COLPF1:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPF1 = byte;
-		setcolreg(5, byte);
+		cword = colour_lookup[5] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[5] = cword;
+		cl_word[R_COLPM0_OR_PF1] = cl_word[0] | cword;
+		cl_word[R_COLPM1_OR_PF1] = cl_word[1] | cword;
+		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cword;
 		break;
 	case _COLPF2:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPF2 = byte;
-		setcolreg(6, byte);
+		cword = colour_lookup[6] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[6] = cword;
+		cl_word[R_COLPM2_OR_PF2] = cl_word[0] | cword;
+		cl_word[R_COLPM3_OR_PF2] = cl_word[1] | cword;
+		cl_word[R_COLPM2OR3_OR_PF2] = cl_word[R_COLPM2OR3] | cword;
 		break;
 	case _COLPF3:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPF3 = byte;
-		setcolreg(7, byte);
+		cword = colour_lookup[7] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[7] = cword;
+		cl_word[R_COLPM2_OR_PF3] = cl_word[0] | cword;
+		cl_word[R_COLPM3_OR_PF3] = cl_word[1] | cword;
+		cl_word[R_COLPM2OR3_OR_PF3] = cl_word[R_COLPM2OR3] | cword;
 		break;
 	case _COLPM0:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPM0 = byte;
-#ifndef DIRECT_VIDEO
-		setcolreg(0, byte);
-#endif
+		cword = colour_lookup[0] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[0] = cword;
+		cl_word[R_COLPM0OR1] = cl_word[1] | cword;
+		cl_word[R_COLPM0_OR_PF0] = cl_word[4] | cword;
+		cl_word[R_COLPM0_OR_PF1] = cl_word[5] | cword;
+		cl_word[R_COLPM0OR1_OR_PF0] = cl_word[R_COLPM0OR1] | cl_word[4];
+		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cl_word[5];
 		break;
 	case _COLPM1:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPM1 = byte;
-#ifndef DIRECT_VIDEO
-		setcolreg(1, byte);
-#endif
+		cword = colour_lookup[1] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[1] = cword;
+		cl_word[R_COLPM0OR1] = cl_word[0] | cword;
+		cl_word[R_COLPM1_OR_PF0] = cl_word[4] | cword;
+		cl_word[R_COLPM1_OR_PF1] = cl_word[5] | cword;
+		cl_word[R_COLPM0OR1_OR_PF0] = cl_word[R_COLPM0OR1] | cl_word[4];
+		cl_word[R_COLPM0OR1_OR_PF1] = cl_word[R_COLPM0OR1] | cl_word[5];
 		break;
 	case _COLPM2:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPM2 = byte;
-#ifndef DIRECT_VIDEO
-		setcolreg(2, byte);
-#endif
+		cword = colour_lookup[2] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[2] = cword;
+		cl_word[R_COLPM2OR3] = cl_word[3] | cword;
+		cl_word[R_COLPM2_OR_PF2] = cl_word[6] | cword;
+		cl_word[R_COLPM2_OR_PF3] = cl_word[7] | cword;
+		cl_word[R_COLPM2OR3_OR_PF2] = cl_word[R_COLPM2OR3] | cl_word[6];
+		cl_word[R_COLPM2OR3_OR_PF3] = cl_word[R_COLPM2OR3] | cl_word[7];
 		break;
 	case _COLPM3:
+		byte &= 0xfe;			//clip lowest bit. 16 lum only in gtia 9!
+
 		COLPM3 = byte;
-#ifndef DIRECT_VIDEO
-		setcolreg(3, byte);
-#endif
+		cword = colour_lookup[3] = colour_translation_table[byte];
+		cword = cword | (cword << 8);
+		cl_word[3] = cword;
+		cl_word[R_COLPM2OR3] = cl_word[2] | cword;
+		cl_word[R_COLPM3_OR_PF2] = cl_word[6] | cword;
+		cl_word[R_COLPM3_OR_PF3] = cl_word[7] | cword;
+		cl_word[R_COLPM2OR3_OR_PF2] = cl_word[R_COLPM2OR3] | cl_word[6];
+		cl_word[R_COLPM2OR3_OR_PF3] = cl_word[R_COLPM2OR3] | cl_word[7];
 		break;
 	case _CONSOL:
+		atari_speaker = !(byte & 0x08);
 		break;
 	case _GRAFM:
 		GRAFM = byte;
@@ -1028,6 +655,7 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		P0PF = P1PF = P2PF = P3PF = 0;
 		M0PL = M1PL = M2PL = M3PL = 0;
 		P0PL = P1PL = P2PL = P3PL = 0;
+		pf_colls[4] = pf_colls[5] = pf_colls[6] = pf_colls[7] = 0;
 		break;
 	case _HPOSM0:
 		HPOSM0 = byte;
@@ -1063,15 +691,10 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		break;
 	case _SIZEM:
 		SIZEM = byte;
-		global_sizem0 = PM_Width[byte & 0x03];
-		if (PRIOR & 0x10) {
-			global_sizem1 = global_sizem2 = global_sizem3 = global_sizem0;
-		}
-		else {
-			global_sizem1 = PM_Width[(byte >> 2) & 0x03];
-			global_sizem2 = PM_Width[(byte >> 4) & 0x03];
-			global_sizem3 = PM_Width[(byte >> 6) & 0x03];
-		}
+		global_sizem[0] = PM_Width[byte & 0x03];
+		global_sizem[1] = PM_Width[(byte & 0x0C) >> 2];
+		global_sizem[2] = PM_Width[(byte & 0x30) >> 4];
+		global_sizem[3] = PM_Width[(byte & 0xC0) >> 6];
 		break;
 	case _SIZEP0:
 		SIZEP0 = byte;
@@ -1090,10 +713,37 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		global_sizep3 = PM_Width[byte & 0x03];
 		break;
 	case _PRIOR:
+		if ((byte & 0x20) != (PRIOR & 0x20)) {	//multi-colour player
+
+			if (byte & 0x20) {
+				new_pm_lookup[3] = L_PM01;
+				new_pm_lookup[7] = L_PM01;
+				new_pm_lookup[11] = L_PM01;
+				new_pm_lookup[12] = L_PM23;
+			}
+			else {
+				new_pm_lookup[3] = L_PM0;
+				new_pm_lookup[7] = L_PM0;
+				new_pm_lookup[11] = L_PM0;
+				new_pm_lookup[12] = L_PM2;
+			}
+		}
+		if (byte & 0x10)
+			p5_mask = 0xf0;		//missile=pf3 5th player
+
+		else
+			p5_mask = 0x00;
+		if ((byte & 0x0f) != (PRIOR & 0x0f)) {
+			memcpy(&cur_prior, &prior_table[((byte & 0x0f) * 35)], 35);
+		}
 		PRIOR = byte;
 		break;
 	case _GRACTL:
 		GRACTL = byte;
+		missile_gra_enabled = (byte & 0x01);
+		player_gra_enabled = (byte & 0x02);
+		player_flickering = ( (player_dma_enabled | player_gra_enabled) == 0x02);
+		missile_flickering = ( (missile_dma_enabled | missile_gra_enabled) == 0x01);
 		break;
 	}
 

@@ -75,9 +75,9 @@
 
 #ifdef COMP16						   /* if 16-bit compiler */
 #define POLY17_SIZE 0x00007fffL    /* reduced to 15 bits for simplicity */
-#else							/*  */
+#else							/*  */
 #define POLY17_SIZE 0x0001ffffL    /* else use the full 17 bits */
-#endif							/*  */
+#endif							/*  */
 
 /* channel definitions */ 
 #define CHAN1       0

@@ -51,13 +51,13 @@
 #define int8  char
 #define int16 short
 #define int32 int
-#endif							/*  */
+#endif							/*  */
 
 #define uint8  unsigned int8
 #define uint16 unsigned int16
 #define uint32 unsigned int32
 
-#endif							/*  */
+#endif							/*  */
 
 /* CONSTANT DEFINITIONS */ 
 
@@ -69,7 +69,7 @@
 #ifdef __cplusplus
 extern "C" {
 	
-#endif							/*  */
+#endif							/*  */
 	
 	uint8 OpenSB(uint16 playback_freq, 
 				 uint16 buffer_size);
@@ -92,7 +92,7 @@ extern "C" {
 #ifdef __cplusplus
 } 
 
-#endif							/*  */
+#endif							/*  */
 
-#endif							/*  */
+#endif							/*  */
 

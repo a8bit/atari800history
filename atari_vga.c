@@ -469,19 +469,25 @@ int Atari_Keyboard(void)
 			keycode = AKEY_UP;
 		break;
 	case 0x02:
-		if (SHIFT_KEY)
+		if (control)
+			keycode = 159;		/* stops text scrolling */
+		else if (SHIFT_KEY)
 			keycode = AKEY_EXCLAMATION;
 		else
 			keycode = AKEY_1;
 		break;
 	case 0x03:
-		if (SHIFT_KEY)
+		if (control)
+			keycode = 158;		/* bell */
+		else if (SHIFT_KEY)
 			keycode = AKEY_DBLQUOTE;
 		else
 			keycode = AKEY_2;
 		break;
 	case 0x04:
-		if (SHIFT_KEY)
+		if (control)
+			keycode = 154;		/* EOF */
+		else if (SHIFT_KEY)
 			keycode = AKEY_HASH;
 		else
 			keycode = AKEY_3;
@@ -864,6 +870,24 @@ int Atari_Keyboard(void)
 			keycode = AKEY_BAR;
 		else
 			keycode = AKEY_BACKSLASH;
+		break;
+	case 71:	/* HOME key */
+		keycode = 118;		/* clear screen */
+		break;
+	case 79:	/* END key */
+		keycode = AKEY_BREAK;
+		break;
+	case 82:	/* INSERT key */
+		if (SHIFT_KEY)
+			keycode = AKEY_INSERT_LINE;
+		else
+			keycode = AKEY_INSERT_CHAR;
+		break;
+	case 83:	/* DELETE key */
+		if (SHIFT_KEY)
+			keycode = AKEY_DELETE_LINE;
+		else
+			keycode = AKEY_DELETE_CHAR;
 		break;
 	default:
 		keycode = AKEY_NONE;

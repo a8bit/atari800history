@@ -48,7 +48,6 @@ int main(void)
 
 	char linux_joystick = 'N';
 	char joymouse = 'N';
-	char direct_video = 'N';
 	char voxware = 'N';
 	int allow_unaligned_long = 0;
 
@@ -61,7 +60,7 @@ int main(void)
 #ifndef DJGPP
 	sprintf(config_filename, "%s/.atari800", home);
 #else
-	sprintf(config_filename, "%s/atari800.cfg", home);
+	sprintf(config_filename, "%s/atari800.djgpp", home);
 #endif
 
 	fp = fopen(config_filename, "r");
@@ -78,9 +77,6 @@ int main(void)
 			if (fscanf(fp, "\n%c", &linux_joystick) == 0)
 				linux_joystick = 'N';
 
-			if (fscanf(fp, "\n%c\n", &direct_video) == 0)
-				direct_video = 'N';
-
 			if (fscanf(fp, "\n%c", &joymouse) == 0)
 				joymouse = 'N';
 
@@ -95,7 +91,6 @@ int main(void)
 	}
 	YesNo("Enable LINUX Joystick [%c] ", &linux_joystick);
 	YesNo("Support for Toshiba Joystick Mouse (Linux SVGALIB Only) [%c] ", &joymouse);
-	YesNo("Enable Direct Video Access [%c] ", &direct_video);
 	YesNo("Enable Voxware Sound Support (Linux) [%c] ", &voxware);
 
 	printf("Testing unaligned long accesses...");
@@ -113,9 +108,6 @@ int main(void)
 
 		if (linux_joystick == 'Y')
 			fprintf(fp, "#define LINUX_JOYSTICK\n");
-
-		if (direct_video == 'Y')
-			fprintf(fp, "#define DIRECT_VIDEO\n");
 
 		if (joymouse == 'Y')
 			fprintf(fp, "#define JOYMOUSE\n");
@@ -136,7 +128,6 @@ int main(void)
 
 		fprintf(fp, "%s\n", ATARI_TITLE);
 		fprintf(fp, "%c\n", linux_joystick);
-		fprintf(fp, "%c\n", direct_video);
 		fprintf(fp, "%c\n", joymouse);
 		fprintf(fp, "%c\n", voxware);
 

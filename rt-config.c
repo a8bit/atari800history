@@ -29,7 +29,6 @@ int default_tv_mode;
 int hold_option;
 int enable_c000_ram;
 int enable_sio_patch;
-int enable_xcolpf1;
 
 static char *rtconfig_filename1 = "atari800.cfg";
 static char *rtconfig_filename2 = "/etc/atari800.cfg";
@@ -59,10 +58,9 @@ int RtConfigLoad(char *rtconfig_filename)
 	refresh_rate = 1;
 	default_system = 3;
 	default_tv_mode = 1;
-	hold_option = 0;
+	hold_option = 1;
 	enable_c000_ram = 0;
 	enable_sio_patch = 1;
-	enable_xcolpf1 = 0;
 
 	if (rtconfig_filename) {
 		fp = fopen(rtconfig_filename, "r");
@@ -123,8 +121,6 @@ int RtConfigLoad(char *rtconfig_filename)
 					sscanf(ptr, "%d", &enable_c000_ram);
 				else if (strcmp(string, "ENABLE_SIO_PATCH") == 0)
 					sscanf(ptr, "%d", &enable_sio_patch);
-				else if (strcmp(string, "ENABLE_XCOLPF1") == 0)
-					sscanf(ptr, "%d", &enable_xcolpf1);
 				else if (strcmp(string, "DEFAULT_SYSTEM") == 0) {
 					if (strcmp(ptr, "Atari OS/A") == 0)
 						default_system = 1;
@@ -218,18 +214,24 @@ void RtConfigSave(void)
 	fprintf(fp, "HOLD_OPTION=%d\n", hold_option);
 	fprintf(fp, "ENABLE_C000_RAM=%d\n", enable_c000_ram);
 	fprintf(fp, "ENABLE_SIO_PATCH=%d\n", enable_sio_patch);
-	fprintf(fp, "ENABLE_XCOLPF1=%d\n", enable_xcolpf1);
 
 	fclose(fp);
 }
 
 void RtConfigUpdate(void)
 {
-	GetString("Enter path to Atari OS/A ROM [%s] ", atari_osa_filename);
-	GetString("Enter path to Atari OS/B ROM [%s] ", atari_osb_filename);
-	GetString("Enter path to Atari XL/XE ROM [%s] ", atari_xlxe_filename);
-	GetString("Enter path to Atari BASIC ROM [%s] ", atari_basic_filename);
-	GetString("Enter path to Atari 5200 ROM [%s] ", atari_5200_filename);
+	strcpy(atari_osa_filename, "atariosa.rom");
+	strcpy(atari_osb_filename, "atariosb.rom");
+	strcpy(atari_xlxe_filename, "atarixl.rom");
+	strcpy(atari_basic_filename, "ataribas.rom");
+	strcpy(atari_disk_dir, ".");
+	strcpy(atari_rom_dir, ".");
+
+	GetString("Enter path with filename of Atari OS/A ROM [%s] ", atari_osa_filename);
+	GetString("Enter path with filename of Atari OS/B ROM [%s] ", atari_osb_filename);
+	GetString("Enter path with filename of Atari XL/XE ROM [%s] ", atari_xlxe_filename);
+	GetString("Enter path with filename of Atari BASIC ROM [%s] ", atari_basic_filename);
+	GetString("Enter path with filename of Atari 5200 ROM [%s] ", atari_5200_filename);
 	GetString("Enter path for disk images [%s] ", atari_disk_dir);
 	GetString("Enter path for ROM images [%s] ", atari_rom_dir);
 	GetString("Enter path for H1: device [%s] ", atari_h1_dir);
@@ -267,9 +269,4 @@ void RtConfigUpdate(void)
 		GetNumber("Enable SIO PATCH (Recommended) [%d] ",
 				  &enable_sio_patch);
 	} while ((enable_sio_patch < 0) || (enable_sio_patch > 1));
-
-	do {
-		GetNumber("Enable Extended COLPF1 [%d] ",
-				  &enable_xcolpf1);
-	} while ((enable_xcolpf1 < 0) || (enable_xcolpf1 > 1));
 }

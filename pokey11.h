@@ -40,7 +40,7 @@
 #define int8  char
 #define int16 short
 #define int32 int
-#endif							/*  */
+#endif							/*  */
 
 #define uint8  unsigned int8 
 #define uint16 unsigned int16
@@ -75,4 +75,4 @@ void Pokey_process_2(register unsigned char *buffer, register uint16 n);
 void Pokey_process(register unsigned char *buffer, register uint16 n);
 
 
-#endif							/*  */
+#endif							/*  */

@@ -17,4 +17,23 @@ void SIO(void);
 void SIO_SEROUT(unsigned char byte, int cmd);
 int SIO_SERIN(void);
 
+#define SIO_NoFrame         (0x00)
+#define SIO_CommandFrame    (0x01)
+#define SIO_StatusRead      (0x02)
+#define SIO_ReadFrame       (0x03)
+#define SIO_WriteFrame      (0x04)
+#define SIO_FinalStatus     (0x05)
+
+void SwitchCommandFrame(int onoff);
+void SIO_PutByte(int byte);
+int SIO_GetByte(void);
+void SIO_Initialize(void);
+void SIO_Initialise(int *argc, char *argv[]);
+
+/* Some defines about the serial I/O timing. Currently fixed! */
+#define XMTDONE_INTERVAL 15
+#define SERIN_INTERVAL 15
+#define SEROUT_INTERVAL 15
+#define VBI_INTERVAL 165
+#define ACK_INTERVAL 50
 #endif

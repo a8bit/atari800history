@@ -85,9 +85,9 @@ int SIO_Mount(int diskno, char *filename)
 	drive_status[diskno - 1] = ReadWrite;
 	strcpy(sio_filename[diskno - 1], "Empty");
 
-	fd = open(filename, O_RDWR, 0777);
+	fd = open(filename, O_RDWR | O_BINARY);
 	if (fd == -1) {
-		fd = open(filename, O_RDONLY, 0777);
+		fd = open(filename, O_RDONLY | O_BINARY);
 		drive_status[diskno - 1] = ReadOnly;
 	}
 

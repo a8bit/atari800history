@@ -45,7 +45,7 @@
 #include <go32.h>
 #include <dpmi.h>
 #include <sys/movedata.h>
-#endif							/*  */
+#endif							/*  */
 
 #include <dos.h>
 #include <stdlib.h>
@@ -77,7 +77,7 @@ static int theDOSBufferSegment;
 
 static int theDOSBufferSelector;
 
-#endif							/*  */
+#endif							/*  */
 static uint8 *Sb_buffer;
 
 static uint16 Sb_buf_size = 200;
@@ -111,19 +111,19 @@ static _go32_dpmi_seginfo OldIntVectInfo;
 
 static _go32_dpmi_seginfo NewIntVectInfo;
 
-#else							/*  */
+#else							/*  */
 static void (__interrupt * OldIntVect) (void);
 
-#endif							/*  */
+#endif							/*  */
 
 /* function prototypes */ 
 #ifdef DJGPP
 static void newIntVect(void);
 
-#else							/*  */
+#else							/*  */
 static void interrupt newIntVect(void);
 
-#endif							/*  */
+#endif							/*  */
 
 static void setNewIntVect(uint16 irq);
 
@@ -170,12 +170,12 @@ static void setNewIntVect(uint16 irq)
 			_go32_dpmi_set_protected_mode_interrupt_vector(irq + 0x68, 
 														&NewIntVectInfo);
 		
-#else							/*  */
+#else							/*  */
 			OldIntVect = _dos_getvect(irq + 0x68);
 		
 			_dos_setvect(irq + 0x68, newIntVect);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 		else
@@ -195,12 +195,12 @@ static void setNewIntVect(uint16 irq)
 			_go32_dpmi_set_protected_mode_interrupt_vector(irq + 0x08, 
 														&NewIntVectInfo);
 		
-#else							/*  */
+#else							/*  */
 			OldIntVect = _dos_getvect(irq + 0x08);
 		
 			_dos_setvect(irq + 0x08, newIntVect);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 }
@@ -229,10 +229,10 @@ static void setOldIntVect(uint16 irq)
 		
 			_go32_dpmi_free_iret_wrapper(&NewIntVectInfo);
 		
-#else							/*  */
+#else							/*  */
 			_dos_setvect(irq + 0x68, OldIntVect);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 		else
@@ -245,10 +245,10 @@ static void setOldIntVect(uint16 irq)
 		
 			_go32_dpmi_free_iret_wrapper(&NewIntVectInfo);
 		
-#else							/*  */
+#else							/*  */
 			_dos_setvect(irq + 0x08, OldIntVect);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 }
@@ -386,7 +386,7 @@ static void logErr(char *st)
 #ifdef SBDRV_SHOW_ERR
 		printf("%s", st);
 	
-#endif							/*  */
+#endif							/*  */
 } 
 
 
@@ -686,7 +686,7 @@ void *low_malloc(int size)
 	
 } 
 
-#endif							/*  */
+#endif							/*  */
 
 
 /*****************************************************************************/ 
@@ -937,19 +937,19 @@ uint8 OpenSB(uint16 playback_freq, uint16 buffer_size)
 				theDOSBufferSegment = __dpmi_allocate_dos_memory((Sb_buf_size * 2 + 15) >> 4, 
 												  &theDOSBufferSelector);
 			
-#else							/*  */
+#else							/*  */
 				Sb_buffer = malloc(Sb_buf_size * 2);
 			
-#endif							/*  */
+#endif							/*  */
 				
 			/* if we were unable to successfully allocate the buffer */ 
 #ifdef DJGPP
 				if ((Sb_buffer == 0) || (theDOSBufferSegment == -1))
 				
-#else							/*  */
+#else							/*  */
 				if (Sb_buffer == 0)
 				
-#endif							/*  */
+#endif							/*  */
 			{
 				
 					logErr("Unable to allocate buffer for audio output.\n");
@@ -995,7 +995,7 @@ void CloseSB(void)
 #ifdef __WATCOMC__
 		uint32 addr;
 	
-#endif							/*  */
+#endif							/*  */
 		
 	/* if the SB was initialized */ 
 		if (Sb_init)
@@ -1051,10 +1051,10 @@ void CloseSB(void)
 			
 				__dpmi_free_dos_memory(theDOSBufferSelector);
 			
-#else							/*  */
+#else							/*  */
 				free(Sb_buffer);
 			
-#endif							/*  */
+#endif							/*  */
 		}
 		
 	}
@@ -1157,7 +1157,7 @@ uint8 Start_audio_output(uint8 dma_mode,
 		/* Copy data to DOS memory buffer */ 
 			dosmemput(Sb_buffer, Sb_buf_size * 2, theDOSBufferSegment << 4);
 		
-#endif							/*  */
+#endif							/*  */
 			
 		/* calculate high, low and page addresses of buffer */ 
 #ifdef __WATCOMC__
@@ -1166,11 +1166,11 @@ uint8 Start_audio_output(uint8 dma_mode,
 #elif defined(DJGPP)
 			addr = ((uint32) theDOSBufferSegment) << 4;
 		
-#else							/*  */
+#else							/*  */
 			addr = ((uint32) FP_SEG(Sb_buffer) << 4) + 
 			(uint32) FP_OFF(Sb_buffer);
 		
-#endif							/*  */
+#endif							/*  */
 			Sb_offset = (uint16) (addr & 0x0ffff);
 		
 			offset_low = (uint8) (addr & 0x0ff);
@@ -1300,9 +1300,9 @@ uint8 Start_audio_output(uint8 dma_mode,
 /*****************************************************************************/ 
 #ifdef DJGPP
 static void newIntVect(void) 
-#else							/*  */
+#else							/*  */
 static void interrupt newIntVect(void) 
-#endif							/*  */
+#endif							/*  */
 {
 	
 		uint16 addr;
@@ -1352,7 +1352,7 @@ static void interrupt newIntVect(void)
 			dosmemput(Sb_buffer + Sb_buf_size, Sb_buf_size, 
 					  (theDOSBufferSegment << 4) + Sb_buf_size);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 		else
@@ -1367,7 +1367,7 @@ static void interrupt newIntVect(void)
 		/* Copy data to DOS memory buffer */ 
 			dosmemput(Sb_buffer, Sb_buf_size, theDOSBufferSegment << 4);
 		
-#endif							/*  */
+#endif							/*  */
 	}
 	
 		

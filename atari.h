@@ -21,6 +21,10 @@
 #define	UWORD unsigned short int
 #define	ULONG unsigned long int
 
+#ifndef O_BINARY		/* flag for binary files on MS-DOS */
+#define O_BINARY	0	/* this won't cause any trouble */
+#endif
+
 typedef enum {
 	PAL,
 	NTSC
@@ -39,7 +43,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.8"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.8.9"
 
 #define NO_CART 0
 #define NORMAL8_CART 1

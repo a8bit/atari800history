@@ -104,7 +104,14 @@ Karel Rous <Empty Head>
 Radek Sterba <raster@infos.cz>
 - Added all missing CPU 6502 instructions
 - Implemented precise timing into Antic and CPU
+- Fixed PMG registers and implemented PMG flickering
+- Added full 256 opcodes support to dissasembler
 
 Perry McFarlane <ce596@freenet.toronto.on.ca>
 - Antic fix in vertical scroll
-- Works on complete Antic rewrite
+- Complete Antic rewrite (DIRECT_VIDEO approach, but better)
+- GTIA enhancements (based on Thomas' code, but using DIRECT_VIDEO)
+
+Thomas Richter <thor@math.tu-berlin.de>
+- GTIA collisions and third colour of players
+- worked on SIO debugging

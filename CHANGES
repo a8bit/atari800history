@@ -1,3 +1,42 @@
+Changes in 0.8.9
+----------------
+
+o Antic's DIRECT_VIDEO mode was completely rewritten. Now it is the
+  default mode of emulation, much faster than the previous approach.
+  Antic's scrolling in both horizontal and vertical direction is now
+  supported in all graphics modes. Thanks Perry for all these things.
+
+o Gtia now supports all possible combinations of PMG collisions. It
+  also supports third colour (many games are much more colourful now,
+  just like they were on original Atari800). Thanks Thomas Richter and
+  Perry.
+
+o -configure now preloads the default filenames of ROM images. It also
+  presets hold_option to 1 (for game players is better not to confuse
+  them with Atari Basic). <Raster>
+
+o xcolpf1 kludge was removed (antic, gtia, rt-config files).
+o DIRECT_VIDEO support was removed (configure.c)
+o the compilation config file is named atari800.djgpp on DOS, so it
+  finally doesn't collide with atari800.cfg (config file of emulator itself)
+o sio.c opens files in binary mode - works on DOS
+
+o Atari800 monitor changes: disassembler rewritten (now recognizes all 256
+  opcodes and displays also cycles and hex codes), different (more logical?)
+  commands: [D]isassembler, [C]hange memory, dump [M]emory (previously Y, M, D)
+  <Raster>
+
+o Fixed DMACTL and GRACTL registers (difference between enabled PMG and enabled
+  DMA for PMG). <Raster>
+
+o Introduced PMG flickering (try out POKE 53248,160:POKE 704,14:POKE 53277,3).
+  <Raster>
+
+o DOS keyboard: added Ctrl-1 (stops scrolling), Ctrl-2 (bell), Ctrl-3 (EOF) and
+  HOME key clears screen, END key stands for Atari BREAK key. INSERT and DELETE
+  keys insert and delete chars or whole lines (with Shift and Control keys).
+
+
 Changes in 0.8.8
 ----------------
 

@@ -39,11 +39,11 @@ vidsnd :
 	@echo Finished.
 
 asm :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o gtia_asm.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o"
 	@echo Finished.
 
 super :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o gtia_asm.o pokey23.o sound_dma.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o pokey23.o sound_dma.o"
 	@echo Finished.
 
 #
@@ -169,10 +169,6 @@ ikbd.o	:	ikbd.s
 cpu_m68k.o	:	cpu_m68k.s
 	xgen -L1 cpu_m68k.o cpu_m68k.s
 	gst2gcc gcc cpu_m68k.o
-
-gtia_asm.o	:	gtia_asm.s
-	xgen -L1 gtia_asm.o gtia_asm.s
-	gst2gcc gcc gtia_asm.o
 
 pokey23.o	:       pokey23.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DSIGNED_SAMPLES -DBIG_ENDIAN pokey23.c

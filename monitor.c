@@ -21,6 +21,7 @@ static char *rcsid = "$Id: monitor.c,v 1.15 1998/02/21 15:19:59 david Exp $";
 #define TRUE    1
 
 extern int count[256];
+extern int cycles[256];
 
 extern UBYTE memory[65536];
 
@@ -30,9 +31,10 @@ extern int rom_inserted;
 int tron = FALSE;
 #endif
 
-unsigned int disassemble(UWORD addr1, UWORD addr2);
-void show_opcode(UBYTE instr);
-void show_operand(UBYTE instr);
+unsigned int disassemble(UWORD addr1);
+UWORD show_instruction(UWORD inad, int wid);
+
+static UWORD addr = 0;
 
 char *get_token(char *string)
 {
@@ -70,7 +72,7 @@ int get_hex(char *string, UWORD * hexval)
 
 	t = get_token(string);
 	if (t) {
-		sscanf(t, "%x", &ihexval);
+		sscanf(t, "%X", &ihexval);
 		*hexval = ihexval;
 		return 1;
 	}
@@ -169,7 +171,7 @@ int monitor(void)
 					if (IR & 0x10)
 						printf("HSCROL ");
 
-					printf("MODE %x ", IR & 0x0f);
+					printf("MODE %X ", IR & 0x0f);
 				}
 
 				printf("\n");
@@ -371,7 +373,7 @@ int monitor(void)
 					if (status) {
 						int fd;
 
-						fd = open(filename, O_RDONLY, 0777);
+						fd = open(filename, O_RDONLY | O_BINARY);
 						if (fd == -1) {
 							perror(filename);
 							Atari800_Exit(FALSE);
@@ -399,7 +401,7 @@ int monitor(void)
 			if (status) {
 				int fd;
 
-				fd = open("memdump.dat", O_CREAT | O_TRUNC | O_WRONLY, 0777);
+				fd = open("memdump.dat", O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
 				if (fd == -1) {
 					perror("open");
 					Atari800_Exit(FALSE);
@@ -424,62 +426,32 @@ int monitor(void)
 
 				for (i = addr1; i <= addr2; i++)
 					sum += (UWORD) memory[i];
-				printf("SUM: %x\n", sum);
+				printf("SUM: %X\n", sum);
 			}
 		}
-		else if (strcmp(t, "D") == 0) {
+		else if (strcmp(t, "M") == 0) {
 			int addr1;
-			int addr2;
 			UWORD xaddr1;
-			UWORD xaddr2;
-			UWORD temp;
 			int i;
-
-			addr1 = addr;
-			addr2 = 0;
-
-			get_hex(NULL, &xaddr1);
-			get_hex(NULL, &xaddr2);
-
-			addr1 = xaddr1;
-			addr2 = xaddr2;
-
-			if (addr2 == 0)
-				addr2 = addr1 + 255;
-
-			addr = addr2 + 1;
-			printf("addr1 = %x, addr2 = %x\n", addr1, addr2);
-			while (addr1 <= addr2) {
-				temp = addr1;
-
-				printf("%4x : ", temp);
-
-				for (i = 0; i < 16; i++) {
-					printf("%2x ", memory[temp]);
-					temp++;
-					if (temp > addr2)
-						break;
-				}
-
-				temp = addr1;
-
+			int count;
+			if (get_hex(NULL, &xaddr1)) addr = xaddr1;
+			count = 16;
+			while (count) {
+				printf("%04X : ", addr);
+				for (i = 0; i < 16; i++) printf("%02X ", memory[(UWORD)(addr+i)]);
 				printf("\t");
-
-				for (i = 0; i < 16; i++) {
-					if (isalnum(memory[temp])) {
-						printf("%c", memory[temp]);
+				for (i = 0; i < 16; i++) 
+				{
+					if (isalnum(memory[(UWORD)(addr+i)])) {
+						printf("%c", memory[(UWORD)(addr+i)]);
 					}
 					else {
 						printf(".");
 					}
-					temp++;
-					if (temp > addr2)
-						break;
 				}
-
 				printf("\n");
-
-				addr1 += 16;
+				addr += 16;
+				count--;
 			}
 		}
 		else if (strcmp(t, "F") == 0) {
@@ -523,9 +495,10 @@ int monitor(void)
 					printf("Found at %04x\n", addr);
 				}
 		}
-		else if (strcmp(t, "M") == 0) {
+		else if (strcmp(t, "C") == 0) {
 			UWORD addr;
 			UWORD temp;
+			addr=0; temp = 0;
 
 			get_hex(NULL, &addr);
 
@@ -534,17 +507,11 @@ int monitor(void)
 				addr++;
 			}
 		}
-		else if (strcmp(t, "Y") == 0) {
+		else if (strcmp(t, "D") == 0) {
 			UWORD addr1;
-			UWORD addr2;
-
 			addr1 = addr;
-			addr2 = 0;
-
 			get_hex(NULL, &addr1);
-			get_hex(NULL, &addr2);
-
-			addr = disassemble(addr1, addr2);
+			addr = disassemble(addr1);
 		}
 		else if (strcmp(t, "ANTIC") == 0) {
 			printf("DMACTL=%02x    CHACTL=%02x    DLISTL=%02x    "
@@ -579,11 +546,11 @@ int monitor(void)
 		else if (strcmp(t, "HELP") == 0 || strcmp(t, "?") == 0) {
 			printf("SET{PC,A,S,X,Y} hexval    - Set Register Value\n");
 			printf("SET{N,V,B,D,I,Z,C} hexval - Set Flag Value\n");
-			printf("D [startaddr] [endaddr]   - Display Memory\n");
-			printf("F [startaddr] [endaddr] hexval - Fill Memory\n");
-			printf("M [startaddr] [hexval...] - Modify Memory\n");
-			printf("S [startaddr] [endaddr] hexval - Search Memory\n");
-			printf("Y [startaddr] [endaddr]   - Disassemble Memory\n");
+			printf("C [startaddr] [hexval...] - Change memory\n");
+			printf("D [startaddr]             - Disassemble memory\n");
+			printf("F [startaddr] [endaddr] hexval - Fill memory\n");
+			printf("M [startaddr]             - Memory list\n");
+			printf("S [startaddr] [endaddr] hexval - Search memory\n");
 			printf("ROM addr1 addr2           - Convert Memory Block into ROM\n");
 			printf("RAM addr1 addr2           - Convert Memory Block into RAM\n");
 			printf("HARDWARE addr1 addr2      - Convert Memory Block into HARDWARE\n");
@@ -618,559 +585,125 @@ int monitor(void)
 	}
 }
 
-static UWORD addr;
-
-unsigned int disassemble(UWORD addr1, UWORD addr2)
+unsigned int disassemble(UWORD addr1)
 {
-	UBYTE instr;
+	UWORD i;
 	int count;
 
 	addr = addr1;
+	count = 24;
 
-	count = (addr2 == 0) ? 20 : 0;
-
-	while (addr < addr2 || count > 0) {
-		printf("%x\t", addr);
-
-		instr = memory[addr];
-		addr++;
-
-		show_opcode(instr);
-		show_operand(instr);
-
+	while (count) 
+	{
+		printf("%04X\t", addr);
+		addr1 = show_instruction(addr,20);
+		printf("; %Xcyc ; ", cycles[memory[addr]]);
+		for(i=0; i<addr1; i++) printf("%02X ", memory[(UWORD)(addr+i)]);
 		printf("\n");
-
-		if (count > 0)
-			count--;
+		addr += addr1;
+		count--;
 	}
-
 	return addr;
 }
 
-void show_opcode(UBYTE instr)
-{
-	switch (instr) {
-	case 0x6d:
-	case 0x65:
-	case 0x69:
-	case 0x79:
-	case 0x7d:
-	case 0x61:
-	case 0x71:
-	case 0x75:
-		printf("ADC");
-		break;
-	case 0x2d:
-	case 0x25:
-	case 0x29:
-	case 0x39:
-	case 0x3d:
-	case 0x21:
-	case 0x31:
-	case 0x35:
-		printf("AND");
-		break;
-	case 0x0e:
-	case 0x06:
-	case 0x1e:
-	case 0x16:
-		printf("ASL");
-		break;
-	case 0x0a:
-		printf("ASL\tA");
-		break;
-	case 0x90:
-		printf("BCC");
-		break;
-	case 0xb0:
-		printf("BCS");
-		break;
-	case 0xf0:
-		printf("BEQ");
-		break;
-	case 0x2c:
-	case 0x24:
-		printf("BIT");
-		break;
-	case 0x30:
-		printf("BMI");
-		break;
-	case 0xd0:
-		printf("BNE");
-		break;
-	case 0x10:
-		printf("BPL");
-		break;
-	case 0x00:
-		printf("BRK");
-		break;
-	case 0x50:
-		printf("BVC");
-		break;
-	case 0x70:
-		printf("BVS");
-		break;
-	case 0x18:
-		printf("CLC");
-		break;
-	case 0xd8:
-		printf("CLD");
-		break;
-	case 0x58:
-		printf("CLI");
-		break;
-	case 0xb8:
-		printf("CLV");
-		break;
-	case 0xcd:
-	case 0xc5:
-	case 0xc9:
-	case 0xdd:
-	case 0xd9:
-	case 0xc1:
-	case 0xd1:
-	case 0xd5:
-		printf("CMP");
-		break;
-	case 0xec:
-	case 0xe4:
-	case 0xe0:
-		printf("CPX");
-		break;
-	case 0xcc:
-	case 0xc4:
-	case 0xc0:
-		printf("CPY");
-		break;
-	case 0xce:
-	case 0xc6:
-	case 0xde:
-	case 0xd6:
-		printf("DEC");
-		break;
-	case 0xca:
-		printf("DEX");
-		break;
-	case 0x88:
-		printf("DEY");
-		break;
-	case 0x4d:
-	case 0x45:
-	case 0x49:
-	case 0x5d:
-	case 0x59:
-	case 0x41:
-	case 0x51:
-	case 0x55:
-		printf("EOR");
-		break;
-	case 0xff:					/* [unofficial] */
-		printf("ESC");
-		break;
-	case 0xee:
-	case 0xe6:
-	case 0xfe:
-	case 0xf6:
-		printf("INC");
-		break;
-	case 0xe8:
-		printf("INX");
-		break;
-	case 0xc8:
-		printf("INY");
-		break;
-	case 0x4c:
-	case 0x6c:
-		printf("JMP");
-		break;
-	case 0x20:
-		printf("JSR");
-		break;
-	case 0xa3:
-	case 0xa7:
-	case 0xaf:					/* [unofficial] */
-	case 0xb3:
-	case 0xb7:
-	case 0xbf:
-		printf("LAX");
-		break;
-	case 0xad:
-	case 0xa5:
-	case 0xa9:
-	case 0xbd:
-	case 0xb9:
-	case 0xa1:
-	case 0xb1:
-	case 0xb5:
-		printf("LDA");
-		break;
-	case 0xae:
-	case 0xa6:
-	case 0xa2:
-	case 0xbe:
-	case 0xb6:
-		printf("LDX");
-		break;
-	case 0xac:
-	case 0xa4:
-	case 0xa0:
-	case 0xbc:
-	case 0xb4:
-		printf("LDY");
-		break;
-	case 0x4e:
-	case 0x46:
-	case 0x5e:
-	case 0x56:
-		printf("LSR");
-		break;
-	case 0x4a:
-		printf("LSR\tA");
-		break;
-	case 0xea:
-		printf("NOP");
-		break;
-	case 0x0d:
-	case 0x05:
-	case 0x09:
-	case 0x1d:
-	case 0x19:
-	case 0x01:
-	case 0x11:
-	case 0x15:
-		printf("ORA");
-		break;
-	case 0x48:
-		printf("PHA");
-		break;
-	case 0x08:
-		printf("PHP");
-		break;
-	case 0x68:
-		printf("PLA");
-		break;
-	case 0x28:
-		printf("PLP");
-		break;
-	case 0x2e:
-	case 0x26:
-	case 0x3e:
-	case 0x36:
-		printf("ROL");
-		break;
-	case 0x2a:
-		printf("ROL\tA");
-		break;
-	case 0x6e:
-	case 0x66:
-	case 0x7e:
-	case 0x76:
-		printf("ROR");
-		break;
-	case 0x6a:
-		printf("ROR\tA");
-		break;
-	case 0x40:
-		printf("RTI");
-		break;
-	case 0x60:
-		printf("RTS");
-		break;
-	case 0xed:
-	case 0xe5:
-	case 0xe9:
-	case 0xfd:
-	case 0xf9:
-	case 0xe1:
-	case 0xf1:
-	case 0xf5:
-		printf("SBC");
-		break;
-	case 0x38:
-		printf("SEC");
-		break;
-	case 0xf8:
-		printf("SED");
-		break;
-	case 0x78:
-		printf("SEI");
-		break;
-	case 0x8d:
-	case 0x85:
-	case 0x9d:
-	case 0x99:
-	case 0x81:
-	case 0x91:
-	case 0x95:
-		printf("STA");
-		break;
-	case 0x8e:
-	case 0x86:
-	case 0x96:
-		printf("STX");
-		break;
-	case 0x8c:
-	case 0x84:
-	case 0x94:
-		printf("STY");
-		break;
-	case 0xaa:
-		printf("TAX");
-		break;
-	case 0xa8:
-		printf("TAY");
-		break;
-	case 0xba:
-		printf("TSX");
-		break;
-	case 0x8a:
-		printf("TXA");
-		break;
-	case 0x9a:
-		printf("TXS");
-		break;
-	case 0x98:
-		printf("TYA");
-		break;
-	default:
-		printf("*** ILLEGAL INSTRUCTION (%x) ***", instr);
-		break;
-	}
-}
+static char* instr6502[256] = {
+"BRK", "ORA ($1,X)", "CIM", "ASO ($1,X)", "SKB", "ORA $1", "ASL $1", "ASO $1", 
+"PHP", "ORA #$1", "ASL", "ASO #$1", "SKW", "ORA $2", "ASL $2", "ASO $2",
 
-void show_operand(UBYTE instr)
-{
-	UBYTE byte;
-	UWORD word;
+"BPL $0", "ORA ($1),Y", "CIM", "ASO ($1),Y", "SKB", "ORA $1,X", "ASL $1,X", "ASO $1,X",
+"CLC", "ORA $2,Y", "NOP", "ASO $2,Y", "SKW", "ORA $2,X", "ASL $2,X", "ASO $2,X",
 
-	switch (instr) {
-/*
-   =========================
-   Absolute Addressing Modes
-   =========================
- */
-	case 0x6d:					/* ADC */
-	case 0x2d:					/* AND */
-	case 0x0e:					/* ASL */
-	case 0x2c:					/* BIT */
-	case 0xcd:					/* CMP */
-	case 0xec:					/* CPX */
-	case 0xcc:					/* CPY */
-	case 0xce:					/* DEC */
-	case 0x4d:					/* EOR */
-	case 0xee:					/* INC */
-	case 0x4c:					/* JMP */
-	case 0x20:					/* JSR */
-	case 0xaf:					/* LAX [unofficial] */
-	case 0xad:					/* LDA */
-	case 0xae:					/* LDX */
-	case 0xac:					/* LDY */
-	case 0x4e:					/* LSR */
-	case 0x0d:					/* ORA */
-	case 0x2e:					/* ROL */
-	case 0x6e:					/* ROR */
-	case 0xed:					/* SBC */
-	case 0x8d:					/* STA */
-	case 0x8e:					/* STX */
-	case 0x8c:					/* STY */
-		word = (memory[addr + 1] << 8) | memory[addr];
-		printf("\t$%x", word);
-		addr += 2;
-		break;
-/*
-   ======================
-   0-Page Addressing Mode
-   ======================
- */
-	case 0x65:					/* ADC */
-	case 0x25:					/* AND */
-	case 0x06:					/* ASL */
-	case 0x24:					/* BIT */
-	case 0xc5:					/* CMP */
-	case 0xe4:					/* CPX */
-	case 0xc4:					/* CPY */
-	case 0xc6:					/* DEC */
-	case 0x45:					/* EOR */
-	case 0xe6:					/* INC */
-	case 0xa7:					/* LAX [unofficial] */
-	case 0xa5:					/* LDA */
-	case 0xa6:					/* LDX */
-	case 0xa4:					/* LDY */
-	case 0x46:					/* LSR */
-	case 0x05:					/* ORA */
-	case 0x26:					/* ROL */
-	case 0x66:					/* ROR */
-	case 0xe5:					/* SBC */
-	case 0x85:					/* STA */
-	case 0x86:					/* STX */
-	case 0x84:					/* STY */
-		byte = memory[addr];
-		addr++;
-		printf("\t$%x", byte);
-		break;
-/*
-   ========================
-   Relative Addressing Mode
-   ========================
- */
-	case 0x90:					/* BCC */
-	case 0xb0:					/* BCS */
-	case 0xf0:					/* BEQ */
-	case 0x30:					/* BMI */
-	case 0xd0:					/* BNE */
-	case 0x10:					/* BPL */
-	case 0x50:					/* BVC */
-	case 0x70:					/* BVS */
-		byte = memory[addr];
-		addr++;
-		printf("\t$%x", addr + (SBYTE) byte);
-		break;
-/*
-   =========================
-   Immediate Addressing Mode
-   =========================
- */
-	case 0x69:					/* ADC */
-	case 0x29:					/* AND */
-	case 0xc9:					/* CMP */
-	case 0xe0:					/* CPX */
-	case 0xc0:					/* CPY */
-	case 0x49:					/* EOR */
-	case 0xa9:					/* LDA */
-	case 0xa2:					/* LDX */
-	case 0xa0:					/* LDY */
-	case 0x09:					/* ORA */
-	case 0xe9:					/* SBC */
-	case 0xff:					/* ESC */
-		byte = memory[addr];
-		addr++;
-		printf("\t#$%x", byte);
-		break;
-/*
-   =====================
-   ABS,X Addressing Mode
-   =====================
- */
-	case 0x7d:					/* ADC */
-	case 0x3d:					/* AND */
-	case 0x1e:					/* ASL */
-	case 0xdd:					/* CMP */
-	case 0xde:					/* DEC */
-	case 0x5d:					/* EOR */
-	case 0xfe:					/* INC */
-	case 0xbd:					/* LDA */
-	case 0xbc:					/* LDY */
-	case 0x5e:					/* LSR */
-	case 0x1d:					/* ORA */
-	case 0x3e:					/* ROL */
-	case 0x7e:					/* ROR */
-	case 0xfd:					/* SBC */
-	case 0x9d:					/* STA */
-		word = (memory[addr + 1] << 8) | memory[addr];
-		printf("\t$%x,X", word);
-		addr += 2;
-		break;
-/*
-   =====================
-   ABS,Y Addressing Mode
-   =====================
- */
-	case 0x79:					/* ADC */
-	case 0x39:					/* AND */
-	case 0xd9:					/* CMP */
-	case 0x59:					/* EOR */
-	case 0xbf:					/* LAX [unofficial] */
-	case 0xb9:					/* LDA */
-	case 0xbe:					/* LDX */
-	case 0x19:					/* ORA */
-	case 0xf9:					/* SBC */
-	case 0x99:					/* STA */
-		word = (memory[addr + 1] << 8) | memory[addr];
-		printf("\t$%x,Y", word);
-		addr += 2;
-		break;
-/*
-   =======================
-   (IND,X) Addressing Mode
-   =======================
- */
-	case 0x61:					/* ADC */
-	case 0x21:					/* AND */
-	case 0xc1:					/* CMP */
-	case 0x41:					/* EOR */
-	case 0xa3:					/* LAX [unofficial] */
-	case 0xa1:					/* LDA */
-	case 0x01:					/* ORA */
-	case 0xe1:					/* SBC */
-	case 0x81:					/* STA */
-		byte = memory[addr];
-		addr++;
-		printf("\t($%x,X)", byte);
-		break;
-/*
-   =======================
-   (IND),Y Addressing Mode
-   =======================
- */
-	case 0x71:					/* ADC */
-	case 0x31:					/* AND */
-	case 0xd1:					/* CMP */
-	case 0x51:					/* EOR */
-	case 0xb3:					/* LAX [unofficial] */
-	case 0xb1:					/* LDA */
-	case 0x11:					/* ORA */
-	case 0xf1:					/* SBC */
-	case 0x91:					/* STA */
-		byte = memory[addr];
-		addr++;
-		printf("\t($%x),Y", byte);
-		break;
-/*
-   ========================
-   0-Page,X Addressing Mode
-   ========================
- */
-	case 0x75:					/* ADC */
-	case 0x35:					/* AND */
-	case 0x16:					/* ASL */
-	case 0xd5:					/* CMP */
-	case 0xd6:					/* DEC */
-	case 0x55:					/* EOR */
-	case 0xf6:					/* INC */
-	case 0xb5:					/* LDA */
-	case 0xb4:					/* LDY */
-	case 0x56:					/* LSR */
-	case 0x15:					/* ORA */
-	case 0x36:					/* ROL */
-	case 0x76:					/* ROR */
-	case 0xf5:					/* SBC */
-	case 0x95:					/* STA */
-	case 0x94:					/* STY */
-		byte = memory[addr];
-		addr++;
-		printf("\t$%x,X", byte);
-		break;
-/*
-   ========================
-   0-Page,Y Addressing Mode
-   ========================
- */
-	case 0xb7:					/* LAX [unofficial] */
-	case 0xb6:					/* LDX */
-	case 0x96:					/* STX */
-		byte = memory[addr];
-		addr++;
-		printf("\t$%x,Y", byte);
-		break;
-/*
-   ========================
-   Indirect Addressing Mode
-   ========================
- */
-	case 0x6c:					/* printf ("JMP INDIRECT at %x\n",instr_addr); */
-		word = (memory[addr + 1] << 8) | memory[addr];
-		printf("\t($%x)", word);
-		addr += 2;
-		break;
+"JSR $2", "AND ($1,X)", "CIM", "RLA ($1,X)", "BIT $1", "AND $1", "ROL $1", "RLA $1",
+"PLP", "AND #$1", "ROL", "RLA #$1", "BIT $2", "AND $2", "ROL $2", "RLA $2",
+
+"BMI $0", "AND ($1),Y", "CIM", "RLA ($1),Y", "SKB", "AND $1,X", "ROL $1,X", "RLA $1,X",
+"SEC", "AND $2,Y", "NOP", "RLA $2,Y", "SKW", "AND $2,X", "ROL $2,X", "RLA $2,X",
+
+
+"RTI", "EOR ($1,X)", "CIM", "LSE ($1,X)", "SKB", "EOR $1", "LSR $1", "LSE $1",
+"PHA", "EOR #$1", "LSR", "ALR #$1", "JMP $2", "EOR $2", "LSR $2", "LSE $2",
+
+"BVC $0", "EOR ($1),Y", "CIM", "LSE ($1),Y", "SKB", "EOR $1,X", "LSR $1,X", "LSE $1,X",
+"CLI", "EOR $2,Y", "NOP", "LSE $2,Y", "SKW", "EOR $2,X", "LSR $2,X", "LSE $2,X",
+
+"RTS", "ADC ($1,X)", "CIM", "RRA ($1,X)", "SKB", "ADC $1", "ROR $1", "RRA $1",
+"PLA", "ADC #$1", "ROR", "ARR #$1", "JMP ($2)", "ADC $2", "ROR $2", "RRA $2",
+
+"BVS $0", "ADC ($1),Y", "CIM", "RRA ($1),Y", "SKB", "ADC $1,X", "ROR $1,X", "RRA $1,X",
+"SEI", "ADC $2,Y", "NOP", "RRA $2,Y", "SKW", "ADC $2,X", "ROR $2,X", "RRA $2,X",
+
+
+"SKB", "STA ($1,X)", "SKB", "AXS ($1,X)", "STY $1", "STA $1", "STX $1", "AXS $1", 
+"DEY", "SKB", "TXA", "XAA #$1", "STY $2", "STA $2", "STX $2", "AXS $2", 
+
+"BCC $0", "STA ($1),Y", "CIM", "AXS ($1),Y", "STY $1,X", "STA $1,X", "STX $1,Y", "AXS $1,Y",
+"TYA", "STA $2,Y", "TXS", "XAA $2,Y", "SKW", "STA $2,X", "MKX $2", "MKA $2",
+
+"LDY #$1", "LDA ($1,X)", "LDX #$1", "LAX ($1,X)", "LDY $1", "LDA $1", "LDX $1", "LAX $1",
+"TAY", "LDA #$1", "TAX", "OAL #$1", "LDY $2", "LDA $2", "LDX $2", "LAX $2",
+
+"BCS $0", "LDA ($1),Y", "CIM", "LAX ($1),Y", "LDY $1,X", "LDA $1,X", "LDX $1,Y", "LAX $1,X",
+"CLV", "LDA $2,Y", "TSX", "AXA $2,Y", "LDY $2,X", "LDA $2,X", "LDX $2,Y", "LAX $2,Y",
+
+
+"CPY #$1", "CMP ($1,X)", "SKB", "DCM ($1,X)", "CPY $1", "CMP $1", "DEC $1", "DCM $1",
+"INY", "CMP #$1", "DEX", "SAX #$1", "CPY $2", "CMP $2", "DEC $2", "DCM $2",
+
+"BNE $0", "CMP ($1),Y", "CIM      [ESCRTS]", "DCM ($1),Y", "SKB", "CMP $1,X", "DEC $1,X", "DCM $1,X",
+"CLD", "CMP $2,Y", "NOP", "DCM $2,Y", "SKW", "CMP $2,X", "DEC $2,X", "DCM $2,X",
+
+
+"CPX #$1", "SBC ($1,X)", "SKB", "INS ($1,X)", "CPX $1", "SBC $1", "INC $1", "INS $1",
+"INX", "SBC #$1", "NOP", "SBC #$1", "CPX $2", "SBC $2", "INC $2", "INS $2",
+
+"BEQ $0", "SBC ($1),Y", "CIM      [ESC]", "INS ($1),Y", "SKB", "SBC $1,X", "INC $1,X", "INS $1,X",
+"SED", "SBC $2,Y", "NOP", "INS $2,Y", "SKW", "SBC $2,X", "INC $2,X", "INS $2,X"
+};
+
+UWORD show_instruction(UWORD inad, int wid)
+{
+	UBYTE instr;
+	UWORD value;
+	char dissbf[32];
+	int i;
+
+	instr = memory[inad];
+	strcpy(dissbf, instr6502[instr]);
+
+	for(i=0; dissbf[i]!=0; i++) 
+	{
+	 if (dissbf[i]=='$') 
+	 {
+	  wid-=i;
+	  dissbf[i]=0;
+	  printf(dissbf);
+	  switch (dissbf[i+1])
+	  {
+	   case '0': value = (UWORD) (inad + (char) memory[(UWORD)(inad+1)] + 2);
+			 inad=2; wid-=5;
+	 	  	 printf("$%04X", value);
+			 break;
+	   case '1': value = (UBYTE) memory[(UWORD)(inad+1)];
+			 inad=2; wid-=3;
+	 	  	 printf("$%02X", value);
+			 break;
+	   case '2': value = (UWORD) memory[(UWORD)(inad+1)] | (memory[(UWORD)(inad+2)]<<8);
+			 inad=3; wid-=5;
+	 	  	 printf("$%04X", value);
+			 break;
+	  }
+	  printf(dissbf+i+2);
+	  for(; dissbf[i+2]!=0; i++) wid--;
+	  i=0;
+	  break;
+	 }
 	}
+	if (dissbf[i]==0)
+	{
+	 printf(dissbf);
+	 wid-=i;
+	 inad=1;
+	}
+	for(i=wid; i>0; i--) printf(" ");
+	return inad;
 }
