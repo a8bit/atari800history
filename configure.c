@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 
-static char *rcsid = "$Id: configure.c,v 1.9 1996/07/19 19:54:25 david Exp $";
+static char *rcsid = "$Id: configure.c,v 1.11 1996/09/29 22:01:07 david Exp $";
 
 void RemoveLF (char *string)
 {
@@ -75,6 +75,7 @@ int main (void)
   char linux_joystick;
   char fps_monitor;
   char direct_video;
+  int pal;
 
   home = getenv ("~");
   if (!home)
@@ -82,20 +83,39 @@ int main (void)
   if (!home)
     home = ".";
 
-  strcpy (os_dir, "/usr/local/lib/atari");
+#ifndef DJGPP
+  strcpy (os_dir, "/usr/local/lib/atari/ROMS");
   strcpy (disk_dir, "/usr/local/lib/atari/DISKS");
   strcpy (h1_dir, "/usr/local/lib/atari/H1");
   strcpy (h2_dir, "/usr/local/lib/atari/H2");
   strcpy (h3_dir, "/usr/local/lib/atari/H3");
   strcpy (h4_dir, "/usr/local/lib/atari/H4");
   strcpy (print_command, "lpr %s");
-  strcpy (rom_dir, "/usr/local/lib/atari/ROM");
+  strcpy (rom_dir, "/usr/local/lib/atari/ROMS");
   refresh_rate = 1;
   linux_joystick = 'N';
   fps_monitor = 'N';
   direct_video = 'N';
+  pal = 1;
 
   sprintf (config_filename, "%s/.atari800", home);
+#else
+  strcpy (os_dir, "c:/atari800/ROMS");
+  strcpy (disk_dir, "c:/atari800/DISKS");
+  strcpy (h1_dir, "c:/atari800/H1");
+  strcpy (h2_dir, "c:/atari800/H2");
+  strcpy (h3_dir, "c:/atari800/H3");
+  strcpy (h4_dir, "c:/atari800/H4");
+  strcpy (print_command, "copy %s prn");
+  strcpy (rom_dir, "c:/atari800/ROMS");
+  refresh_rate = 1;
+  linux_joystick = 'N';
+  fps_monitor = 'N';
+  direct_video = 'N';
+  pal = 1;
+
+  sprintf (config_filename, "%s/atari800.cfg", home);
+#endif
 
   fp = fopen (config_filename, "r");
   if (fp)
@@ -140,6 +160,9 @@ int main (void)
       if (strlen(os_dir) == 0)
 	strcpy (os_dir, "/usr/local/lib/atari");
 
+      if (fscanf(fp,"%d", &pal) == 0)
+	pal = 1;
+
       fclose (fp);
     }
 
@@ -159,6 +182,9 @@ int main (void)
   YesNo ("Enable LINUX Joystick [%c] ", &linux_joystick);
   YesNo ("Enable Frames per Second Monitor [%c] ", &fps_monitor);
   YesNo ("Enable Direct Video Access [%c] ", &direct_video);
+  do
+    GetNumber ("NTSC (0) or PAL (1) System [%d] ", &pal);
+  while ((pal < 0) || (pal > 1));
 
   fp = fopen ("config.h", "w");
   if (fp)
@@ -185,6 +211,9 @@ int main (void)
       if (direct_video == 'Y')
         fprintf (fp, "#define DIRECT_VIDEO\n");
 
+      if (pal == 1)
+	fprintf (fp, "#define PAL\n");
+
       fprintf (fp, "#endif\n");
 
       fclose (fp);
@@ -207,6 +236,7 @@ int main (void)
       fprintf (fp, "%c\n", fps_monitor);
       fprintf (fp, "%c\n", direct_video);
       fprintf (fp, "%s\n", os_dir);
+      fprintf (fp, "%d\n", pal);
 
       fclose (fp);
     }

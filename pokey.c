@@ -2,9 +2,13 @@
 #include "pia.h"
 #include "pokey.h"
 #include "gtia.h"
+#include "sio.h"
+#include "platform.h"
 
 #define FALSE 0
 #define TRUE 1
+
+static char *rcsid = "$Id: pokey.c,v 1.8 1996/09/04 23:46:44 david Exp $";
 
 UBYTE KBCODE;
 UBYTE IRQST;

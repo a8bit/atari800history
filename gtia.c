@@ -13,9 +13,12 @@
 #include "pokey.h"
 #include "gtia.h"
 #include "antic.h"
+#include "platform.h"
 
 #define FALSE 0
 #define TRUE 1
+
+static char *rcsid = "$Id: gtia.c,v 1.13 1996/09/04 23:46:43 david Exp $";
 
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
@@ -116,7 +119,7 @@ UWORD m0123adr;
 static int PM_XPos[256];
 static UBYTE PM_Width[4] = { 2, 4, 2, 8};
 
-void GTIA_Initialise (void)
+void GTIA_Initialise (int *argc, char *argv[])
 {
   int i;
 
@@ -134,6 +137,144 @@ void GTIA_Initialise (void)
     colour_lookup[i] = 0x00;
 
   PRIOR = 0x00;
+}
+
+UBYTE WhichColourReg (int pf_pixel, int player, int missile)
+{
+  UBYTE colreg;
+
+  switch (PRIOR & 0x1f)
+    {
+    case 0x01 : /* RIVER RAID */
+      if (missile < player)
+	colreg = missile;
+      else
+	colreg = player;
+      break;
+    case 0x02 : /* MOUNTAIN KING */
+      if (player < 2)
+	{
+	  colreg = player;
+	}
+      else if (pf_pixel < 7)
+	{
+	  colreg = pf_pixel;
+	}
+      else if (pf_pixel == 7)
+	{
+	  if (missile != 0xff)
+	    colreg = missile;
+	  else
+	    colreg = pf_pixel;
+	}
+      else if (player < 4)
+	{
+	  colreg = player;
+	}
+      else
+	{
+	  colreg = pf_pixel;
+	}
+      break;
+    case 0x04 :
+      if (pf_pixel > 7)
+	{
+	  if (missile < player)
+	    colreg = missile;
+	  else
+	    colreg = player;
+	}
+      else
+	{
+	  colreg = pf_pixel;
+	}
+      break;
+    case 0x08 : /* RALLY SPEEDWAY */
+      if (pf_pixel > 5)
+	{
+	  if (missile < player)
+	    colreg = missile;
+	  else
+	    colreg = player;
+	}
+      else
+	{
+	  colreg = pf_pixel;
+	}
+      break;
+    case 0x11 : /* PAC-MAN, STAR RAIDERS, ASTEROIDS, FROGGER DELUXE, KANGAROO */
+      if (player != 0xff)
+	colreg = player;
+      else if (pf_pixel > 7)
+	colreg = 7; /* Missile using COLPF3 */
+      else
+	colreg = pf_pixel;
+      break;
+    case 0x12 : /* ZONE RANGER */
+      if (player < 2)
+	{
+	  colreg = player;
+	}
+      else if (pf_pixel < 7)
+	{
+	  colreg = pf_pixel;
+	}
+      else if (pf_pixel == 7)
+	{
+	  if (missile != 0xff)
+	    colreg = missile;
+	  else
+	    colreg = pf_pixel;
+	}
+      else if (player < 4)
+	{
+	  colreg = player;
+	}
+      else
+	{
+	  colreg = pf_pixel;
+	}
+      break;
+    case 0x14 : /* ATARI CHESS, FORT APOCALYPSE */
+      if (missile != 0xff)
+	{
+	  if (pf_pixel > 7)
+	    colreg = 7; /* Missile using COLPF3 */
+	  else
+	    colreg = pf_pixel;
+	}
+      else
+	{
+	  if (pf_pixel > 7)
+	    colreg = player;
+	  else
+	    colreg = pf_pixel;
+	}
+      break;
+    case 0x18 : /* THE LAST STARTFIGHTER */
+      if (pf_pixel > 5)
+	{
+	  if (missile < player)
+	    colreg = 7; /* Missile using COLPF3 */
+	  else
+	    colreg = player;
+	}
+      else
+	{
+	  colreg = pf_pixel;
+	}
+      break;
+    default :
+      printf ("Unsupported PRIOR = %02x\n", PRIOR);
+    case 0x00 :
+      if (missile < player)
+	colreg = missile;
+      else
+	colreg = player;
+      break;
+    }
+
+  return colreg;
 }
 
 void PM_ScanLine (void)
@@ -508,127 +649,7 @@ void PM_ScanLine (void)
 	      which_player = which_pm_lookup[pm_pixel & 0x0f];
 	      which_missile = which_pm_lookup[(pm_pixel >> 4) & 0x0f];
 
-	      switch (PRIOR & 0x1f)
-		{
-		case 0x01 : /* RIVER RAID */
-		  if (which_missile < which_player)
-		    colreg = which_missile;
-		  else
-		    colreg = which_player;
-		  break;
-		case 0x02 : /* MOUNTAIN KING */
-		  if (which_player < 2)
-		    {
-		      colreg = which_player;
-		    }
-		  else if (pf_pixel < 7)
-		    {
-		      colreg = pf_pixel;
-		    }
-		  else if (pf_pixel == 7)
-		    {
-		      if (which_missile != 0xff)
-			colreg = which_missile;
-		      else
-			colreg = pf_pixel;
-		    }
-		  else if (which_player < 4)
-		    {
-		      colreg = which_player;
-		    }
-		  else
-		    {
-		      colreg = pf_pixel;
-		    }
-		  break;
-		case 0x04 :
-		  if (pf_pixel > 7)
-		    {
-		      if (which_missile < which_player)
-			colreg = which_missile;
-		      else
-			colreg = which_player;
-		    }
-		  else
-		    {
-		      colreg = pf_pixel;
-		    }
-		  break;
-		case 0x08 : /* RALLY SPEEDWAY */
-		  if (pf_pixel > 5)
-		    {
-		      if (which_missile < which_player)
-			colreg = which_missile;
-		      else
-			colreg = which_player;
-		    }
-		  else
-		    {
-		      colreg = pf_pixel;
-		    }
-		  break;
-		case 0x11 : /* PAC-MAN, STAR RAIDERS, ASTEROIDS, FROGGER DELUXE, KANGAROO */
-		  if (which_player != 0xff)
-		    colreg = which_player;
-		  else if (pf_pixel > 7)
-		    colreg = 7;
-		  else
-		    colreg = pf_pixel;
-		  break;
-		case 0x12 : /* ZONE RANGER */
-		  if (which_player < 2)
-		    {
-		      colreg = which_player;
-		    }
-		  else if (pf_pixel < 7)
-		    {
-		      colreg = pf_pixel;
-		    }
-		  else if (pf_pixel == 7)
-		    {
-		      if (which_missile != 0xff)
-			colreg = which_missile;
-		      else
-			colreg = pf_pixel;
-		    }
-		  else if (which_player < 4)
-		    {
-		      colreg = which_player;
-		    }
-		  else
-		    {
-		      colreg = pf_pixel;
-		    }
-		  break;
-		case 0x14 : /* ATARI CHESS, FORT APOCALYPSE */
-		  if (which_missile != 0xff)
-		    {
-		      if (pf_pixel > 7)
-			colreg = 7;
-		      else
-			colreg = pf_pixel;
-		    }
-		  else
-		    {
-		      if (pf_pixel > 7)
-			colreg = which_player;
-		      else
-			colreg = pf_pixel;
-		    }
-		  break;
-		default :
-		  printf ("Unsupported PRIOR = %02x\n", PRIOR);
-		case 0x00 :
-		  if (which_missile < which_player)
-		    colreg = which_missile;
-		  else
-		    colreg = which_player;
-		  break;
-		}
-
-/*
-	      colreg = colreg_lookup[((pf_pixel-4) << 8) | pm_pixel];
-*/
+	      colreg = WhichColourReg (pf_pixel, which_player, which_missile);
 
 #ifdef DIRECT_VIDEO
 	      scrn_ptr[xpos] = colour_lookup[colreg];
@@ -711,7 +732,7 @@ void Atari_ScanLine (void)
 
   if (!wsync_halt)
     {
-      GO (48);
+      GO (107);
     }
 
 #ifdef DIRECT_VIDEO
@@ -846,12 +867,12 @@ void Atari_ScanLine (void)
     {
       if (!(--wsync_halt))
 	{
-	  GO (3);
+	  GO (7);
 	}
     }
   else
     {
-      GO (3);
+      GO (7);
     }
 }
 
@@ -914,7 +935,11 @@ UBYTE GTIA_GetByte (UWORD addr)
       byte = P3PL & 0xf7;
       break;
     case _PAL :
-      byte = 0;
+#ifdef PAL
+      byte = 0x00;
+#else
+      byte = 0x0e;
+#endif
       break;
     case _TRIG0 :
       byte = Atari_TRIG (0);

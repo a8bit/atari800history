@@ -238,10 +238,17 @@ INCLUDES	=	Makefile \
 			antic.h \
 			gtia.h \
 			pokey.h \
-			pia.h
+			pia.h \
+			devices.h \
+			ffp.h \
+			monitor.h \
+			sio.h \
+			supercart.h \
+			nas.h \
+			platform.h
 
 config config.h	:	configure
-	configure
+	./configure
 
 configure	:	configure.o
 	$(LD) $(LDFLAGS) configure.o $(LDLIBS) -o configure
@@ -253,7 +260,7 @@ OBJECTS	=	atari.o \
 		ffp.o \
 		cpu.o \
 		monitor.o \
-		atari_sio.o \
+		sio.o \
 		devices.o \
 		antic.o \
 		gtia.o \
@@ -276,8 +283,8 @@ cpu.o		:	cpu.c $(INCLUDES)
 monitor.o	:	monitor.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
 
-atari_sio.o	:	atari_sio.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) atari_sio.c
+sio.o		:	sio.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sio.c
 
 devices.o	:	devices.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) devices.c

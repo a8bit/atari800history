@@ -1,6 +1,7 @@
 #include "atari.h"
+#include "monitor.h"
 
-static char *rcsid = "$Id: atari_basic.c,v 1.2 1995/12/30 22:11:02 david Exp $";
+static char *rcsid = "$Id: atari_basic.c,v 1.3 1996/09/04 23:36:01 david Exp $";
 
 #define FALSE 0
 #define TRUE 1

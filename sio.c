@@ -1,30 +1,35 @@
 /*
-   *
-   * All Input is assumed to be going to RAM
-   * All Output is assumed to be coming from either RAM or ROM
-   *
-*/
+ *
+ * All Input is assumed to be going to RAM
+ * All Output is assumed to be coming from either RAM or ROM
+ *
+ */
 
-#include	<stdio.h>
-#include	<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifdef VMS
-#include	<unixio.h>
-#include	<file.h>
+#include <unixio.h>
+#include <file.h>
 #else
-#include	<fcntl.h>
+#include <fcntl.h>
 #ifndef AMIGA
-#include	<unistd.h>
+#include <unistd.h>
 #endif
 #endif
 
-static char *rcsid = "$Id: atari_sio.c,v 1.12 1996/07/18 00:33:03 david Exp $";
+#ifdef DJGPP
+#include "djgpp.h"
+#endif
+
+static char *rcsid = "$Id: sio.c,v 1.3 1996/09/29 22:01:07 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
 
-#include	"atari.h"
-#include	"cpu.h"
+#include "atari.h"
+#include "cpu.h"
+#include "sio.h"
 
 #define	MAX_DRIVES	8
 
@@ -51,13 +56,29 @@ static int	disk[MAX_DRIVES] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 static int	sectorcount[MAX_DRIVES];
 static int	sectorsize[MAX_DRIVES];
 
+static enum DriveStatus
+{
+  Off,
+  NoDisk,
+  ReadOnly,
+  ReadWrite
+} drive_status[MAX_DRIVES];
+
 int SIO_Mount (int diskno, char *filename)
 {
   struct ATR_Header	header;
 
   int	fd;
 
+  drive_status[diskno-1] = ReadWrite;
+
   fd = open (filename, O_RDWR, 0777);
+  if (fd == -1)
+    {
+      fd = open (filename, O_RDONLY, 0777);
+      drive_status[diskno-1] = ReadOnly;
+    }
+
   if (fd)
     {
       int	status;
@@ -100,6 +121,10 @@ int SIO_Mount (int diskno, char *filename)
 	  format[diskno-1] = XFD;
 	}
     }
+  else
+    {
+      drive_status[diskno-1] = NoDisk;
+    }
 
   disk[diskno-1] = fd;
 
@@ -112,7 +137,13 @@ int SIO_Dismount (int diskno)
     {
       close (disk[diskno-1]);
       disk[diskno-1] = -1;
+      drive_status[diskno-1] = NoDisk;
     }
+}
+
+void SIO_DisableDrive (int diskno)
+{
+  drive_status[diskno-1] = Off;
 }
 
 void SeekSector (int dskno, int sector)
@@ -142,7 +173,7 @@ void SeekSector (int dskno, int sector)
   lseek (disk[dskno], offset, SEEK_SET);
 }
 
-SIO ()
+void SIO (void)
 {
   UBYTE DDEVIC = memory[0x0300];
   UBYTE DUNIT = memory[0x0301];
@@ -161,60 +192,70 @@ SIO ()
   int	count;
   int	i;
 
-  if (disk[DUNIT-1] != -1)
+  if (drive_status[DUNIT-1] != Off)
     {
-      int	offset;
-
-      sector = DAUX1 + DAUX2 * 256;
-      buffer = DBUFLO + DBUFHI * 256;
-      count = DBYTLO + DBYTHI * 256;
-
-      switch (format[DUNIT-1])
+      if (disk[DUNIT-1] != -1)
 	{
-	case XFD :
-	  offset = (sector-1)*128+0;
-	  break;
-	case ATR :
-	  if (sector < 4)
-	    offset = (sector-1) * 128 + 16;
-	  else
-	    offset = (sector - 1) * sectorsize[DUNIT-1] + 16;
-/*
-	    offset = 3*128 + (sector-4) * sectorsize[DUNIT-1] + 16;
-*/
-	  break;
-	default :
-	  printf ("Fatal Error in atari_sio.c\n");
-	  Atari800_Exit (FALSE);
-	  exit (1);
-	}
+	  int offset;
 
-      lseek (disk[DUNIT-1], offset, SEEK_SET);
+	  sector = DAUX1 + DAUX2 * 256;
+	  buffer = DBUFLO + DBUFHI * 256;
+	  count = DBYTLO + DBYTHI * 256;
+
+	  switch (format[DUNIT-1])
+	    {
+	    case XFD :
+	      offset = (sector-1)*128+0;
+	      break;
+	    case ATR :
+	      if (sector < 4)
+		offset = (sector-1) * 128 + 16;
+	      else
+		offset = (sector - 1) * sectorsize[DUNIT-1] + 16;
+/*
+   offset = 3*128 + (sector-4) * sectorsize[DUNIT-1] + 16;
+*/
+	      break;
+	    default :
+	      printf ("Fatal Error in atari_sio.c\n");
+	      Atari800_Exit (FALSE);
+	      exit (1);
+	    }
+
+	  lseek (disk[DUNIT-1], offset, SEEK_SET);
 
 #ifdef DEBUG
-      printf ("SIO: DCOMND = %x, SECTOR = %d, BUFADR = %x, BUFLEN = %d\n",
-	      DCOMND, sector, buffer, count);
+	  printf ("SIO: DCOMND = %x, SECTOR = %d, BUFADR = %x, BUFLEN = %d\n",
+		  DCOMND, sector, buffer, count);
 #endif
 
-      switch (DCOMND)
-	{
-	case 0x50 :
-	case 0x57 :
-	  write (disk[DUNIT-1], &memory[buffer], count);
-	  regY = 1;
-	  ClrN;
-	  break;
-	case 0x52 :
-	  read (disk[DUNIT-1], &memory[buffer], count);
-	  regY = 1;
-	  ClrN;
-	  break;
-	case 0x21 : /* Single Density Format */
-	case 0x22 : /* Duel Density Format */
-	case 0x66 : /* US Doubler Format - I think! */
-	  regY = 1;
-	  ClrN;
-	  break;
+	  switch (DCOMND)
+	    {
+	    case 0x50 :
+	    case 0x57 :
+	      if (drive_status[DUNIT-1] == ReadWrite)
+		{
+		  write (disk[DUNIT-1], &memory[buffer], count);
+		  regY = 1;
+		  ClrN;
+		}
+	      else
+		{
+		  regY = 146;
+		  SetN;
+		}
+	      break;
+	    case 0x52 :
+	      read (disk[DUNIT-1], &memory[buffer], count);
+	      regY = 1;
+	      ClrN;
+	      break;
+	    case 0x21 : /* Single Density Format */
+	    case 0x22 : /* Duel Density Format */
+	    case 0x66 : /* US Doubler Format - I think! */
+	      regY = 1;
+	      ClrN;
+	      break;
 /*
    Status Request from Atari 400/800 Technical Reference Notes
 
@@ -236,27 +277,33 @@ SIO ()
    Bit 5 = 1 indicates double density
    Bit 7 = 1 indicates duel density disk (1050 format)
 */
-	case 0x53 :	/* Get Status */
-	  for (i=0;i<count;i++)
-	    {
-	      if (sectorsize[DUNIT-1] == 256)
-		memory[buffer+i] = 32 + 16;
-	      else
-		memory[buffer+i] = 16;
+	    case 0x53 :	/* Get Status */
+	      for (i=0;i<count;i++)
+		{
+		  if (sectorsize[DUNIT-1] == 256)
+		    memory[buffer+i] = 32 + 16;
+		  else
+		    memory[buffer+i] = 16;
+		}
+	      regY = 1;
+	      ClrN;
+	      break;
+	    default :
+	      printf ("SIO: DCOMND = %0x\n", DCOMND);
+	      regY = 146;
+	      SetN;
+	      break;
 	    }
-	  regY = 1;
-	  ClrN;
-	  break;
-	default :
-	  printf ("SIO: DCOMND = %0x\n", DCOMND);
+	}
+      else
+	{
 	  regY = 146;
 	  SetN;
-	  break;
 	}
     }
   else
     {
-      regY = 146;
+      regY = 138;
       SetN;
     }
 
@@ -280,7 +327,7 @@ extern int DELAYED_XMTDONE_IRQ;
 typedef enum
 {
   SIO_Normal,
-  SIO_Put,
+  SIO_Put
 } SIO_State;
 
 static SIO_State sio_state = SIO_Normal;
@@ -414,7 +461,7 @@ void SIO_SEROUT (unsigned char byte, int cmd)
       if (cmd_frame[0] == 0)
 	ncmd = 0;
     }
-  else if (sio_state = SIO_Put)
+  else if (sio_state == SIO_Put)
     {
       data[buffer_offset++] = byte;
       if (buffer_offset == 130)
@@ -471,7 +518,7 @@ void SIO_SEROUT (unsigned char byte, int cmd)
     }
 }
 
-int SIO_SERIN ()
+int SIO_SERIN (void)
 {
   int byte;
 
@@ -495,5 +542,3 @@ int SIO_SERIN ()
 
   return byte;
 }
-
-

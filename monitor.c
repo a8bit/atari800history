@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #endif
 
-static char *rcsid = "$Id: monitor.c,v 1.8 1996/07/23 01:21:12 david Exp $";
+static char *rcsid = "$Id: monitor.c,v 1.10 1996/09/23 21:26:22 david Exp $";
 
 #include "atari.h"
 #include "cpu.h"
@@ -77,7 +77,7 @@ int get_hex (char *string, UWORD *hexval)
   return 0;
 }
 
-int monitor ()
+int monitor (void)
 {
   UWORD	addr;
   UWORD	break_addr;
@@ -93,13 +93,21 @@ int monitor ()
       char    *t;
 
       printf ("> ");
-      gets (s);
+      if (gets (s) == NULL)
+        {
+	  printf("\n> CONT\n");
+	  strcpy(s, "CONT");
+	}
 
       for (p=0;s[p]!=0;p++)
 	if (islower(s[p]))
 	  s[p] = toupper(s[p]);
 
       t = get_token(s);
+      if (t == NULL)
+        {
+	  continue;
+        }
 
       if (strcmp(t,"BREAK") == 0)
 	{
@@ -543,6 +551,7 @@ int monitor ()
 	  printf ("Y [startaddr] [endaddr]   - Disassemble Memory\n");
 	  printf ("ROM addr1 addr2           - Convert Memory Block into ROM\n");
 	  printf ("RAM addr1 addr2           - Convert Memory Block into RAM\n");
+	  printf ("HARDWARE addr1 addr2      - Convert Memory Block into HARDWARE\n");
 	  printf ("CONT                      - Continue\n");
 	  printf ("SHOW                      - Show Registers\n");
 	  printf ("WRITE startaddr endaddr   - Write specified area of memory to memdump.dat\n");
@@ -553,6 +562,8 @@ int monitor ()
 #endif
           printf ("ANTIC                     - Display ANTIC registers\n");
           printf ("GTIA                      - Display GTIA registers\n");
+          printf ("DLIST                     - Display current display list\n");
+          printf ("PROFILE                   - Display profiling statistics\n");
 	  printf ("QUIT                      - Quit Emulation\n");
 	  printf ("HELP or ?                 - This Text\n");
 	}

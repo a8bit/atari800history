@@ -44,4 +44,8 @@ extern int dmactl_xmin_noscroll;
 extern int dmactl_xmax_noscroll;
 extern ULONG *atari_screen;
 
+void ANTIC_RunDisplayList (void);
+UBYTE ANTIC_GetByte (UWORD addr);
+int ANTIC_PutByte (UWORD addr, UBYTE byte);
+
 #endif

@@ -1,0 +1,139 @@
+#
+# Note: x11-nas and xview-nas versions are linked with -lsocket and
+#       -lnsl which is required for the Sun versions. Remove them
+#       if they cause a problem on your system.
+#
+
+CC              = gcc
+CPPFLAGS        = $(OTHER)
+CFLAGS          = -c -O6 -DGNU_C
+LD              = gcc
+LDFLAGS         =
+LDLIBS          = -lm
+
+# PREFIX          = /usr/local
+# BIN_PATH        = ${PREFIX}/bin
+# LIB_PATH        = ${PREFIX}/lib
+# MAN_PATH        = ${PREFIX}/man
+
+ATARI_LIBRARY   = c:/atari800/ROMS
+
+default :
+	@echo To build the Atari 800 Emulator, type:
+	@echo make version
+	@echo .
+	@echo where version is one of
+	@echo   basic
+	@echo   pdcurses
+	@echo   vga
+	@echo . 
+	@echo To reconfigure options, type: make config
+	@echo To clean directory, type: make clean
+	@echo To install the Emulator, type:
+
+basic :
+	@make atari800 CPPFLAGS="-DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
+	@echo Finished.
+
+pdcurses :
+	@make atari800 CPPFLAGS="-DCURSES" LDLIBS="-lcurso -lm" OBJ="atari_curses.o"
+	@echo Finished.
+
+vga :
+	@make atari800 CPPFLAGS="-DVGA" LDLIBS="-lm" OBJ="atari_vga.o"
+	@echo Finished.
+
+#
+# ======================================================
+# You should not need to modify anything below this here
+# ======================================================
+#
+
+INCLUDES        =       Makefile \
+			config.h \
+			cpu.h \
+			atari.h \
+			colours.h \
+			antic.h \
+			gtia.h \
+			pokey.h \
+			pia.h
+
+config config.h :       configure
+	configure
+
+configure       :       configure.o
+	$(LD) $(LDFLAGS) configure.o $(LDLIBS) -o configure
+
+configure.o     :       configure.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
+
+OBJECTS =       atari.o \
+		ffp.o \
+		cpu.o \
+		monitor.o \
+		sio.o \
+		devices.o \
+		antic.o \
+		gtia.o \
+		pokey.o \
+		pia.o \
+		supercart.o
+
+atari800        :       $(OBJECTS) $(OBJ)
+	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
+
+atari.o         :       atari.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="\"${ATARI_LIBRARY}\"" $(CFLAGS) atari.c
+
+ffp.o           :       ffp.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
+
+cpu.o           :       cpu.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c
+
+monitor.o       :       monitor.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
+
+sio.o           :       sio.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) sio.c
+
+devices.o       :       devices.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) devices.c
+
+antic.o         :       antic.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) antic.c
+
+gtia.o          :       gtia.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) gtia.c
+
+pokey.o         :       pokey.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pokey.c
+
+pia.o           :       pia.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pia.c
+
+supercart.o     :       supercart.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
+
+atari_x11.o     :       atari_x11.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
+
+atari_svgalib.o :       atari_svgalib.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_svgalib.c
+
+atari_curses.o  :       atari_curses.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_curses.c
+
+atari_amiga.o   :       atari_amiga.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_amiga.c
+
+nas.o           :       nas.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
+
+clean   :
+	del configure.exe
+	del configure
+	del config.h
+	del core
+	del *.o

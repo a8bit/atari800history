@@ -33,7 +33,7 @@ extern Machine	machine;
 
 #define	ATARI_WIDTH	(384)
 #define	ATARI_HEIGHT	(192 + 24 + 24)
-#define	ATARI_TITLE	"Atari 800 Emulator, Version 0.5.0"
+#define	ATARI_TITLE	"Atari 800 Emulator, Version 0.6.0"
 
 #define NO_CART		0
 #define	NORMAL8_CART	1
@@ -348,5 +348,24 @@ enum ESCAPE
 #define AKEY_CIRCUMFLEX 0x47
 #define AKEY_BACKSLASH 0x46
 #define AKEY_BAR 0x4f
+
+void EnablePILL (void);
+int Insert_8K_ROM (char *filename);
+int Insert_16K_ROM (char *filename);
+int Insert_OSS_ROM (char *filename);
+int Insert_DB_ROM (char *filename);
+int Insert_32K_5200ROM (char *filename);
+int Remove_ROM (void);
+void Coldstart (void);
+void Warmstart (void);
+int Initialise_AtariOSA (void);
+int Initialise_AtariOSB (void);
+int Initialise_AtariXL (void);
+int Initialise_AtariXE (void);
+int Initialise_Atari5200 (void);
+int Atari800_Exit (int run_monitor);
+UBYTE Atari800_GetByte (UWORD addr);
+int Atari800_PutByte (UWORD addr, UBYTE byte);
+void Escape (UBYTE esc_code);
 
 #endif

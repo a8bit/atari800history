@@ -4,10 +4,11 @@
 #include	<curses.h>
 #endif
 
-static char *rcsid = "$Id: atari_curses.c,v 1.3 1996/04/28 20:14:57 david Exp $";
+static char *rcsid = "$Id: atari_curses.c,v 1.4 1996/09/04 23:36:02 david Exp $";
 
-#include	"cpu.h"
-#include	"atari.h"
+#include "atari.h"
+#include "cpu.h"
+#include "monitor.h"
 
 #define CURSES_LEFT 0
 #define CURSES_CENTRAL 1
@@ -62,7 +63,7 @@ int Atari_Exit (int run_monitor)
   return 0;
 }
 
-void Atari_DisplayScreen ()
+void Atari_DisplayScreen (UBYTE *screen)
 {
   UWORD	screenaddr;
 

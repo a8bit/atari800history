@@ -11,7 +11,7 @@
  *       scanline_ptr.
  */
 
-static char *rcsid = "$Id: atari_x11.c,v 1.23 1996/07/19 19:52:22 david Exp $";
+static char *rcsid = "$Id: atari_x11.c,v 1.30 1996/09/29 22:34:20 david Exp $";
 
 #ifdef XVIEW
 #include <xview/xview.h>
@@ -27,12 +27,26 @@ static char *rcsid = "$Id: atari_x11.c,v 1.23 1996/07/19 19:52:22 david Exp $";
 #include <Xm/DrawingA.h>
 #include <Xm/MessageB.h>
 #include <Xm/FileSB.h>
+#include <Xm/RowColumn.h>
+#include <Xm/ToggleBG.h>
 
 static XtAppContext app;
 static Widget toplevel;
 static Widget main_w;
 static Widget drawing_area;
-static Widget fsel;
+static Widget fsel_b;
+static Widget fsel_d;
+static Widget fsel_r;
+static Widget rbox_d;
+static Widget rbox_r;
+static Widget togg_d1, togg_d2, togg_d3, togg_d4;
+static Widget togg_d5, togg_d6, togg_d7, togg_d8;
+static Widget togg_8k, togg_16k, togg_oss, togg_32k, togg_5200;
+static Widget eject_menu;
+static Widget disable_menu;
+static Widget system_menu;
+static int motif_disk_sel = 1;
+static int motif_rom_sel = 1;
 #endif
 
 #include <X11/Xlib.h>
@@ -44,6 +58,10 @@ static Widget fsel;
 #endif
 #include "atari.h"
 #include "colours.h"
+#include "monitor.h"
+#include "sio.h"
+#include "nas.h"
+#include "platform.h"
 
 #ifdef FPS_MONITOR
 #include <sys/time.h>
@@ -136,7 +154,6 @@ static Panel_item js1_item;
 static Frame performance_frame;
 static Panel performance_panel;
 static Panel_item refresh_slider;
-static Panel_item countdown_slider;
 #endif
 
 static int	SHIFT = 0x00;
@@ -165,7 +182,8 @@ static int	npoints = 0;
 static XPoint		points[NPOINTS];
 static XRectangle	rectangles[NRECTS];
 
-static int consol;
+static int keyboard_consol;
+static int menu_consol;
 
 /*
    ==========================================
@@ -174,7 +192,6 @@ static int consol;
 */
 
 extern int refresh_rate;
-extern int countdown_rate;
 extern double deltatime;
 
 int GetKeyCode (XEvent *event)
@@ -225,15 +242,15 @@ int GetKeyCode (XEvent *event)
 	  keycode = AKEY_WARMSTART;
 	  break;
 	case XK_F2 :
-	  consol &= 0x03;
+	  keyboard_consol &= 0x03;
 	  keycode = AKEY_NONE;
 	  break;
 	case XK_F3 :
-	  consol &= 0x05;
+	  keyboard_consol &= 0x05;
 	  keycode = AKEY_NONE;
 	  break;
 	case XK_F4 :
-	  consol &= 0x6;
+	  keyboard_consol &= 0x6;
 	  keycode = AKEY_NONE;
 	  break;
 	case XK_F5 :
@@ -567,6 +584,11 @@ int GetKeyCode (XEvent *event)
 	  if (x11bug)
 	    printf ("XK_Shift_Lock\n");
 	  break;
+	case XK_F2 :
+	case XK_F3 :
+	case XK_F4 :
+	  keyboard_consol = 0x07;
+	  keycode = AKEY_NONE;
 	default :
 	  break;
 	}
@@ -683,6 +705,33 @@ eject_callback ()
   SIO_Dismount(diskno);
 }
 
+disable_callback ()
+{
+  int diskno;
+
+  diskno = notice_prompt (panel, NULL,
+			  NOTICE_MESSAGE_STRINGS,
+			    "Drive to Disable?",
+			    NULL,
+			  NOTICE_BUTTON, "1", 1,
+			  NOTICE_BUTTON, "2", 2,
+			  NOTICE_BUTTON, "3", 3,
+			  NOTICE_BUTTON, "4", 4,
+			  NOTICE_BUTTON, "5", 5,
+			  NOTICE_BUTTON, "6", 6,
+			  NOTICE_BUTTON, "7", 7,
+			  NOTICE_BUTTON, "8", 8,
+			  NULL);
+
+  if ((diskno < 1) || (diskno > 8))
+    {
+      printf ("Invalid driveno: %d\n", diskno);
+      exit (1);
+    }
+
+  SIO_DisableDrive(diskno);
+}
+
 int rom_change (char *a, char *full_filename, char *filename)
 {
   struct stat buf;
@@ -784,17 +833,17 @@ exit_callback ()
 
 option_callback ()
 {
-  consol &= 0x03;
+  menu_consol &= 0x03;
 }
 
 select_callback ()
 {
-  consol &= 0x05;
+  menu_consol &= 0x05;
 }
 
 start_callback ()
 {
-  consol &= 0x6;
+  menu_consol &= 0x6;
 }
 
 help_callback ()
@@ -1082,10 +1131,6 @@ refresh_callback (Panel_item item, int value, Event *event)
   refresh_rate = value;
 }
 
-countdown_callback (Panel_item item, int value, Event *event)
-{
-  countdown_rate = value;
-}
 #endif
 
 void Atari_WhatIs (int mode)
@@ -1112,11 +1157,12 @@ void Atari_WhatIs (int mode)
 
 #ifdef MOTIF
 void motif_boot_disk (Widget fs, XtPointer client_data,
-		      XmFileSelectionBoxCallbackStruct *cbs)
+		      XtPointer cbs)
 {
   char *filename;
 
-  if (XmStringGetLtoR(cbs->value, XmSTRING_DEFAULT_CHARSET, &filename))
+  if (XmStringGetLtoR(((XmFileSelectionBoxCallbackStruct *) cbs)->value,
+		      XmSTRING_DEFAULT_CHARSET, &filename))
     {
       if (*filename)
 	{
@@ -1132,67 +1178,170 @@ void motif_boot_disk (Widget fs, XtPointer client_data,
   XtPopdown (XtParent(fs));
 }
 
-void motif_fs_cancel (Widget fs)
+void motif_select_disk (Widget toggle, XtPointer client_data, XtPointer cbs)
+{
+  motif_disk_sel = (int) client_data;
+}
+
+void motif_insert_disk (Widget fs, XtPointer client_data, XtPointer cbs)
+{
+  char *filename;
+
+  if (XmStringGetLtoR(((XmFileSelectionBoxCallbackStruct *) cbs)->value,
+		      XmSTRING_DEFAULT_CHARSET, &filename))
+    {
+      if (*filename)
+	{
+	  SIO_Dismount(motif_disk_sel);
+	  SIO_Mount (motif_disk_sel, filename);
+	}
+
+      XtFree (filename);
+    }
+
+  XtUnmanageChild (fs);
+  XtPopdown (XtParent(fs));
+}
+
+void motif_select_rom (Widget toggle, XtPointer client_data, XtPointer cbs)
+{
+  motif_rom_sel = (int) client_data;
+}
+
+void motif_insert_rom (Widget fs, XtPointer client_data, XtPointer cbs)
+{
+  char *filename;
+  int ret;
+
+  if (XmStringGetLtoR(((XmFileSelectionBoxCallbackStruct *) cbs)->value,
+		      XmSTRING_DEFAULT_CHARSET, &filename))
+    {
+      if (*filename)
+	{
+	  Remove_ROM ();
+	  switch (motif_rom_sel)
+	  {
+	  case 1:
+	    ret = Insert_8K_ROM(filename);
+	    break;
+	  case 2:
+	    ret = Insert_16K_ROM(filename);
+	    break;
+	  case 3:
+	    ret = Insert_OSS_ROM(filename);
+	    break;
+	  case 4:
+	    ret = Insert_DB_ROM(filename);
+	    break;
+	  case 5:
+	    ret = Insert_32K_5200ROM(filename);
+	    break;
+	  default:
+	    ret = 0;
+	    break;
+	  }
+	  if (ret)
+	  {
+	    Coldstart ();
+	  }
+	}
+
+      XtFree (filename);
+    }
+
+  XtUnmanageChild (fs);
+  XtPopdown (XtParent(fs));
+}
+
+void motif_fs_cancel (Widget fs, XtPointer client_data, XtPointer call_data)
 {
   XtUnmanageChild (fs);
   XtPopdown (XtParent(fs));
 }
 
-void motif_system_cback (Widget w, int item_no)
+void motif_eject_cback (Widget button, XtPointer client_data, XtPointer cbs)
+{
+  SIO_Dismount(((int) client_data) + 1);
+}
+
+void motif_disable_cback (Widget button, XtPointer client_data, XtPointer cbs)
+{
+  SIO_DisableDrive(((int) client_data) + 1);
+}
+
+void motif_system_cback (Widget w, XtPointer item_no, XtPointer cbs)
 {
   XmString t;
   int status;
   char *errmsg = NULL;
 
-  switch (item_no)
+  switch ((int) item_no)
     {
     case 0 :
       t = XmStringCreateSimple ("/usr/local/lib/atari/DISKS/*");
-      XmFileSelectionDoSearch (fsel, t);
+      XmFileSelectionDoSearch (fsel_b, t);
       XmStringFree (t);
-      XtAddCallback (fsel, XmNokCallback, motif_boot_disk, NULL);
-      XtAddCallback (fsel, XmNcancelCallback, motif_fs_cancel, NULL);
-      XtManageChild (fsel);
-      XtPopup (XtParent(fsel), XtGrabNone);
+      XtManageChild (fsel_b);
+      XtPopup (XtParent(fsel_b), XtGrabNone);
       break;
     case 1 :
+      /* insert disk */
+      t = XmStringCreateSimple ("/usr/local/lib/atari/DISKS/*");
+      XmFileSelectionDoSearch (fsel_d, t);
+      XmStringFree (t);
+      XtManageChild (fsel_d);
+      XtPopup (XtParent(fsel_d), XtGrabNone);
+      break;
     case 2 :
+      /* eject disk */
+      /* handled by pullright menu */
+      break;
     case 3 :
+      /* disable drive */
+      /* handled by pullright menu */
       break;
     case 4 :
+      /* insert rom */
+      t = XmStringCreateSimple ("/usr/local/lib/atari/ROM/*");
+      XmFileSelectionDoSearch (fsel_r, t);
+      XmStringFree (t);
+      XtManageChild (fsel_r);
+      XtPopup (XtParent(fsel_r), XtGrabNone);
+      break;
+    case 5 :
       Remove_ROM ();
       Coldstart ();
       break;
-    case 5 :
+    case 6 :
       EnablePILL ();
       Coldstart ();
       break;
-    case 6 :
+    case 7 :
       status = Initialise_AtariOSA ();
       if (status == 0)
 	errmsg = "Sorry, OS/A ROM Unavailable";
       break;
-    case 7 :
+    case 8 :
       status = Initialise_AtariOSB ();
       if (status == 0)
 	errmsg = "Sorry, OS/B ROM Unavailable";
       break;
-    case 8 :
+    case 9 :
       status = Initialise_AtariXL ();
       if (status == 0)
 	errmsg = "Sorry, XL/XE ROM Unavailable";
       break;
-    case 9 :
+    case 10 :
       status = Initialise_AtariXE ();
       if (status == 0)
 	errmsg = "Sorry, XL/XE ROM Unavailable";
       break;
-    case 10 :
+    case 11 :
       status = Initialise_Atari5200 ();
       if (status == 0)
 	errmsg = "Sorry, 5200 ROM Unavailable";
       break;
-    case 11 :
+    case 12 :
       exit (0);
     }
 
@@ -1223,18 +1372,18 @@ void motif_system_cback (Widget w, int item_no)
     }
 }
 
-void motif_consol_cback (Widget w, int item_no)
+void motif_consol_cback (Widget w, XtPointer item_no, XtPointer cbs)
 {
-  switch (item_no)
+  switch ((int) item_no)
     {
     case 0 :
-      consol &= 0x03; /* Option Pressed */
+      menu_consol &= 0x03; /* Option Pressed */
       break;
     case 1 :
-      consol &= 0x05; /* Select Pressed */
+      menu_consol &= 0x05; /* Select Pressed */
       break;
     case 2 :
-      consol &= 0x06; /* Start Pressed */
+      menu_consol &= 0x06; /* Start Pressed */
       break;
     case 3 :
       xview_keycode = AKEY_HELP;
@@ -1251,13 +1400,20 @@ void motif_consol_cback (Widget w, int item_no)
     }
 }
 
-void motif_keypress (Widget w, XtPointer client_data, XEvent *event)
+void motif_keypress (Widget w, XtPointer client_data, XEvent *event,
+		     Boolean *continue_to_dispatch)
 {
   int keycode;
 
   keycode = GetKeyCode (event);
   if (keycode != AKEY_NONE)
     xview_keycode = keycode;
+}
+
+void motif_exposure (Widget w, XtPointer client_data, XEvent *event,
+		     Boolean *continue_to_dispatch)
+{
+  modified = TRUE;
 }
 #endif
 
@@ -1425,6 +1581,10 @@ void Atari_Initialise (int *argc, char *argv[])
 			   MENU_ITEM,
 			     MENU_STRING, "Eject Disk",
 			     MENU_NOTIFY_PROC, eject_callback,
+			     NULL,
+			   MENU_ITEM,
+			     MENU_STRING, "Disable Drive",
+			     MENU_NOTIFY_PROC, disable_callback,
 			     NULL,
 			   MENU_ITEM,
 			     MENU_STRING, "Insert Cartridge",
@@ -1657,19 +1817,6 @@ void Atari_Initialise (int *argc, char *argv[])
 					  NULL);
   ypos += 25;
 
-  countdown_slider = (Panel_item)xv_create (performance_panel, PANEL_SLIDER,
-					    PANEL_VALUE_X, 155,
-					    PANEL_VALUE_Y, ypos,
-					    PANEL_LAYOUT, PANEL_HORIZONTAL,
-					    PANEL_LABEL_STRING, "Instructions per VBI",
-					    PANEL_VALUE, countdown_rate,
-					    PANEL_MIN_VALUE, 1000,
-					    PANEL_MAX_VALUE, 10000,
-					    PANEL_SLIDER_WIDTH, 100,
-					    PANEL_TICKS, 10,
-					    PANEL_NOTIFY_PROC, countdown_callback,
-					    NULL);
-
   xv_create (performance_panel, PANEL_BUTTON,
 	     XV_X, 180,
 	     XV_Y, 75,
@@ -1723,6 +1870,7 @@ void Atari_Initialise (int *argc, char *argv[])
     XmString s_boot_disk;
     XmString s_insert_disk;
     XmString s_eject_disk;
+    XmString s_disable_drive;
     XmString s_insert_cart;
     XmString s_remove_cart;
     XmString s_enable_pill;
@@ -1742,15 +1890,24 @@ void Atari_Initialise (int *argc, char *argv[])
     XmString s_warmstart;
     XmString s_coldstart;
 
+    XmString s_label;
+
+    XmString s_d1, s_d2, s_d3, s_d4;
+    XmString s_d5, s_d6, s_d7, s_d8;
+
+    Arg args[8];
+    int n;
+
     main_w = XtVaCreateManagedWidget ("main_window",
 				      xmMainWindowWidgetClass, toplevel,
 				      NULL);
 
     s_system = XmStringCreateSimple ("System");
-    s_boot_disk = XmStringCreateSimple ("Boot Disk");
-    s_insert_disk = XmStringCreateSimple ("Insert Disk");
+    s_boot_disk = XmStringCreateSimple ("Boot Disk...");
+    s_insert_disk = XmStringCreateSimple ("Insert Disk...");
     s_eject_disk = XmStringCreateSimple ("Eject Disk");
-    s_insert_cart = XmStringCreateSimple ("Insert Cartridge");
+    s_disable_drive = XmStringCreateSimple ("Disable Drive");
+    s_insert_cart = XmStringCreateSimple ("Insert Cartridge...");
     s_remove_cart = XmStringCreateSimple ("Remove Cartridge");
     s_enable_pill = XmStringCreateSimple ("Enable PILL");
     s_osa = XmStringCreateSimple ("Atari 800 OS/A");
@@ -1774,12 +1931,14 @@ void Atari_Initialise (int *argc, char *argv[])
 				       XmVaCASCADEBUTTON, s_console, 'C',
 				       NULL);
 
+    system_menu =
     XmVaCreateSimplePulldownMenu (menubar, "system_menu", 0, motif_system_cback,
-				  XmVaPUSHBUTTON, s_boot_disk, 'O', NULL, NULL,
+				  XmVaPUSHBUTTON, s_boot_disk, 'o', NULL, NULL,
 				  XmVaPUSHBUTTON, s_insert_disk, 'I', NULL, NULL,
-				  XmVaPUSHBUTTON, s_eject_disk, 'J', NULL, NULL,
+				  XmVaCASCADEBUTTON, s_eject_disk, 'j',
+				  XmVaCASCADEBUTTON, s_disable_drive, 'D',
 				  XmVaSEPARATOR,
-				  XmVaPUSHBUTTON, s_insert_cart, 'N', NULL, NULL,
+				  XmVaPUSHBUTTON, s_insert_cart, 'n', NULL, NULL,
 				  XmVaPUSHBUTTON, s_remove_cart, 'R', NULL, NULL,
 				  XmVaPUSHBUTTON, s_enable_pill, 'P', NULL, NULL,
 				  XmVaSEPARATOR,
@@ -1805,6 +1964,13 @@ void Atari_Initialise (int *argc, char *argv[])
 				  NULL);
 
     XmStringFree (s_system);
+    XmStringFree (s_boot_disk);
+    XmStringFree (s_insert_disk);
+    XmStringFree (s_eject_disk);
+    XmStringFree (s_disable_drive);
+    XmStringFree (s_insert_cart);
+    XmStringFree (s_remove_cart);
+    XmStringFree (s_enable_pill);
     XmStringFree (s_osa);
     XmStringFree (s_osb);
     XmStringFree (s_osxl);
@@ -1823,7 +1989,178 @@ void Atari_Initialise (int *argc, char *argv[])
 
     XtManageChild (menubar);
 
-    fsel = XmCreateFileSelectionDialog (toplevel, "filesb", NULL, 0);
+    fsel_b = XmCreateFileSelectionDialog (toplevel, "boot_disk", NULL, 0);
+    XtAddCallback (fsel_b, XmNokCallback, motif_boot_disk, NULL);
+    XtAddCallback (fsel_b, XmNcancelCallback, motif_fs_cancel, NULL);
+
+    fsel_d = XmCreateFileSelectionDialog (toplevel, "load_disk", NULL, 0);
+    XtAddCallback (fsel_d, XmNokCallback, motif_insert_disk, NULL);
+    XtAddCallback (fsel_d, XmNcancelCallback, motif_fs_cancel, NULL);
+
+    n = 0;
+    XtSetArg(args[n], XmNradioBehavior, True); n++;
+    XtSetArg(args[n], XmNradioAlwaysOne, True); n++;
+    XtSetArg(args[n], XmNorientation, XmHORIZONTAL); n++;
+    rbox_d = XmCreateWorkArea(fsel_d, "rbox_d", args, n);
+    XtManageChild(rbox_d);
+
+    s_label = XmStringCreateSimple("D1:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    XtSetArg(args[n], XmNset, True); n++;
+    togg_d1 = XmCreateToggleButtonGadget(rbox_d, "togg_d1", args, n);
+    XtManageChild(togg_d1);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d1, XmNarmCallback, motif_select_disk, (XtPointer) 1);
+
+    s_label = XmStringCreateSimple("D2:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d2 = XmCreateToggleButtonGadget(rbox_d, "togg_d2", args, n);
+    XtManageChild(togg_d2);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d2, XmNarmCallback, motif_select_disk, (XtPointer) 2);
+
+    s_label = XmStringCreateSimple("D3:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d3 = XmCreateToggleButtonGadget(rbox_d, "togg_d3", args, n);
+    XtManageChild(togg_d3);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d3, XmNarmCallback, motif_select_disk, (XtPointer) 3);
+
+    s_label = XmStringCreateSimple("D4:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d4 = XmCreateToggleButtonGadget(rbox_d, "togg_d4", args, n);
+    XtManageChild(togg_d4);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d4, XmNarmCallback, motif_select_disk, (XtPointer) 4);
+
+    s_label = XmStringCreateSimple("D5:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d5 = XmCreateToggleButtonGadget(rbox_d, "togg_d5", args, n);
+    XtManageChild(togg_d5);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d5, XmNarmCallback, motif_select_disk, (XtPointer) 5);
+
+    s_label = XmStringCreateSimple("D6:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d6 = XmCreateToggleButtonGadget(rbox_d, "togg_d6", args, n);
+    XtManageChild(togg_d6);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d6, XmNarmCallback, motif_select_disk, (XtPointer) 6);
+
+    s_label = XmStringCreateSimple("D7:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d7 = XmCreateToggleButtonGadget(rbox_d, "togg_d7", args, n);
+    XtManageChild(togg_d7);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d7, XmNarmCallback, motif_select_disk, (XtPointer) 7);
+
+    s_label = XmStringCreateSimple("D8:");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_d8 = XmCreateToggleButtonGadget(rbox_d, "togg_d8", args, n);
+    XtManageChild(togg_d8);
+    XmStringFree(s_label);
+    XtAddCallback (togg_d8, XmNarmCallback, motif_select_disk, (XtPointer) 8);
+
+
+    fsel_r = XmCreateFileSelectionDialog (toplevel, "load_rom", NULL, 0);
+    XtAddCallback (fsel_r, XmNokCallback, motif_insert_rom, NULL);
+    XtAddCallback (fsel_r, XmNcancelCallback, motif_fs_cancel, NULL);
+
+    n = 0;
+    XtSetArg(args[n], XmNradioBehavior, True); n++;
+    XtSetArg(args[n], XmNradioAlwaysOne, True); n++;
+    rbox_r = XmCreateWorkArea(fsel_r, "rbox_r", args, n);
+    XtManageChild(rbox_r);
+
+    s_label = XmStringCreateSimple("8K");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    XtSetArg(args[n], XmNset, True); n++;
+    togg_8k = XmCreateToggleButtonGadget(rbox_r, "togg_8k", args, n);
+    XtManageChild(togg_8k);
+    XmStringFree(s_label);
+    XtAddCallback (togg_8k, XmNarmCallback, motif_select_rom, (XtPointer) 1);
+
+    s_label = XmStringCreateSimple("16K");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_16k = XmCreateToggleButtonGadget(rbox_r, "togg_16k", args, n);
+    XtManageChild(togg_16k);
+    XmStringFree(s_label);
+    XtAddCallback (togg_16k, XmNarmCallback, motif_select_rom, (XtPointer) 2);
+
+    s_label = XmStringCreateSimple("OSS 16K Bank Switched");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_oss = XmCreateToggleButtonGadget(rbox_r, "togg_oss", args, n);
+    XtManageChild(togg_oss);
+    XmStringFree(s_label);
+    XtAddCallback (togg_oss, XmNarmCallback, motif_select_rom, (XtPointer) 3);
+
+    s_label = XmStringCreateSimple("DB 32K Bank Switched");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_32k = XmCreateToggleButtonGadget(rbox_r, "togg_32k", args, n);
+    XtManageChild(togg_32k);
+    XmStringFree(s_label);
+    XtAddCallback (togg_32k, XmNarmCallback, motif_select_rom, (XtPointer) 4);
+
+    s_label = XmStringCreateSimple("5200 32K");
+    n = 0;
+    XtSetArg(args[n], XmNlabelString, s_label); n++;
+    togg_5200 = XmCreateToggleButtonGadget(rbox_r, "togg_5200", args, n);
+    XtManageChild(togg_5200);
+    XmStringFree(s_label);
+    XtAddCallback (togg_5200, XmNarmCallback, motif_select_rom, (XtPointer) 5);
+
+    s_d1 = XmStringCreateSimple("D1:");
+    s_d2 = XmStringCreateSimple("D2:");
+    s_d3 = XmStringCreateSimple("D3:");
+    s_d4 = XmStringCreateSimple("D4:");
+    s_d5 = XmStringCreateSimple("D5:");
+    s_d6 = XmStringCreateSimple("D6:");
+    s_d7 = XmStringCreateSimple("D7:");
+    s_d8 = XmStringCreateSimple("D8:");
+    eject_menu = XmVaCreateSimplePulldownMenu(system_menu,
+					      "eject_disk", 2,
+					      motif_eject_cback,
+					   XmVaPUSHBUTTON, s_d1, '1', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d2, '2', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d3, '3', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d4, '4', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d5, '5', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d6, '6', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d7, '7', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d8, '8', NULL, NULL,
+					   NULL);
+    disable_menu = XmVaCreateSimplePulldownMenu(system_menu,
+					      "disable_disk", 3,
+					      motif_disable_cback,
+					   XmVaPUSHBUTTON, s_d1, '1', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d2, '2', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d3, '3', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d4, '4', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d5, '5', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d6, '6', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d7, '7', NULL, NULL,
+					   XmVaPUSHBUTTON, s_d8, '8', NULL, NULL,
+					   NULL);
+    XmStringFree(s_d1);
+    XmStringFree(s_d2);
+    XmStringFree(s_d3);
+    XmStringFree(s_d4);
+    XmStringFree(s_d5);
+    XmStringFree(s_d6);
+    XmStringFree(s_d7);
+    XmStringFree(s_d8);
 
     drawing_area = XtVaCreateManagedWidget ("Canvas",
 					    xmDrawingAreaWidgetClass, main_w,
@@ -1837,6 +2174,11 @@ void Atari_Initialise (int *argc, char *argv[])
 		       KeyPressMask | KeyReleaseMask,
 		       False,
 		       motif_keypress, NULL);
+
+    XtAddEventHandler (drawing_area,
+		       ExposureMask, 
+		       False,
+		       motif_exposure, NULL);
 
     XtRealizeWidget (toplevel);
   }
@@ -1998,7 +2340,8 @@ void Atari_Initialise (int *argc, char *argv[])
       exit (1);
     }
 
-  consol = 7;
+  keyboard_consol = 7;
+  menu_consol = 7;
 
   if (x11bug)
     {
@@ -2090,8 +2433,6 @@ void Atari_DisplayScreen (UBYTE *screen)
   int ypos;
   int i;
 
-  modified = FALSE;
-
   for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
     {
       for (xpos=0;xpos<ATARI_WIDTH;xpos++)
@@ -2163,11 +2504,11 @@ void Atari_DisplayScreen (UBYTE *screen)
       XCopyArea (display, pixmap, window, gc, 0, 0,
 		 window_width, window_height, 0, 0);
     }
+  modified = FALSE;
 #endif
 
   keypad_trig = 1;
 
-#ifdef XVIEW
 #ifdef FPS_MONITOR
   {
     double curtime;
@@ -2179,6 +2520,7 @@ void Atari_DisplayScreen (UBYTE *screen)
 
     if ((curtime - basetime) >= 2.0)
       {
+#ifdef XVIEW
 	static char gash[64];
 
 	sprintf (gash, "%.2f FPS", (double)nframes / (curtime - basetime));
@@ -2186,6 +2528,24 @@ void Atari_DisplayScreen (UBYTE *screen)
 	xv_set (frame,
 		FRAME_LEFT_FOOTER, gash,
 		NULL);
+#else
+#ifdef MOTIF
+	int n = 0;
+	Arg args[1];
+	static char gash[64];
+
+	sprintf (gash, " %s - %.2f FPS",
+		 ATARI_TITLE, (double)nframes / (curtime - basetime));
+	XtSetArg(args[n], XtNtitle, gash); n++;
+	XtSetValues(toplevel, args, n);
+#else
+	static char gash[64];
+
+	sprintf (gash, " %s - %.2f FPS",
+		 ATARI_TITLE, (double)nframes / (curtime - basetime));
+	XStoreName (display, window, gash);
+#endif
+#endif
 
 	nframes = 0;
 	basetime = curtime;
@@ -2193,6 +2553,7 @@ void Atari_DisplayScreen (UBYTE *screen)
   }
 #endif
 
+#ifdef XVIEW
   notify_dispatch ();
   XFlush (display);
 #endif
@@ -2530,8 +2891,15 @@ int Atari_CONSOL (void)
 {
   int temp;
 
-  temp = consol;
-  consol = 0x07;
+  if (menu_consol != 7)
+    {
+      temp = menu_consol;
+      menu_consol = 0x07;
+    }
+  else
+    {
+      temp = keyboard_consol;
+    }
 
   return temp;
 }

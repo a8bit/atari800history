@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <math.h>
 
-static char *rcsid = "$Id: ffp.c,v 1.3 1996/07/18 00:33:05 david Exp $";
+static char *rcsid = "$Id: ffp.c,v 1.4 1996/09/04 23:36:06 david Exp $";
 
 #include "cpu.h"
+#include "ffp.h"
+
 /*
 #define DEBUG
 */
@@ -86,7 +88,7 @@ void PutFloat (unsigned char *memory, double fval)
 
   for (i=1;i<6;i++)
     {
-      int ival = fval;
+      int ival = (int)fval;
       memory[i] = DECtoBCD[ival];
       fval -= ival;
       fval *= 100.0;

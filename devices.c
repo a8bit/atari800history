@@ -27,7 +27,7 @@
 #include	<dirent.h>
 #endif
 
-static char *rcsid = "$Id: devices.c,v 1.13 1996/07/18 00:33:05 david Exp $";
+static char *rcsid = "$Id: devices.c,v 1.16 1996/09/29 22:41:09 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
@@ -43,6 +43,7 @@ static char *rcsid = "$Id: devices.c,v 1.13 1996/07/18 00:33:05 david Exp $";
 #endif
 #include "atari.h"
 #include "cpu.h"
+#include "devices.h"
 
 #define	ICHIDZ	0x0020
 #define	ICDNOZ	0x0021
@@ -118,6 +119,8 @@ int Device_isvalid (char ch)
       case ':' :
       case '.' :
       case '_' :
+      case '*' :
+      case '?' :
 	valid = TRUE;
 	break;
       default :
@@ -183,7 +186,13 @@ match (char *pattern, char *filename)
 	  break;
 	}
     }
-
+  if ((*filename)
+      || ((*pattern)
+	  && (((*pattern != '*') && (*pattern != '?'))
+	      || pattern[1])))
+  {
+    status = 0;
+  }
   return status;
 }
 
@@ -256,6 +265,7 @@ void Device_HHOPEN (void)
 	}
       break;
     case 6 :
+    case 7 :
 #ifdef DO_DIR
       fp[fid] = tmpfile ();
       if (fp[fid])

@@ -12,7 +12,12 @@
 #define Z_FLAG 0x02
 #define C_FLAG 0x01
 
+void CPU_GetStatus (void);
+void CPU_PutStatus (void);
 void CPU_Reset (void);
+void SetRAM (int addr1, int addr2);
+void SetROM (int addr1, int addr2);
+void SetHARDWARE (int addr1, int addr2);
 void NMI (void);
 void GO (int cycles);
 

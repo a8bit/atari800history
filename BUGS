@@ -32,8 +32,3 @@ Bugs and Known Problems
    of XVIEW I am using (XVIEW 3.2 Linux Rel. 5 + X11R6) and the Network
    Audio System. XVIEW and NAS work OK together under Solaris and
    Linux/ELF.
-
-10. SHAMUS doesn't work because you need to switch the drive off. I did
-    a test modification to atari_sio.c so that 138 (Device Timeout) was
-    returned if no disk was present. This corrected the problem and
-    needs to be added permanently.

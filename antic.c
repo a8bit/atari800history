@@ -9,6 +9,8 @@
 #define FALSE 0
 #define TRUE 1
 
+static char *rcsid = "$Id: antic.c,v 1.12 1996/09/29 22:28:54 david Exp $";
+
 UBYTE CHACTL;
 UBYTE CHBASE;
 UBYTE DLISTH;
@@ -214,12 +216,23 @@ void antic_2 ()
 		  *ptr++ = lookup1[0];
 		  *ptr++ = lookup1[0];
 #else
+#if 0
 		  ULONG *l_ptr = (ULONG*)ptr;
 
 		  *l_ptr++ = PF4_COLPF2;
 		  *l_ptr++ = PF4_COLPF2;
 
 		  ptr = (UBYTE*)l_ptr;
+#else
+		  UWORD *w_ptr = (UWORD*)ptr;
+
+		  *w_ptr++ = PF2_COLPF2;
+		  *w_ptr++ = PF2_COLPF2;
+		  *w_ptr++ = PF2_COLPF2;
+		  *w_ptr++ = PF2_COLPF2;
+
+		  ptr = (UBYTE*)w_ptr;
+#endif
 #endif
 		}
 
@@ -1142,7 +1155,9 @@ void antic_e ()
     PF2_COLPF2;
 #endif
 
+#if 0
   background = (lookup1[0x00] << 16) | lookup1[0x00];
+#endif
 
   ptr = &memory[screenaddr];
 
@@ -1159,12 +1174,19 @@ void antic_e ()
 	}
       else
 	{
+#if 0
 	  ULONG *l_ptr  = (ULONG*)t_scrn_ptr;
 
 	  *l_ptr++ = background;
 	  *l_ptr++ = background;
 
 	  t_scrn_ptr = (UWORD*)l_ptr;
+#else
+	  *t_scrn_ptr++ = lookup1[0x00];
+	  *t_scrn_ptr++ = lookup1[0x00];
+	  *t_scrn_ptr++ = lookup1[0x00];
+	  *t_scrn_ptr++ = lookup1[0x00];
+#endif
 	}
     }
 
@@ -1248,9 +1270,6 @@ void antic_f ()
 	*   Section that handles Antic Display List. Not required for	*
 	*   BASIC version.						*
 	*                                                               *
-	*   VCOUNT is equal to 8 at the start of the first mode line,   *
-	*   and is compensated for in the Atari_ScanLine macro.         *
-	*								*
 	*****************************************************************
 */
 
@@ -1283,7 +1302,7 @@ void pmg_dma (void)
     }
 }
 
-void ANTIC_RunDisplayList ()
+void ANTIC_RunDisplayList (void)
 {
   UWORD	dlist;
   int JVB;
@@ -1291,15 +1310,27 @@ void ANTIC_RunDisplayList ()
   int nlines;
   int i;
 
+  wsync_halt = 0;
+
+  /*
+   * VCOUNT must equal zero for some games but the first line starts
+   * when VCOUNT=4. This portion processes when VCOUNT=0, 1, 2 and 3
+   */
+
+  for (ypos = 0;ypos < 8; ypos++)
+    GO (114);
+
+  NMIST = 0x00; /* Reset VBLANK */
+
   scrn_ptr = (UBYTE*)atari_screen;
 
-  ypos = 0;
+  ypos = 8;
   vscrol_flag = FALSE;
 
   dlist = (DLISTH << 8) | DLISTL;
   JVB = FALSE;
 
-  while ((DMACTL & 0x20) && !JVB && (ypos < ATARI_HEIGHT))
+  while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT+8)))
     {
       UBYTE	IR;
 
@@ -1461,7 +1492,7 @@ void ANTIC_RunDisplayList ()
       vskipafter = 99;
     }
 
-  nlines = ATARI_HEIGHT - ypos;
+  nlines = (ATARI_HEIGHT+8) - ypos;
   antic_blank (nlines);
   for (i=0;i<nlines;i++)
     {
@@ -1469,7 +1500,20 @@ void ANTIC_RunDisplayList ()
       Atari_ScanLine ();
     }
 
-  ypos = 246;
+  NMIST = 0x40; /* Set VBLANK */
+  if (NMIEN & 0x40)
+    {
+      GO (1); /* Needed for programs that monitor NMIST (Spy's Demise) */
+      NMI ();
+    }
+
+#ifdef PAL
+  for (ypos=248;ypos<312;ypos++)
+    GO (114);
+#else
+  for (ypos=248;ypos<262;ypos++)
+    GO (114);
+#endif
 }
 
 UBYTE ANTIC_GetByte (UWORD addr)
@@ -1499,10 +1543,7 @@ UBYTE ANTIC_GetByte (UWORD addr)
       byte = 0x00;
       break;
     case _VCOUNT :
-/*
-   The first line occurs when VCOUNT is equal to 4
-*/
-      byte = (ypos + 8) >> 1;
+      byte = ypos >> 1;
       break;
     case _NMIEN :
       byte = NMIEN;
@@ -1656,17 +1697,17 @@ int ANTIC_PutByte (UWORD addr, UBYTE byte)
 	  pmbase_s = (PMBASE & 0xf8) << 8;
 	  pmbase_d = (PMBASE & 0xfc) << 8;
 
-	  maddr_s = pmbase_s + 768 + 8;
-	  p0addr_s = pmbase_s + 1024 + 8;
-	  p1addr_s = pmbase_s + 1280 + 8;
-	  p2addr_s = pmbase_s + 1536 + 8;
-	  p3addr_s = pmbase_s + 1792 + 8;
+	  maddr_s = pmbase_s + 768;
+	  p0addr_s = pmbase_s + 1024;
+	  p1addr_s = pmbase_s + 1280;
+	  p2addr_s = pmbase_s + 1536;
+	  p3addr_s = pmbase_s + 1792;
 
-	  maddr_d = pmbase_d + 384 + 4;
-	  p0addr_d = pmbase_d + 512 + 4;
-	  p1addr_d = pmbase_d + 640 + 4;
-	  p2addr_d = pmbase_d + 768 + 4;
-	  p3addr_d = pmbase_d + 896 + 4;
+	  maddr_d = pmbase_d + 384;
+	  p0addr_d = pmbase_d + 512;
+	  p1addr_d = pmbase_d + 640;
+	  p2addr_d = pmbase_d + 768;
+	  p3addr_d = pmbase_d + 896;
 	}
       break;
     case _VSCROL :

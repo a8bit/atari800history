@@ -38,7 +38,7 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 
-static char *rcsid = "$Id: cpu.c,v 1.13 1996/07/23 01:13:33 david Exp $";
+static char *rcsid = "$Id: cpu.c,v 1.18 1996/09/02 19:41:59 david Exp $";
 
 #define	FALSE	0
 #define	TRUE	1
@@ -85,25 +85,13 @@ extern int tron;
 
 int count[256];
 
-#define MEMORY_ATTRIBUTES
-
 UBYTE memory[65536];
-
-static int ram_below = 0xa000;
-static int ram_above = 0xffff;
 
 int IRQ;
 
-#ifdef MEMORY_ATTRIBUTES
 static UBYTE attrib[65536];
 #define	GetByte(addr)		((attrib[addr] == HARDWARE) ? Atari800_GetByte(addr) : memory[addr])
 #define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) if (Atari800_PutByte(addr,byte)) break;
-#else
-#define GetByte(addr) ((addr < 0xd000) ? memory[addr] : ((addr > 0xd7ff) ? memory[addr] : Atari800_GetByte(addr)))
-#define PutByte(addr,byte) if ((int)addr < ram_below) memory[addr] = byte; else if ((int)addr > ram_above) memory[addr] = byte; else Atari800_PutByte(addr,byte);
-#endif
-
-#define	GetWord(addr)		((GetByte(addr+1) << 8) | GetByte(addr))
 
 /*
 	===============================================================
@@ -184,38 +172,32 @@ void CPU_Reset (void)
 
 void SetRAM (int addr1, int addr2)
 {
-#ifdef MEMORY_ATTRIBUTES
   int	i;
 
   for (i=addr1;i<=addr2;i++)
     {
       attrib[i] = RAM;
     }
-#endif
 }
 
 void SetROM (int addr1, int addr2)
 {
-#ifdef MEMORY_ATTRIBUTES
   int	i;
 
   for (i=addr1;i<=addr2;i++)
     {
       attrib[i] = ROM;
     }
-#endif
 }
 
 void SetHARDWARE (int addr1, int addr2)
 {
-#ifdef MEMORY_ATTRIBUTES
   int	i;
 
   for (i=addr1;i<=addr2;i++)
     {
       attrib[i] = HARDWARE;
     }
-#endif
 }
 
 #define AND(t_data) data = t_data; Z = N = A &= data
@@ -264,6 +246,29 @@ void NMI (void)
 	moment changes can be made very easily.
 	==============================================================
 */
+
+int cycles[256] =
+{
+  7, 2, 0, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+  6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+
+  6, 6, 0, 8, 3, 3, 7, 5, 3, 2, 2, 2, 3, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 0, 7,
+  6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+
+  2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+  2, 6, 0, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
+  2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+  2, 5, 0, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+
+  2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+  2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+  2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
+};
 
 void GO (int ncycles)
 {
@@ -395,12 +400,12 @@ void GO (int ncycles)
    =====================================
 */
 
-#define	ABSOLUTE	addr=(memory[PC+1]<<8)|memory[PC];PC+=2;
+#define	ABSOLUTE	addr=(memory[PC+1]<<8)+memory[PC];PC+=2;
 #define	ZPAGE		addr=memory[PC++];
-#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)|memory[PC])+(UWORD)X;PC+=2;
-#define ABSOLUTE_Y	addr=((memory[PC+1]<<8)|memory[PC])+(UWORD)Y;PC+=2;
-#define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=GetWord(addr);
-#define	INDIRECT_Y	addr=memory[PC++];addr=GetWord(addr)+(UWORD)Y;
+#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)X;PC+=2;
+#define ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)Y;PC+=2;
+#define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=(memory[addr+1]<<8)+memory[addr];
+#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[addr+1]<<8)+memory[addr]+(UWORD)Y;
 #define	ZPAGE_X		addr=(memory[PC++]+X)&0xff;
 #define	ZPAGE_Y		addr=(memory[PC++]+Y)&0xff;
 
@@ -431,7 +436,7 @@ void GO (int ncycles)
 #endif
 #endif
 
-  while (ncycles--)
+  while (ncycles > 0)
     {
 #ifdef TRACE
       if (tron)
@@ -445,6 +450,8 @@ void GO (int ncycles)
 #ifdef PROFILE
       count[memory[PC]]++;
 #endif
+
+      ncycles -= cycles[memory[PC]];
 
 #ifdef GNU_C
       goto *opcode[memory[PC++]];
@@ -2114,9 +2121,9 @@ void GO (int ncycles)
     opcode_f7:
     opcode_fb:
       UPDATE_GLOBAL_REGS;
-      fprintf (stderr,"*** Invalid Opcode %02x at address %04x\n",
-	       memory[PC-1], PC-1);
-      ncycles = 1;
+      printf ("*** Invalid Opcode %02x at address %04x\n",
+	      memory[PC-1], PC-1);
+      ncycles = 0;
       break;
 
     adc:
@@ -2156,7 +2163,11 @@ void GO (int ncycles)
 
 	  Z = N = temp & 0xff;
 
-	  C = (A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
+/*
+ * This was the old code that I have been using upto version 0.5.2
+ *  C = (A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
+ */
+	  C = (temp > 255) ? 0 : 1;
 	  V = (Z ^ A) & 0x80;
 	  A = Z;
 	}

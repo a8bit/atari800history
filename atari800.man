@@ -1,10 +1,11 @@
-.TH ATARI800 1 "4 July 96"
+.TH ATARI800 1 "5 August 96"
 .SH NAME
-atari800 \- Atari 800 Emulator, Version 0.4.5
+atari800 \- Atari 800 Emulator, Version 0.5.1
 .SH SYNOPSIS
 \fBatari800\fP [options] [diskfiles...]
 .SH DESCRIPTION
-\fIatari800\fP emulates the Atari 800, Atari 800 XL and Atari 130 XE.
+\fIatari800\fP emulates the Atari 800, Atari 800 XL, Atari 130 XE and
+Atari 5200 Games System.
 .SS Options
 .TP
 \fB-a
@@ -61,10 +62,6 @@ which specifies how many emulated screen updates are required before
 the actual screen is updated. This value effects the speed of the
 emulation: A higher value results in faster CPU emulation but a
 less frequently updated screen.
-.TP
-\fB-countdown
-Controls the number of instructions that are executed in the vertical
-blank period. The default value is 4000.
 .SS SVGALIB Options
 .TP
 \fB-sound

@@ -1,9 +1,12 @@
 #include "atari.h"
 #include "cpu.h"
 #include "pia.h"
+#include "platform.h"
 
 #define FALSE 0
 #define TRUE 1
+
+static char *rcsid = "$Id: pia.c,v 1.7 1996/09/04 23:46:43 david Exp $";
 
 UBYTE PACTL;
 UBYTE PBCTL;
@@ -13,20 +16,22 @@ UBYTE PORTB;
 int xe_bank = -1;
 
 int rom_inserted;
-UBYTE atari_basic[8129];
+UBYTE atari_basic[8192];
 UBYTE atarixl_os[16384];
 static UBYTE under_atari_basic[8192];
 static UBYTE under_atarixl_os[16384];
 static UBYTE atarixe_memory[65536];
 static UBYTE atarixe_16kbuffer[16384];
 
-void PIA_Initialise (void)
+static UBYTE PORTA_mask = 0xff;
+
+void PIA_Initialise (int *argc, char *argv[])
 {
   PORTA = 0xff;
   PORTB = 0xff;
 }
 
-UBYTE PIA_GetByte (addr)
+UBYTE PIA_GetByte (UWORD addr)
 {
   UBYTE byte;
 
@@ -45,6 +50,7 @@ UBYTE PIA_GetByte (addr)
       break;
     case _PORTA :
       byte = Atari_PORT (0);
+      byte &= PORTA_mask;
       break;
     case _PORTB :
       switch (machine)
@@ -78,6 +84,10 @@ int PIA_PutByte (UWORD addr, UBYTE byte)
 #ifdef DEBUG1
       printf ("WR: PBCTL = %x, PC = %x\n", PBCTL, PC);
 #endif
+      break;
+    case _PORTA :
+      if (!(PACTL & 0x04))
+        PORTA_mask = ~byte;
       break;
     case _PORTB :
       switch (machine)

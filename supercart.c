@@ -4,6 +4,8 @@
 #define FALSE 0
 #define TRUE 1
 
+static char *rcsid = "$Id: supercart.c,v 1.3 1996/09/04 23:46:44 david Exp $";
+
 extern UBYTE *cart_image;
 extern int cart_type;
 

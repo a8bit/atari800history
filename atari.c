@@ -4,15 +4,20 @@
 #include <ctype.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #ifdef VMS
-#include	<unixio.h>
-#include	<file.h>
+#include <unixio.h>
+#include <file.h>
 #else
-#include	<fcntl.h>
+#include <fcntl.h>
 #endif
 
-static char *rcsid = "$Id: atari.c,v 1.23 1996/07/19 19:55:09 david Exp $";
+#ifdef DJGPP
+#include "djgpp.h"
+#endif
+
+static char *rcsid = "$Id: atari.c,v 1.30 1996/09/29 22:01:05 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
@@ -33,6 +38,12 @@ static char *rcsid = "$Id: atari.c,v 1.23 1996/07/19 19:55:09 david Exp $";
 #include "gtia.h"
 #include "pia.h"
 #include "pokey.h"
+#include "supercart.h"
+#include "ffp.h"
+#include "devices.h"
+#include "sio.h"
+#include "monitor.h"
+#include "platform.h"
 
 Machine machine = Atari;
 
@@ -58,7 +69,12 @@ int DELAYED_SEROUT_IRQ;
 int DELAYED_XMTDONE_IRQ;
 int countdown_rate = 4000;
 int refresh_rate = DEFAULT_REFRESH_RATE;
+
+#ifdef PAL
 double deltatime = (1.0 / 50.0);
+#else
+double deltatime = (1.0 / 60.0);
+#endif
 
 static char *atari_library = ATARI_LIBRARY;
 
@@ -70,7 +86,7 @@ int load_cart (char *filename, int type);
 
 static char *rom_filename = NULL;
 
-void sigint_handler ()
+void sigint_handler (int num)
 {
   int restart;
   int diskno;
@@ -88,65 +104,26 @@ void sigint_handler ()
   exit (0);
 }
 
-int GetBinaryWord (int fd, unsigned short *word)
+
+int load_image (char *filename, int addr, int nbytes)
 {
-  unsigned char hi;
-  unsigned char lo;
-  unsigned short t_word;
-  int status = FALSE;
-
-  if (read (fd, &lo, 1) == 1)
-    if (read (fd, &hi, 1) == 1)
-      {
-	t_word = ((unsigned short)hi << 8) | (unsigned short)lo;
-	*word = t_word;
-	status = TRUE;
-      }
-
-  return status;
-}
-
-int BinaryLoad (char *filename)
-{
-  int status;
-  int fd;
+  int	status = FALSE;
+  int	fd;
 
   fd = open (filename, O_RDONLY, 0777);
   if (fd != -1)
     {
-      unsigned short gash;
-      unsigned short block_start;
-      unsigned short block_end;
-      int finished = FALSE;
-
-      status = GetBinaryWord (fd, &gash);
-
-      while (!finished)
+      status = read (fd, &memory[addr], nbytes);
+      if (status != nbytes)
 	{
-	  finished = TRUE;
-
-	  status = GetBinaryWord (fd, &block_start);
-	  if (status)
-	    {
-	      status = GetBinaryWord (fd, &block_end);
-	      if (status)
-		{
-		  int nbytes;
-
-		  nbytes = block_end - block_start  + 1;
-		  read (fd, &memory[block_start], nbytes);
-
-		  finished = FALSE;
-		}
-	    }
+	  printf ("Error reading %s\n", filename);
+	  Atari800_Exit (FALSE);
+	  exit (1);
 	}
 
       close (fd);
+
       status = TRUE;
-    }
-  else
-    {
-      status = FALSE;
     }
 
   return status;
@@ -617,8 +594,10 @@ int Initialise_Atari5200 (void)
       machine = Atari5200;
       SetRAM (0x0000, 0x3fff);
       SetROM (0xf800, 0xffff);
+      SetROM (0x4000, 0xffff);
       SetHARDWARE (0xc000, 0xc0ff); /* 5200 GTIA Chip */
       SetHARDWARE (0xd400, 0xd4ff); /* 5200 ANTIC Chip */
+      SetHARDWARE (0xe800, 0xe8ff); /* 5200 POKEY Chip */
       SetHARDWARE (0xeb00, 0xebff); /* 5200 POKEY Chip */
       Coldstart ();
     }
@@ -686,12 +665,6 @@ main (int argc, char **argv)
 	  if (refresh_rate < 1)
 	    refresh_rate = 1;
 	}
-      else if (strcmp(argv[i],"-countdown") == 0)
-	{
-	  sscanf (argv[++i],"%d", &countdown_rate);
-	  if (countdown_rate < 1)
-	    countdown_rate = 1;
-	}
       else if (strcmp(argv[i],"-help") == 0)
 	{
 	  printf ("\t-atari        Standard Atari 800 mode\n");
@@ -704,7 +677,6 @@ main (int argc, char **argv)
 	  printf ("\t-oss %%s       Install OSS Super Cartridge\n");
 	  printf ("\t-db %%s        Install DB's 16/32K Cartridge (not for normal use)\n");
 	  printf ("\t-refresh %%d   Specify screen refresh rate\n");
-	  printf ("\t-countdown %%d Specify CPU cycles during vertical blank period\n");
 	  printf ("\t-nopatch      Don't patch SIO routine in OS (Ongoing Development)\n");
 	  printf ("\t-a            Use A OS\n");
 	  printf ("\t-b            Use B OS\n");
@@ -876,30 +848,6 @@ void add_esc (UWORD address, UBYTE esc_code)
   memory[address] = 0x60;	/* RTS */
 }
 
-int load_image (char *filename, int addr, int nbytes)
-{
-  int	status = FALSE;
-  int	fd;
-
-  fd = open (filename, O_RDONLY, 0777);
-  if (fd != -1)
-    {
-      status = read (fd, &memory[addr], nbytes);
-      if (status != nbytes)
-	{
-	  printf ("Error reading %s\n", filename);
-	  Atari800_Exit (FALSE);
-	  exit (1);
-	}
-
-      close (fd);
-
-      status = TRUE;
-    }
-
-  return status;
-}
-
 /*
    ================================
    N = 0 : I/O Successful and Y = 1
@@ -977,7 +925,8 @@ E_Device (UBYTE esc_code)
 	  putchar ('\n');
 	  break;
 	default :
-	  putchar (ch & 0x7f);
+	  if ((ch >= 0x20) && (ch <= 0x7e)) /* for DJGPP */
+	    putchar (ch & 0x7f);
 	  break;
 	}
       regY = 1;
@@ -1240,6 +1189,9 @@ UBYTE Atari800_GetByte (UWORD addr)
     case 0xc000: /* GTIA - 5200 */
       byte = GTIA_GetByte (addr - 0xc000);
       break;
+    case 0xe800 : /* POKEY - 5200 */
+      byte = POKEY_GetByte (addr - 0xe800);
+      break;
     case 0xeb00 : /* POKEY - 5200 */
       byte = POKEY_GetByte (addr - 0xeb00);
       break;
@@ -1307,8 +1259,6 @@ void Atari800_Hardware (void)
 
       int keycode;
 
-      NMIST = 0x00;
-
 #ifndef BASIC
 /*
       colour_lookup[8] = colour_translation_table[COLBK];
@@ -1370,62 +1320,31 @@ void Atari800_Hardware (void)
 	}
 #endif
 
-      if (NMIEN & 0x40)
-	{
-	  NMIST |= 0x40;
-	  GO (1); /* Needed for programs that monitor NMIST (Spy's Demise) */
-	  NMI ();
-	}
-
-      /*
-       * Execute Instructions during Vertical Blank period
-       */
-
-      GO (countdown_rate);
-
       /*
        * Generate Screen
        */
 
 #ifndef BASIC
-
-      /*
-       * VCOUNT must equal zero for some games but first line to
-       * display starts when VCOUNT = 4. This portion processes
-       * when VCOUNT = 0, 1, 2 and 3.
-       */
-
-      wsync_halt = 0;
-
-      for (ypos = -8;ypos != 0;ypos++)
-	{
-	  GO(48);
-	}
-
       if (++test_val == refresh_rate)
 	{
-#ifndef CURSES
 	  ANTIC_RunDisplayList ();
-	  Atari_DisplayScreen (atari_screen);
-#else
-	  Atari_DisplayScreen ();
-#endif
+	  Atari_DisplayScreen ((UBYTE*)atari_screen);
 	  test_val = 0;
 	}
       else
 	{
 	  for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
 	    {
-	      GO (48);
+	      GO (114);
 	    }
 	}
-#endif
-/*
-      for (ypos=240;ypos<248;ypos++)
+#else
+      for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
 	{
-	  GO(48);
+	  GO (114);
 	}
-*/
+#endif
+
       if (deltatime > 0.0)
 	{
 	  if (lasttime >= 0.0)

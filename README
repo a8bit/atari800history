@@ -1,5 +1,5 @@
-Atari 800 Emulator for Unix, Version 0.4.5
-------------------------------------------
+Atari 800 Emulator for Unix, Amiga and MS-DOS, Version 0.6.0
+------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
 
@@ -8,21 +8,22 @@ Atari 800 Emulator for Unix, Version 0.4.5
     the Free Software Foundation; either version 1, or (at your option)
     any later version.
 
-This is the version 0.4.5 of my Atari 800, 800XL, 130XE and 5200 emulator
-for Unix. My main objective is to create a freely distributable portable
-emulator (i.e. with source code available). It can be configured to run in
-the following ways :-
+This is the version 0.6.0 of my Atari 800, 800XL, 130XE and 5200 emulator
+for Unix, Amiga and MS-DOS. My main objective is to create a freely
+distributable portable emulator (i.e. with source code available). It can
+be configured to run in the following ways :-
 
 	1. BASIC mode
 	2. CURSES Mode
 	3. SVGALIB for Linux Systems
 	4. X-Windows + Optional XVIEW or MOTIF User Interface
 	5. CBM Amiga
+ 	6. MS-DOS
 
 The basic mode is only useful for running programs such as MAC65,
 Atari Basic etc. I have had this version running on Linux,
-SunOS 4.1.3, Solaris 2.4, VAX/VMS, CBM Amiga (Dice C and GNU C)
-and the HP-UX 9000/380.
+SunOS 4.1.3, Solaris 2.4, Silicon Graphics, VAX/VMS, CBM Amiga
+(Dice C and GNU C) and the HP-UX 9000/380.
 
 The CURSES mode is similar to the basic mode, but it also enables full
 screen editing capability. Some computer don't seem to support curses

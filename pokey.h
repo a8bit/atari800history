@@ -38,4 +38,7 @@ extern UBYTE KBCODE;
 extern UBYTE IRQST;
 extern UBYTE IRQEN;
 
+UBYTE POKEY_GetByte (UWORD addr);
+int POKEY_PutByte (UWORD addr, UBYTE byte);
+
 #endif

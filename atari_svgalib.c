@@ -5,11 +5,14 @@
 #include <vga.h>
 #include <vgagl.h>
 
-static char *rcsid = "$Id: atari_svgalib.c,v 1.4 1996/07/19 19:53:29 david Exp $";
+static char *rcsid = "$Id: atari_svgalib.c,v 1.5 1996/09/04 23:36:03 david Exp $";
 
 #include "config.h"
 #include "atari.h"
 #include "colours.h"
+#include "monitor.h"
+#include "nas.h"
+#include "platform.h"
 
 #ifdef LINUX_JOYSTICK
 #include <linux/joystick.h>
@@ -916,15 +919,15 @@ int Atari_CONSOL (void)
 }
 
 #ifndef NAS
-void Atari_AUDC (int channel, int byte)
+int Atari_AUDC (int channel, int byte)
 {
 }
 
-void Atari_AUDF (int channel, int byte)
+int Atari_AUDF (int channel, int byte)
 {
 }
 
-void Atari_AUDCTL (int byte)
+int Atari_AUDCTL (int byte)
 {
 }
 #endif
