@@ -232,6 +232,7 @@ freebsd-xview-shm :
 
 INCLUDES	=	Makefile \
 			config.h \
+			rt-config.h \
 			cpu.h \
 			atari.h \
 			colours.h \
@@ -250,10 +251,10 @@ INCLUDES	=	Makefile \
 config config.h	:	configure
 	./configure
 
-configure	:	configure.o
-	$(LD) $(LDFLAGS) configure.o $(LDLIBS) -o configure
+configure	:	configure.o prompts.o
+	$(LD) $(LDFLAGS) configure.o prompts.o $(LDLIBS) -o configure
 
-configure.o	:	configure.c
+configure.o	:	configure.c prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS	=	atari.o \
@@ -266,12 +267,16 @@ OBJECTS	=	atari.o \
 		gtia.o \
 		pokey.o \
 		pia.o \
-		supercart.o
+		supercart.o \
+		prompts.o \
+		rt-config.o \
+		ui.o \
+                list.o
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
-atari.o		:	atari.c $(INCLUDES)
+atari.o		:	atari.c $(INCLUDES) prompts.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 ffp.o		:	ffp.c $(INCLUDES)
@@ -304,6 +309,12 @@ pia.o		:	pia.c $(INCLUDES)
 supercart.o	:	supercart.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
 
+ui.o		:	ui.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+list.o		:	list.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) list.c
+
 atari_x11.o	:	atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
 
@@ -318,6 +329,12 @@ atari_amiga.o	:	atari_amiga.c $(INCLUDES)
 
 nas.o		:	nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
+
+prompts.o	:	prompts.c prompts.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
+
+rt-config.o	:	rt-config.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c
 
 clean	:
 	rm -f configure

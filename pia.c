@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "atari.h"
 #include "cpu.h"
 #include "pia.h"
@@ -6,7 +8,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: pia.c,v 1.7 1996/09/04 23:46:43 david Exp $";
+static char *rcsid = "$Id: pia.c,v 1.10 1997/03/31 09:34:33 david Exp $";
 
 UBYTE PACTL;
 UBYTE PBCTL;
@@ -24,6 +26,7 @@ static UBYTE atarixe_memory[65536];
 static UBYTE atarixe_16kbuffer[16384];
 
 static UBYTE PORTA_mask = 0xff;
+static UBYTE PORTB_mask = 0xff;
 
 void PIA_Initialise (int *argc, char *argv[])
 {
@@ -57,10 +60,16 @@ UBYTE PIA_GetByte (UWORD addr)
 	{
 	case Atari :
 	  byte = Atari_PORT (1);
+          byte &= PORTB_mask;
 	  break;
 	case AtariXL :
 	case AtariXE :
 	  byte = PORTB;
+	  break;
+	default :
+	  printf ("Fatal Error in pia.c: PIA_GetByte(): Unknown machine\n");
+	  Atari800_Exit (FALSE);
+	  exit (1);
 	  break;
 	}
       break;
@@ -93,11 +102,15 @@ int PIA_PutByte (UWORD addr, UBYTE byte)
       switch (machine)
 	{
 	case Atari :
+          if (!(PBCTL & 0x04))
+            PORTB_mask = ~byte;
 	  break;
 	case AtariXE :
 	  {
 	    int cpu_flag = (byte & 0x10);
+#ifdef DEBUG
 	    int antic_flag = (byte & 0x20);
+#endif
 	    int bank = (byte & 0x0c) >> 2;
 
 #ifdef DEBUG
@@ -147,7 +160,7 @@ int PIA_PutByte (UWORD addr, UBYTE byte)
 	  }
 	case AtariXL :
 #ifdef DEBUG
-	  printf ("Storing %x to PORTB, PC = %x\n", byte, PC);
+	  printf ("Storing %x to PORTB, PC = %x\n", byte, regPC);
 #endif
 /*
  * Enable/Disable OS ROM 0xc000-0xcfff and 0xd800-0xffff
@@ -240,6 +253,11 @@ int PIA_PutByte (UWORD addr, UBYTE byte)
 	    }
 
 	  PORTB = byte;
+	  break;
+	default :
+	  printf ("Fatal Error in pia.c: PIA_PutByte(): Unknown machine\n");
+	  Atari800_Exit (FALSE);
+	  exit (1);
 	  break;
 	}
       break;

@@ -117,6 +117,7 @@ extern UWORD pl3adr;
 
 extern UBYTE colour_lookup[9];
 extern int colour_translation_table[256];
+extern int next_console_value;
 
 void GTIA_Initialise (int *argc, char *argv[]);
 void Atari_ScanLine (void);

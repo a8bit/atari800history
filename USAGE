@@ -1,8 +1,9 @@
 Usage
 -----
 
-Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d] [-1..9]
+Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
 		[disk1.xfd ... disk8.xfd]
+                [-xcolpf1]
 		[-rom filename]
                 [-rom16 filename]
                 [-ags32 filename]
@@ -25,6 +26,8 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d] [-1..9]
          probably never be needed since programs that access the
          serial hardware directly will work even if the OS has been
          patched.
+-xcolpf1 Enables Extended Usage of COLPF1 as used by Antic Modes
+         2, 3 and f.
 
 -rom     Loads the following 8K ROM Cartridge
 -rom16   Loads the following 16K ROM Cartridge
@@ -33,9 +36,6 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d] [-1..9]
 -db      Loads the following DB Super Cartridge
          (Private 32K Cartridge Format - not for general use)
 
--1..9    Trade off between speed and screen refresh rate. The lower the
-         number the more often the screen is refreshed and the slower the
-         CPU emulation. :-(
 -a       Use Atari OS/A ROM (atariosa.rom)
 -b       Use Atari OS/B ROM (atariosb.rom) [default]
 -c       Enable RAM between $C000 and $CFFF

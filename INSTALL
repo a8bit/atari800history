@@ -9,25 +9,16 @@ The ROM images are distributed within the PC Xformer 2.5 package (other
 versions of this program do not contain the ROMs in a suitable format)
 which can be downloaded from:-
 
-Site:      ftp.doc.ic.ac.uk
-Directory: /computing/systems/atari/umich/8bit/Xf2
-File:      xf25.zip
+http://www.signus.demon.co.uk/david/atari/atari.html
 
-Note: Check your usual UMICH mirror first or do an archie search on
-      xf25
+If you are creating the ROM images yourself they should be copied from
+the following locations:-
 
-Copy the *.rom files extracted from PC-Xformer into the directory
-specified during configuration. Alternatively you can define the
-"ATARI_LIBRARY" environment variable to point to the directory
-containing the OS ROMs.
-
-If you are creating the ROM images yourself they should be called:-
-
-1. ataribas.rom (8192 bytes between $a000 and $bfff)
-2. atariosa.rom (10240 bytes between $d800 and $ffff)
-3. atariosb.rom (10240 bytes between $d800 and $ffff)
-4. atarixl.rom (16384 bytes between $c000 and $ffff)
-5. atari5200.rom (2048 bytes between $f800 and $ffff)
+1. Atari Basic (8192 bytes between $a000 and $bfff)
+2. Atari OS/A (10240 bytes between $d800 and $ffff)
+3. Atari OS/B (10240 bytes between $d800 and $ffff)
+4. Atari XL/XE (16384 bytes between $c000 and $ffff)
+5. Atari 5200 (2048 bytes between $f800 and $ffff)
 
 Note: If you are extracting the atarixl.rom you will find that the
       ROM area under the custom chip ($d000 to $d7ff) are mapped
@@ -37,21 +28,10 @@ Note: If you are extracting the atarixl.rom you will find that the
            out in the following order:- $c000 to $cfff, $5000 to $57ff
            and finally $d800 to $ffff.
 
-You must have at least one of "atariosa.rom", "atariosb.rom" and
-"atarixl.rom". "ataribas.rom" is needed if you intend running
-basic programs (I would suggest you keep it just in case).
-
-If you have obtained a binary distribution you should be able to start
-it by executing the atari800 program.
-
-Note: for case sensitive systems make sure that the filenames and
-      directory are all lowercase.
-
-5200 Emulation
---------------
-
-If you can obtain a copy of the 2K Atari 5200 OS ROM it must be called
-"atari5200.rom" and placed in the directory specified by "ATARI_LIBRARY".
+The first time you run the emulator you will be prompted for the
+location of the ROMs and various other defaults. If you want to
+change any of these in the future simply start the emulator with
+the "-configure" command line option.
 
 Compiling the Emulator
 ----------------------
@@ -135,25 +115,16 @@ For example:
 Building the Emulator for DOS
 -----------------------------
 
-To compile, use DJGPP, the DOS port of gcc, which can be get from
+To compile, use DJGPP the DOS port of gcc, which can be get from
 http://www.delorie.com/djgpp/. You don't need any contrib libraries.
-A basic setup will do. ( I haven't tested the EZ-DJGPP distribution,
-but I suppose that's all you need ).
+A basic setup will do. (I haven't tested the EZ-DJGPP distribution,
+but I suppose that's all you need).
 
 If you have GCC, the second thing to do is rename Makefile to Makefile.org
-and Makefile.dos to Makefile. Now type make vga, answer the questions
-of configure and wait for gcc to build atari800.exe. To run this binary,
-you'll need to set the following environment variables:
-
-rem HOME points to the directory where you're executable is located.
-rem ATARI_LIBRARY to where you're ROM files are stored.
-
-set HOME=c:/atari800/.
-set ATARI_LIBRARY=c:/atari800/roms/.
+and Makefile.dos to Makefile. Now type "make vga", answer the questions
+required by "configure" and wait for gcc to build atari800.exe. To run
+this binary, you'll need to set the following environment variables:
 
 Also, if you run it in DOS mode and you have not installed DJGPP, but you
 want to run the binary files, you'll need to install CWSDPMI by
 typing cwsdpmi -p. To unload cpsdmi, type cwsdpmi -u.
-
-After terminating the emulator, type mode co80 to return to normal DOS
-processing. ( This could be put in a batch file if you like... )

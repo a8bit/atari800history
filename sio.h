@@ -3,8 +3,14 @@
 
 #include "atari.h"
 
+#define MAX_DRIVES 8
+#define FILENAME_LEN 256
+
+extern char sio_status[256];
+extern char sio_filename[MAX_DRIVES][FILENAME_LEN];
+
 int SIO_Mount (int diskno, char *filename);
-int SIO_Dismount (int diskno);
+void SIO_Dismount (int diskno);
 void SIO_DisableDrive (int diskno);
 void SIO (void);
 

@@ -4,7 +4,7 @@
 #include	<curses.h>
 #endif
 
-static char *rcsid = "$Id: atari_curses.c,v 1.4 1996/09/04 23:36:02 david Exp $";
+static char *rcsid = "$Id: atari_curses.c,v 1.5 1996/10/09 22:02:06 david Exp $";
 
 #include "atari.h"
 #include "cpu.h"
@@ -54,13 +54,22 @@ void Atari_Initialise (int *argc, char *argv[])
 
 int Atari_Exit (int run_monitor)
 {
+  int restart;
+
   curs_set (1);
   endwin ();
 
   if (run_monitor)
-    monitor ();
+    restart = monitor ();
+  else
+    restart = FALSE;
 
-  return 0;
+  if (restart)
+  {
+    curs_set(0);
+  }
+
+  return restart;
 }
 
 void Atari_DisplayScreen (UBYTE *screen)
@@ -102,10 +111,10 @@ void Atari_DisplayScreen (UBYTE *screen)
 	      ch = 0x40 + ((ch & 0x7f) - 0x20) + A_REVERSE;
 	      break;
 	    case 0xc0 :	/* Control Characters */
-	      ch = ch & 0x7f + A_REVERSE + A_BOLD;
+	      ch = (ch & 0x7f) + A_REVERSE + A_BOLD;
 	      break;
 	    case 0xe0 :	/* Lower Case Characters */
-	      ch = ch & 0x7f + A_REVERSE;
+	      ch = (ch & 0x7f) + A_REVERSE;
 	      break;
 	    }
 
@@ -145,6 +154,15 @@ int Atari_Keyboard (void)
   int	keycode;
 
   keycode = getch ();
+
+#if 0
+  /* for debugging */
+  if (keycode > 0) {
+    Atari800_Exit(FALSE);
+    printf("%o\n", keycode);
+    exit(1);
+  }
+#endif
 
   switch (keycode)
     {
@@ -564,6 +582,7 @@ int Atari_Keyboard (void)
 #endif
 		  keycode = AKEY_BACKSPACE;
       break;
+    case KEY_ENTER :
     case '\n' :
       keycode = AKEY_RETURN;
       break;

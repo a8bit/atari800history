@@ -22,7 +22,7 @@
 #include "djgpp.h"
 #endif
 
-static char *rcsid = "$Id: sio.c,v 1.3 1996/09/29 22:01:07 david Exp $";
+static char *rcsid = "$Id: sio.c,v 1.7 1997/03/30 19:36:19 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
@@ -30,8 +30,6 @@ static char *rcsid = "$Id: sio.c,v 1.3 1996/09/29 22:01:07 david Exp $";
 #include "atari.h"
 #include "cpu.h"
 #include "sio.h"
-
-#define	MAX_DRIVES	8
 
 #define	MAGIC1	0x96
 #define	MAGIC2	0x02
@@ -64,6 +62,17 @@ static enum DriveStatus
   ReadWrite
 } drive_status[MAX_DRIVES];
 
+char sio_status[256];
+char sio_filename[MAX_DRIVES][FILENAME_LEN];
+
+void SIO_Initialise (int *argc, char *argv[])
+{
+  int i;
+
+  for (i=0;i<MAX_DRIVES;i++)
+    strcpy (sio_filename[i], "Empty");
+}
+
 int SIO_Mount (int diskno, char *filename)
 {
   struct ATR_Header	header;
@@ -71,6 +80,7 @@ int SIO_Mount (int diskno, char *filename)
   int	fd;
 
   drive_status[diskno-1] = ReadWrite;
+  strcpy (sio_filename[diskno-1], "Empty");
 
   fd = open (filename, O_RDWR, 0777);
   if (fd == -1)
@@ -90,6 +100,8 @@ int SIO_Mount (int diskno, char *filename)
 	  disk[diskno-1] = -1;
 	  return FALSE;
 	}
+
+      strcpy (sio_filename[diskno-1], filename);
 
       if ((header.magic1 == MAGIC1) && (header.magic2 == MAGIC2))
 	{
@@ -131,24 +143,28 @@ int SIO_Mount (int diskno, char *filename)
   return (disk[diskno-1] != -1) ? TRUE : FALSE;
 }
 
-int SIO_Dismount (int diskno)
+void SIO_Dismount (int diskno)
 {
   if (disk[diskno-1] != -1)
     {
       close (disk[diskno-1]);
       disk[diskno-1] = -1;
       drive_status[diskno-1] = NoDisk;
+      strcpy (sio_filename[diskno-1], "Empty");
     }
 }
 
 void SIO_DisableDrive (int diskno)
 {
   drive_status[diskno-1] = Off;
+  strcpy (sio_filename[diskno-1], "Off");
 }
 
 void SeekSector (int dskno, int sector)
 {
   int	offset;
+
+  sprintf (sio_status, "%d: %d", dskno+1, sector);
 
   switch (format[dskno])
     {
@@ -175,13 +191,13 @@ void SeekSector (int dskno, int sector)
 
 void SIO (void)
 {
-  UBYTE DDEVIC = memory[0x0300];
+  /* UBYTE DDEVIC = memory[0x0300]; */
   UBYTE DUNIT = memory[0x0301];
   UBYTE DCOMND = memory[0x0302];
-  UBYTE DSTATS = memory[0x0303];
+  /* UBYTE DSTATS = memory[0x0303]; */
   UBYTE DBUFLO = memory[0x0304];
   UBYTE DBUFHI = memory[0x0305];
-  UBYTE DTIMLO = memory[0x0306];
+  /* UBYTE DTIMLO = memory[0x0306]; */
   UBYTE DBYTLO = memory[0x0308];
   UBYTE DBYTHI = memory[0x0309];
   UBYTE DAUX1 = memory[0x030a];
@@ -372,7 +388,7 @@ void Command_Frame (void)
 
 	DELAYED_SEROUT_IRQ = 1;
 	DELAYED_XMTDONE_IRQ = 3;
-	DELAYED_SERIN_IRQ = 7;
+	DELAYED_SERIN_IRQ = 150; /* BEFORE 7 */
       }
       break;
     case 'S' : /* Status */
@@ -403,7 +419,7 @@ void Command_Frame (void)
       buffer_size = 1;
       DELAYED_SEROUT_IRQ = 1;
       DELAYED_XMTDONE_IRQ = 3;
-      DELAYED_SERIN_IRQ = 7;
+      DELAYED_SERIN_IRQ = 150; /* BEFORE 7 */
       sio_state = SIO_Put;
       break;
     case '!' : /* Format */
@@ -423,13 +439,15 @@ void Command_Frame (void)
       break;
     default :
       printf ("Unknown command: %02x\n", cmd_frame[1]);
+      printf ("Command frame: %02x %02x %02x %02x %02x\n",
+	      cmd_frame[0], cmd_frame[1], cmd_frame[2],
+	      cmd_frame[3], cmd_frame[4]);
       buffer_offset = 0;
       buffer_size = 0;
       DELAYED_XMTDONE_IRQ = 3;
       break;
   }
 }
-#undef DEBUG
 
 void SIO_SEROUT (unsigned char byte, int cmd)
 {

@@ -27,23 +27,15 @@
 #include	<dirent.h>
 #endif
 
-static char *rcsid = "$Id: devices.c,v 1.16 1996/09/29 22:41:09 david Exp $";
+static char *rcsid = "$Id: devices.c,v 1.19 1997/03/30 19:36:18 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
 
-#ifdef AMIGA
-#define PRINT_COMMAND "COPY %s PAR:"
-#else
-#ifdef VMS
-#define PRINT_COMMAND "$ PRINT/DELETE %s"
-#else
-#include "config.h"
-#endif
-#endif
 #include "atari.h"
 #include "cpu.h"
 #include "devices.h"
+#include "rt-config.h"
 
 #define	ICHIDZ	0x0020
 #define	ICDNOZ	0x0021
@@ -61,10 +53,10 @@ static char *rcsid = "$Id: devices.c,v 1.16 1996/09/29 22:41:09 david Exp $";
 static char *H[5] =
 {
   ".",
-  ATARI_H1_DIR,
-  ATARI_H2_DIR,
-  ATARI_H3_DIR,
-  ATARI_H4_DIR
+  atari_h1_dir,
+  atari_h2_dir,
+  atari_h3_dir,
+  atari_h4_dir
 };
 
 static int devbug = FALSE;
@@ -131,7 +123,7 @@ int Device_isvalid (char ch)
   return valid;
 }
 
-Device_GetFilename ()
+void Device_GetFilename ()
 {
   int bufadr;
   int offset = 0;
@@ -159,7 +151,7 @@ Device_GetFilename ()
   filename[offset++] = '\0';
 }
 
-match (char *pattern, char *filename)
+int match (char *pattern, char *filename)
 {
   int status = TRUE;
 
@@ -275,7 +267,7 @@ void Device_HHOPEN (void)
 	    {
 	      struct dirent	*entry;
 	      
-	      while (entry = readdir (dp))
+	      while ((entry = readdir (dp)))
 		{
 		  if (match(filename, entry->d_name))
 		    fprintf (fp[fid],"%s\n", entry->d_name);
@@ -513,7 +505,7 @@ void Device_PHCLOS (void)
 
       close (phfd);
 
-      sprintf (command, PRINT_COMMAND, spool_file);
+      sprintf (command, print_command, spool_file);
       system (command);
 
 #ifndef VMS
@@ -590,273 +582,3 @@ void Device_PHINIT (void)
   regY = 1;
   ClrN;
 }
-
-void Device_KHOPEN (void)
-{
-  if (devbug)
-    printf ("KHOPEN\n");
-}
-
-void Device_KHCLOS (void)
-{
-  if (devbug)
-    printf ("KHCLOS\n");
-}
-
-void Device_KHREAD (void)
-{
-  if (devbug)
-    printf ("KHREAD\n");
-}
-
-void Device_KHWRIT (void)
-{
-  if (devbug)
-    printf ("KHWRIT\n");
-}
-
-void Device_KHSTAT (void)
-{
-  if (devbug)
-    printf ("KHSTAT\n");
-}
-
-void Device_KHSPEC (void)
-{
-  if (devbug)
-    printf ("KHSPEC\n");
-}
-
-void Device_KHINIT (void)
-{
-  if (devbug)
-    printf ("KHINIT\n");
-}
-
-unsigned char ascii_to_screen[128] =
-{
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-	0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
-	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 
-	0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f,
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-	0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-	0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
-	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
-	0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f,
-	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77,
-	0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f
-};
-
-#define LMARGN memory[0x52]
-#define RMARGN memory[0x53]
-#define ROWCRS memory[0x54]
-#define COLCRSL memory[0x55]
-#define COLCRSH memory[0x56]
-
-static int OLDADR = 0;
-
-void Device_PutChar (UBYTE ch)
-{
-  int address = 0xb000+ROWCRS*40+COLCRSL;
-  int column;
-
-  memory[OLDADR] ^= 0x80;
-
-  switch (ch)
-    {
-    case 0x1c :
-      ROWCRS--;
-      break;
-    case 0x1d :
-      ROWCRS++;
-      break;
-    case 0x1e :
-      column = (COLCRSH << 8) + COLCRSL;
-      column--;
-      COLCRSH = (COLCRSH >> 8);
-      COLCRSL = column & 0xff;
-      break;
-    case 0x1f :
-      column = (COLCRSH << 8) + COLCRSL;
-      column++;
-      COLCRSH = (COLCRSH >> 8);
-      COLCRSL = column & 0xff;
-      break;
-    case 0x7d :
-      memset (&memory[0xb000], 0, 960);
-      ROWCRS = 0;
-      COLCRSL = LMARGN;
-      COLCRSH = 0;
-      break;
-    case 0x7f :
-      column = (COLCRSH << 8) + COLCRSL;
-      column = (column & 0xf8) + 8;
-      COLCRSH = (COLCRSH >> 8);
-      COLCRSL = column & 0xff;
-      break;
-    case 0x9b :
-      COLCRSL = LMARGN;
-      COLCRSH = 0;
-      if (ROWCRS == 23)
-	{
-	  UBYTE *lno1 = &memory[0xb000];
-	  UBYTE *lno2 = lno1 + 40;
-	  int i;
-
-	  for (i=0;i<23;i++)
-	    {
-	      memcpy (lno1, lno2, 40);
-	      lno1 += 40;
-	      lno2 += 40;
-	    }
-
-	  memset (lno1, 0, 40);
-	}
-      else
-	{
-	  ROWCRS++;
-	}
-      break;
-    default :
-      {
-	UBYTE bit7 = ch & 0x80;
-
-	address = 0xb000 + ROWCRS*40 + COLCRSL;
-	ch &= 0x7f;
-	ch = ascii_to_screen[ch] | bit7;
-	memory[address++] = ch;
-	COLCRSL++;
-	if (COLCRSL > RMARGN)
-	  {
-	    COLCRSL = LMARGN;
-	    ROWCRS++;
-	  }
-      }
-    }
-
-  address = 0xb000 + ROWCRS*40 + COLCRSL;
-  memory[address] ^= 0x80;
-  OLDADR = address;
-}
-
-void Device_SHOPEN (void)
-{
-  if (devbug)
-    printf ("SHOPEN\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHCLOS (void)
-{
-  if (devbug)
-    printf ("SHCLOS\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHREAD (void)
-{
-  if (devbug)
-    printf ("SHREAD\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHWRIT (void)
-{
-  if (devbug)
-    printf ("SHWRIT\n");
-
-  Device_PutChar (regA);
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHSTAT (void)
-{
-  if (devbug)
-    printf ("SHSTAT\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHSPEC (void)
-{
-  if (devbug)
-    printf ("SHSPEC\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_SHINIT (void)
-{
-  if (devbug)
-    printf ("SHINIT\n");
-
-  regY = 1;
-  ClrN;
-}
-
-void Device_EHOPEN (void)
-{
-  if (devbug)
-    printf ("EHOPEN\n");
-
-  LMARGN = 2;
-  RMARGN = 39;
-  ROWCRS = 0;
-  COLCRSL = LMARGN;
-  COLCRSH = 0;
-}
-
-void Device_EHCLOS (void)
-{
-  if (devbug)
-    printf ("EHCLOS\n");
-}
-
-void Device_EHREAD (void)
-{
-  if (devbug)
-    printf ("EHREAD\n");
-}
-
-void Device_EHWRIT (void)
-{
-  if (devbug)
-    printf ("EHWRIT\n");
-
-  Device_SHWRIT ();
-}
-
-void Device_EHSTAT (void)
-{
-  if (devbug)
-    printf ("EHSTAT\n");
-}
-
-void Device_EHSPEC (void)
-{
-  if (devbug)
-    printf ("EHSPEC\n");
-}
-
-void Device_EHINIT (void)
-{
-  if (devbug)
-    printf ("EHINIT\n");
-
-}
-

@@ -1,6 +1,6 @@
-.TH ATARI800 1 "5 August 96"
+.TH ATARI800 1 "31 March 1997"
 .SH NAME
-atari800 \- Atari 800 Emulator, Version 0.5.1
+atari800 \- Atari 800 Emulator, Version 0.7.0
 .SH SYNOPSIS
 \fBatari800\fP [options] [diskfiles...]
 .SH DESCRIPTION
@@ -23,10 +23,20 @@ Emulate Atari 130 XE - but Antic accesses the same bank the CPU is using.
 \fB-5200
 Emulate Atari 5200 - Games controller emulation has not been implemented yet!
 .TP
+\fB-config filename
+Specify an alternative configuration filename.
+.TP
+\fB-configure
+Starts emulator in run-time configuration mode.
+.TP
 \fB-ffp
 Replace standard floating point with a set of fast floating point
 routines implemented within the emulator without using 6502 CPU
 emulation.
+.TP
+\fB-nobasic
+Used to disable Basic when starting the emulator in XL/XE mode.
+Simulates the Option key being held down during system boot.
 .TP
 \fB-nopatch
 Normally the OS is patched giving very fast I/O. This options prevents
@@ -35,20 +45,45 @@ hardware directly. This option will probably never be needed since
 programs that access the serial hardware should work even if the OS
 has been patched.
 .TP
-\fB-rom
-The following file is a standard 8K ROM cartridge.
+\fB-xcolpf1
+Enables Extended Use of COLPF1 register as used by Antic Modes 2, 3 and
+f. This option allows two different colours to be displayed in these
+modes - i.e. Not one colour and two luminances.
 .TP
-\fB-rom16
-The following file is a standard 16K ROM cartridge.
+\fB-rom filename
+Path to file containing a standard 8K ROM cartridge.
 .TP
-\fB-ags32
-The following file is a 32 ROM cartridge for the Atari 5200 Games System.
+\fB-rom16 filename
+Path to file containing a standard 16K ROM cartridge.
 .TP
-\fB-oss
-The following file is an OSS super-cartridge.
+\fB-ags32 filename
+Path to file containing 32K ROM cartridge for the Atari 5200 Games System.
 .TP
-\fB-db
-The following file is a DB super-cartridge.
+\fB-oss filename
+Path to file containing OSS super-cartridge.
+.TP
+\fB-db filename
+Path to file containing DB super-cartridge.
+.TP
+\fB-osa_rom filename
+Path to file containing Atari Rev.A Operating System.
+Used to override paths defined at compile time.
+.TP
+\fB-osb_rom filename
+Path to file containing Atari Rev.B Operating System.
+Used to override paths defined at compile time.
+.TP
+\fB-xlxe_rom
+Path to file containing Atari XL/XE Operating System.
+Used to override paths defined at compile time.
+.TP
+\fB-5200_rom
+Path to file containing Atari 5200 Games System ROM.
+Used to override paths defined at compile time.
+.TP
+\fB-basic_rom
+Path to file containing Atari BASIC ROM.
+Used to override paths defined at compile time.
 .TP
 \fB-c
 Enable RAM between $c000 and $d000.
@@ -150,7 +185,3 @@ Atari Basic
 .SH BUGS
 A few programs cause the emulator to enter its built in debugger. The
 reason for this is unknown at the moment.
-
-Antic Modes 2, 3 and f display two true colours and not one colour with
-two luminances. Should this be called a bug or feature, and should
-it be corrected?

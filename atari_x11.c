@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
 #ifdef VMS
 #include <stat.h>
 #else
 #include <sys/stat.h>
 #endif
+
+#include <sys/time.h>
 
 /*
  * Note: For SHM version check if image_data or the pixmap is needed
@@ -11,7 +14,7 @@
  *       scanline_ptr.
  */
 
-static char *rcsid = "$Id: atari_x11.c,v 1.30 1996/09/29 22:34:20 david Exp $";
+static char *rcsid = "$Id: atari_x11.c,v 1.40 1997/03/29 21:05:11 david Exp $";
 
 #ifdef XVIEW
 #include <xview/xview.h>
@@ -62,17 +65,13 @@ static int motif_rom_sel = 1;
 #include "sio.h"
 #include "nas.h"
 #include "platform.h"
-
-#ifdef FPS_MONITOR
-#include <sys/time.h>
+#include "rt-config.h"
 
 static struct timeval tp;
 static struct timezone tzp;
 
 static double basetime;
-static int totframes = 0;
 static int nframes = 0;
-#endif
 
 #ifdef SHM
 #include <sys/ipc.h>
@@ -111,6 +110,13 @@ typedef enum
 } WindowSize;
 
 static WindowSize windowsize = Large;
+
+enum
+{
+  MONITOR_NOTHING,
+  MONITOR_FPS,
+  MONITOR_SIO
+} x11_monitor = MONITOR_NOTHING;
 
 static int x11bug = FALSE;
 
@@ -184,6 +190,7 @@ static XRectangle	rectangles[NRECTS];
 
 static int keyboard_consol;
 static int menu_consol;
+static int screen_dump = 0;
 
 /*
    ==========================================
@@ -239,7 +246,7 @@ int GetKeyCode (XEvent *event)
 	  keycode = AKEY_ATARI;
 	  break;
 	case XK_F1 :
-	  keycode = AKEY_WARMSTART;
+          keycode = AKEY_UI;
 	  break;
 	case XK_F2 :
 	  keyboard_consol &= 0x03;
@@ -254,6 +261,9 @@ int GetKeyCode (XEvent *event)
 	  keycode = AKEY_NONE;
 	  break;
 	case XK_F5 :
+	  keycode = AKEY_WARMSTART;
+	  break;
+	case XK_L5 :
 	  keycode = AKEY_COLDSTART;
 	  break;
 	case XK_F6 :
@@ -262,8 +272,13 @@ int GetKeyCode (XEvent *event)
 	case XK_F7 :
 	  keycode = AKEY_BREAK;
 	  break;
+	case XK_L8 :
+          screen_dump = (1 - screen_dump);
+          keycode = AKEY_NONE;
+	  break;
 	case XK_F8 :
-	  keycode = AKEY_DISKCHANGE;
+          screen_dump = 2;
+          keycode = AKEY_NONE;
 	  break;
 	case XK_F9 :
 	  keycode = AKEY_EXIT;
@@ -589,6 +604,21 @@ int GetKeyCode (XEvent *event)
 	case XK_F4 :
 	  keyboard_consol = 0x07;
 	  keycode = AKEY_NONE;
+          break;
+	case XK_KP_0 :
+	  keypad_trig = 1;
+	  break;
+	case XK_KP_1 :
+	case XK_KP_2 :
+	case XK_KP_3 :
+	case XK_KP_4 :
+	case XK_KP_5 :
+	case XK_KP_6 :
+	case XK_KP_7 :
+	case XK_KP_8 :
+	case XK_KP_9 :
+	  keypad_stick = STICK_CENTRE;
+	  break;
 	default :
 	  break;
 	}
@@ -660,7 +690,7 @@ boot_callback ()
 
   xv_set (chooser,
 	  FRAME_LABEL, "Disk Selector",
-	  FILE_CHOOSER_DIRECTORY, ATARI_DISK_DIR,
+	  FILE_CHOOSER_DIRECTORY, atari_disk_dir,
 	  FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 	  XV_SHOW, TRUE,
 	  NULL);
@@ -672,7 +702,7 @@ insert_callback ()
 
   xv_set (chooser,
 	  FRAME_LABEL, "Disk Selector",
-	  FILE_CHOOSER_DIRECTORY, ATARI_DISK_DIR,
+	  FILE_CHOOSER_DIRECTORY, atari_disk_dir,
 	  FILE_CHOOSER_NOTIFY_FUNC, disk_change,
 	  XV_SHOW, TRUE,
 	  NULL);
@@ -808,7 +838,7 @@ insert_rom_callback ()
 {
   xv_set (chooser,
 	  FRAME_LABEL, "ROM Selector",
-	  FILE_CHOOSER_DIRECTORY, ATARI_ROM_DIR,
+	  FILE_CHOOSER_DIRECTORY, atari_rom_dir,
 	  FILE_CHOOSER_NOTIFY_FUNC, rom_change,
 	  XV_SHOW, TRUE,
 	  NULL);
@@ -1269,6 +1299,14 @@ void motif_disable_cback (Widget button, XtPointer client_data, XtPointer cbs)
   SIO_DisableDrive(((int) client_data) + 1);
 }
 
+void update_fsel(Widget fsel)
+{
+  XmString dirmask;
+
+  XtVaGetValues(fsel, XmNdirMask, &dirmask, NULL);
+  XmFileSelectionDoSearch(fsel, dirmask);
+}
+
 void motif_system_cback (Widget w, XtPointer item_no, XtPointer cbs)
 {
   XmString t;
@@ -1278,17 +1316,13 @@ void motif_system_cback (Widget w, XtPointer item_no, XtPointer cbs)
   switch ((int) item_no)
     {
     case 0 :
-      t = XmStringCreateSimple ("/usr/local/lib/atari/DISKS/*");
-      XmFileSelectionDoSearch (fsel_b, t);
-      XmStringFree (t);
+      update_fsel(fsel_b);
       XtManageChild (fsel_b);
       XtPopup (XtParent(fsel_b), XtGrabNone);
       break;
     case 1 :
       /* insert disk */
-      t = XmStringCreateSimple ("/usr/local/lib/atari/DISKS/*");
-      XmFileSelectionDoSearch (fsel_d, t);
-      XmStringFree (t);
+      update_fsel(fsel_d);
       XtManageChild (fsel_d);
       XtPopup (XtParent(fsel_d), XtGrabNone);
       break;
@@ -1302,9 +1336,7 @@ void motif_system_cback (Widget w, XtPointer item_no, XtPointer cbs)
       break;
     case 4 :
       /* insert rom */
-      t = XmStringCreateSimple ("/usr/local/lib/atari/ROM/*");
-      XmFileSelectionDoSearch (fsel_r, t);
-      XmStringFree (t);
+      update_fsel(fsel_r);
       XtManageChild (fsel_r);
       XtPopup (XtParent(fsel_r), XtGrabNone);
       break;
@@ -1347,7 +1379,7 @@ void motif_system_cback (Widget w, XtPointer item_no, XtPointer cbs)
 
   if (errmsg)
     {
-      static Widget dialog;
+      static Widget dialog = NULL;
 
       if (!dialog)
 	{
@@ -1419,7 +1451,11 @@ void motif_exposure (Widget w, XtPointer client_data, XEvent *event,
 
 void Atari_Initialise (int *argc, char *argv[])
 {
+#ifndef XVIEW
+#ifndef MOTIF
   XSetWindowAttributes	xswda;
+#endif
+#endif
 
   XGCValues	xgcvl;
 
@@ -1441,10 +1477,8 @@ void Atari_Initialise (int *argc, char *argv[])
 				NULL);
 #endif
 
-#ifdef FPS_MONITOR
   gettimeofday (&tp, &tzp);
   basetime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-#endif
 
   for (i=j=1;i<*argc;i++)
     {
@@ -1456,6 +1490,15 @@ void Atari_Initialise (int *argc, char *argv[])
 	windowsize = Huge;
       else if (strcmp(argv[i],"-x11bug") == 0)
 	x11bug = TRUE;
+      else if (strcmp(argv[i],"-fps") == 0)
+	x11_monitor = MONITOR_FPS;
+      else if (strcmp(argv[i],"-sio") == 0)
+	x11_monitor = MONITOR_SIO;
+      else if (strcmp(argv[i],"-keypad") == 0)
+        {
+          if (keypad_mode == -1)
+            keypad_mode = mode++;
+        }
       else
 	{
 	  if (strcmp(argv[i],"-help") == 0)
@@ -1550,7 +1593,8 @@ void Atari_Initialise (int *argc, char *argv[])
 #endif
 
   mouse_mode = mode++;
-  keypad_mode = mode++;
+  if (keypad_mode == -1)
+    keypad_mode = mode++;
 
 #ifdef XVIEW
   frame = (Frame)xv_create ((Xv_opaque)NULL, FRAME,
@@ -1558,9 +1602,7 @@ void Atari_Initialise (int *argc, char *argv[])
 			    FRAME_SHOW_RESIZE_CORNER, FALSE,
 			    XV_WIDTH, window_width,
 			    XV_HEIGHT, window_height + 27,
-#ifdef FPS_MONITOR
 			    FRAME_SHOW_FOOTER, TRUE,
-#endif
 			    XV_SHOW, TRUE,
 			    NULL);
 
@@ -1895,6 +1937,9 @@ void Atari_Initialise (int *argc, char *argv[])
     XmString s_d1, s_d2, s_d3, s_d4;
     XmString s_d5, s_d6, s_d7, s_d8;
 
+    char *tmpstr;
+    XmString xmtmpstr;
+
     Arg args[8];
     int n;
 
@@ -2120,6 +2165,23 @@ void Atari_Initialise (int *argc, char *argv[])
     XtManageChild(togg_5200);
     XmStringFree(s_label);
     XtAddCallback (togg_5200, XmNarmCallback, motif_select_rom, (XtPointer) 5);
+
+    tmpstr = (char *) XtMalloc(strlen(atari_disk_dir + 3));
+    strcpy(tmpstr, atari_disk_dir);
+    strcat(tmpstr, "/*");
+    xmtmpstr = XmStringCreateSimple(tmpstr);
+    XmFileSelectionDoSearch(fsel_b, xmtmpstr);
+    XmFileSelectionDoSearch(fsel_d, xmtmpstr);
+    XmStringFree(xmtmpstr);
+    XtFree(tmpstr);
+
+    tmpstr = (char *) XtMalloc(strlen(atari_rom_dir + 3));
+    strcpy(tmpstr, atari_rom_dir);
+    strcat(tmpstr, "/*");
+    xmtmpstr = XmStringCreateSimple(tmpstr);
+    XmFileSelectionDoSearch(fsel_r, xmtmpstr);
+    XmStringFree(xmtmpstr);
+    XtFree(tmpstr);
 
     s_d1 = XmStringCreateSimple("D1:");
     s_d2 = XmStringCreateSimple("D2:");
@@ -2422,16 +2484,34 @@ void Atari_ScanLine_Flush ()
 }
 #endif
 
+void ScreenDump ()
+{
+  static char command[128];
+  static int frame_num = 0;
+
+  sprintf (command, "xwd -name \"%s\"|xwdtopnm -|ppmtogif>%d.gif",
+           ATARI_TITLE, frame_num++);
+/*
+  sprintf (command, "xwd -name \"%s\"|xwdtopnm -|pnmcut 0 25 384 240 -|ppmtogif>%d.gif",
+           ATARI_TITLE, frame_num++);
+*/
+
+  system (command);
+}
+
 void Atari_DisplayScreen (UBYTE *screen)
 {
+  static char status_line[64];
+  int update_status_line;
+
 #ifdef SHM
   XShmPutImage (display, window, gc, image, 0, 0, 0, 0,
 		window_width, window_height, 0);
+  XSync(display, FALSE);
 #else
   UBYTE *scanline_ptr = image_data;
   int xpos;
   int ypos;
-  int i;
 
   for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
     {
@@ -2509,49 +2589,71 @@ void Atari_DisplayScreen (UBYTE *screen)
 
   keypad_trig = 1;
 
-#ifdef FPS_MONITOR
-  {
-    double curtime;
-
-    gettimeofday (&tp, &tzp);
-    curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
-
-    nframes++;
-
-    if ((curtime - basetime) >= 2.0)
-      {
+  switch (x11_monitor)
+    {
+    case MONITOR_SIO :
+      if (sio_status[0] != '\0')
+	{
 #ifdef XVIEW
-	static char gash[64];
+	  strcpy (status_line, sio_status);
+#else
+	  sprintf (status_line, "%s - %s",
+		   ATARI_TITLE, sio_status);
+#endif
+	  sio_status[0] = '\0';
+	  update_status_line = TRUE;
+	}
+      else
+	{
+	  update_status_line = FALSE;
+	}
+      break;
+    case MONITOR_FPS :
+      {
+	double curtime;
 
-	sprintf (gash, "%.2f FPS", (double)nframes / (curtime - basetime));
+	gettimeofday (&tp, &tzp);
+	curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
 
-	xv_set (frame,
-		FRAME_LEFT_FOOTER, gash,
-		NULL);
+	nframes++;
+
+	if ((curtime - basetime) >= 2.0)
+	  {
+#ifdef XVIEW
+	    sprintf (status_line, "%.2f FPS",
+		     (double)nframes / (curtime - basetime));
+#else
+	    sprintf (status_line, " %s - %.2f FPS",
+		     ATARI_TITLE, (double)nframes / (curtime - basetime));
+#endif
+
+	    nframes = 0;
+	    basetime = curtime;
+	  }
+      }
+      update_status_line = TRUE;
+      break;
+    default :
+      update_status_line = FALSE;
+      break;
+    }
+
+  if (update_status_line)
+    {
+#ifdef XVIEW
+      xv_set (frame,
+	      FRAME_LEFT_FOOTER, status_line,
+	      NULL);
 #else
 #ifdef MOTIF
-	int n = 0;
-	Arg args[1];
-	static char gash[64];
-
-	sprintf (gash, " %s - %.2f FPS",
-		 ATARI_TITLE, (double)nframes / (curtime - basetime));
-	XtSetArg(args[n], XtNtitle, gash); n++;
-	XtSetValues(toplevel, args, n);
+      XtVaSetValues(toplevel,
+		    XtNtitle, status_line,
+		    NULL);
 #else
-	static char gash[64];
-
-	sprintf (gash, " %s - %.2f FPS",
-		 ATARI_TITLE, (double)nframes / (curtime - basetime));
-	XStoreName (display, window, gash);
+      XStoreName (display, window, status_line);
 #endif
 #endif
-
-	nframes = 0;
-	basetime = curtime;
-      }
-  }
-#endif
+    }
 
 #ifdef XVIEW
   notify_dispatch ();
@@ -2571,6 +2673,14 @@ void Atari_DisplayScreen (UBYTE *screen)
 #ifdef NAS
   NAS_UpdateSound ();
 #endif
+
+  if (screen_dump)
+    {
+      ScreenDump ();
+
+      if (screen_dump == 2)
+        screen_dump = 0;
+    }
 }
 
 int Atari_Keyboard (void)
@@ -2598,7 +2708,7 @@ int Atari_Keyboard (void)
   return keycode;
 }
 
-mouse_joystick (int mode)
+void mouse_joystick (int mode)
 {
   Window root_return;
   Window child_return;
@@ -2862,21 +2972,25 @@ int Atari_POT (int num)
 			 &child_return, &root_x_return, &root_y_return,
 			 &win_x_return, &win_y_return, &mask_return))
 	{
-	  if (windowsize == Small)
-	    {
+	  switch (windowsize)
+	  {
+	  case Small:
 	      pot = ((float)((ATARI_WIDTH) - win_x_return) /
 		     (float)(ATARI_WIDTH)) * 228;
-	    }
-	  else if (windowsize == Large)
-	    {
+	      break;
+	  case Large:
 	      pot = ((float)((ATARI_WIDTH * 2) - win_x_return) /
 		     (float)(ATARI_WIDTH * 2)) * 228;
-	    }
-	  else
-	    {
+	      break;
+	  default:
 	      pot = ((float)((ATARI_WIDTH * 3) - win_x_return) /
 		     (float)(ATARI_WIDTH * 3)) * 228;
-	    }
+	      break;
+          }
+        }
+      else
+        {
+	  pot = 228;
 	}
     }
   else
@@ -2905,15 +3019,15 @@ int Atari_CONSOL (void)
 }
 
 #ifndef NAS
-int Atari_AUDC (int channel, int byte)
+void Atari_AUDC (int channel, int byte)
 {
 }
 
-int Atari_AUDF (int channel, int byte)
+void Atari_AUDF (int channel, int byte)
 {
 }
 
-int Atari_AUDCTL (int byte)
+void Atari_AUDCTL (int byte)
 {
 }
 #endif

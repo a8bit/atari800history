@@ -57,6 +57,8 @@ void Atari_Initialise(int *argc, char *argv[])
 
   *argc = j;
 
+  /* setupSB(); */
+
   rg.x.ax = 0x0013;
   int86(0x10, &rg, &rg);
 
@@ -79,6 +81,15 @@ void Atari_Initialise(int *argc, char *argv[])
 
 int Atari_Exit(int run_monitor)
 {
+  union REGS rg;
+
+  /* restore to text mode */
+
+  rg.x.ax = 0x0003;
+  int86 (0x10, &rg, &rg);
+
+  /* cleanupSB(); */
+
   return 0;
 }
 
@@ -566,7 +577,7 @@ int Atari_Keyboard(void)
     switch(scancode)
       {
         case 0x3b :
-          keycode = AKEY_WARMSTART;
+          keycode = AKEY_UI;
           break;
         case 0x3c :
           consol &= 0x03;
@@ -580,7 +591,10 @@ int Atari_Keyboard(void)
           consol &= 0x06;
           keycode = AKEY_NONE;
           break;
-        case 0x3f :
+        case 0x3f : /* F5 */
+          keycode = AKEY_WARMSTART;
+          break;
+        case 0x58 : /* Shift F5 */
           keycode = AKEY_COLDSTART;
           break;
         case 0x40 :
@@ -612,6 +626,7 @@ int Atari_Keyboard(void)
           break;
         default :
           keycode = AKEY_NONE;
+          break;
       }
       break;
     default :

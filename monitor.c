@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #ifdef VMS
 #include <unixio.h>
@@ -8,7 +9,7 @@
 #include <fcntl.h>
 #endif
 
-static char *rcsid = "$Id: monitor.c,v 1.10 1996/09/23 21:26:22 david Exp $";
+static char *rcsid = "$Id: monitor.c,v 1.12 1996/10/09 22:02:07 david Exp $";
 
 #include "atari.h"
 #include "cpu.h"
@@ -93,6 +94,7 @@ int monitor (void)
       char    *t;
 
       printf ("> ");
+      fflush(stdout);
       if (gets (s) == NULL)
         {
 	  printf("\n> CONT\n");

@@ -5,7 +5,7 @@
 #include <vga.h>
 #include <vgagl.h>
 
-static char *rcsid = "$Id: atari_svgalib.c,v 1.5 1996/09/04 23:36:03 david Exp $";
+static char *rcsid = "$Id: atari_svgalib.c,v 1.8 1997/03/29 21:05:11 david Exp $";
 
 #include "config.h"
 #include "atari.h"
@@ -13,6 +13,14 @@ static char *rcsid = "$Id: atari_svgalib.c,v 1.5 1996/09/04 23:36:03 david Exp $
 #include "monitor.h"
 #include "nas.h"
 #include "platform.h"
+
+#ifdef JOYMOUSE
+#include <vgamouse.h>
+
+#define CENTER_X 16384
+#define CENTER_Y 16384
+#define THRESHOLD 15
+#endif
 
 #ifdef LINUX_JOYSTICK
 #include <linux/joystick.h>
@@ -33,6 +41,8 @@ static int	lookup[256];
 #define FALSE 0
 #define TRUE 1
 
+static int vgamouse_stick;
+static int vgamouse_strig;
 static int trig0;
 static int stick0;
 static int consol;
@@ -82,6 +92,16 @@ void Atari_Initialise (int *argc, char *argv[])
     }
 
   *argc = j;
+
+#ifdef JOYMOUSE
+  if (mouse_init("/dev/mouse", MOUSE_PS2, MOUSE_DEFAULTSAMPLERATE) == -1)
+    {
+      perror ("/dev/mouse");
+      exit (1);
+    }
+
+  mouse_setposition (CENTER_X, CENTER_Y);
+#endif
 
 #ifdef LINUX_JOYSTICK
   js0 = open ("/dev/js0", O_RDONLY, 0777);
@@ -191,6 +211,10 @@ int Atari_Exit (int run_monitor)
     }
   else
     {
+#ifdef JOYMOUSE
+      mouse_close();
+#endif
+
 #ifdef LINUX_JOYSTICK
       if (js0 != -1)
 	close (js0);
@@ -242,6 +266,36 @@ void Atari_DisplayScreen (UBYTE *screen)
       svga_ptr += svga_ptr_inc;
       scrn_ptr += scrn_ptr_inc;
     }
+
+#ifdef JOYMOUSE
+  vgamouse_stick = 0xff;
+
+  if (mouse_update() != 0)
+    {
+      int x;
+      int y;
+
+      x = mouse_getx();
+      y = mouse_gety();
+
+      if (x < (CENTER_X - THRESHOLD))
+        vgamouse_stick &= 0xfb;
+      else if (x > (CENTER_X + THRESHOLD))
+        vgamouse_stick &= 0xf7;
+          
+      if (y < (CENTER_Y - THRESHOLD))
+        vgamouse_stick &= 0xfe;
+      else if (y > (CENTER_Y + THRESHOLD))
+        vgamouse_stick &= 0xfd;
+          
+      mouse_setposition(CENTER_X, CENTER_Y);
+    }
+
+  if (mouse_getbutton())
+    vgamouse_strig = 0;
+  else
+    vgamouse_strig = 1;
+#endif
 
 #ifdef NAS
   NAS_UpdateSound ();
@@ -658,9 +712,7 @@ int Atari_Keyboard (void)
 	    keycode = AKEY_ESCAPE;
 	  }
 	else if (strcmp(buff, "\133\133\101") == 0)	/* F1 */
-	  {
-	    keycode = AKEY_WARMSTART;
-	  }
+          keycode = AKEY_UI;
 	else if (strcmp(buff, "\133\133\102") == 0)	/* F2 */
 	  {
 	    consol &= 0x03;
@@ -676,10 +728,10 @@ int Atari_Keyboard (void)
 	    consol &= 0x06;
 	    keycode = AKEY_NONE;
 	  }
+        else if (strcmp(buff, "[28~") == 0) /* Shift F5 */
+          keycode = AKEY_COLDSTART;
 	else if (strcmp(buff, "\133\133\105") == 0)	/* F5 */
-	  {
-	    keycode = AKEY_COLDSTART;
-	  }
+          keycode = AKEY_WARMSTART;
 	else if (strcmp(buff, "\133\061\067\176") == 0)	/* F6 */
 	  {
 	    keycode = AKEY_PIL;
@@ -821,7 +873,7 @@ int Atari_Keyboard (void)
 	else
 	  {
 	    int	i;
-	    printf ("Unknown key: 0x1b ");
+	    printf ("Unknown key (%s): 0x1b ", buff);
 	    for (i=0;i<nc;i++) printf ("0x%02x ", buff[i]);
 	    printf ("\n");
 	    keycode = AKEY_NONE;
@@ -868,6 +920,10 @@ int Atari_PORT (int num)
 {
   if (num == 0)
     {
+#ifdef JOYMOUSE
+      stick0 = vgamouse_stick;
+#endif
+
 #ifdef LINUX_JOYSTICK
       read_joystick (js0, js0_centre_x, js0_centre_y);
 #endif
@@ -881,6 +937,10 @@ int Atari_TRIG (int num)
 {
   if (num == 0)
     {
+#ifdef JOYMOUSE
+      trig0 = vgamouse_strig;
+#endif
+
 #ifdef LINUX_JOYSTICK
       int status;
 
@@ -919,15 +979,15 @@ int Atari_CONSOL (void)
 }
 
 #ifndef NAS
-int Atari_AUDC (int channel, int byte)
+void Atari_AUDC (int channel, int byte)
 {
 }
 
-int Atari_AUDF (int channel, int byte)
+void Atari_AUDF (int channel, int byte)
 {
 }
 
-int Atari_AUDCTL (int byte)
+void Atari_AUDCTL (int byte)
 {
 }
 #endif

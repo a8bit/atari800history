@@ -6,7 +6,13 @@
  * Issues cpu cycles during frame redraw.
  */
 
+#include <stdio.h>
+#include <string.h>
+
+#ifndef AMIGA
 #include "config.h"
+#endif
+
 #include "atari.h"
 #include "cpu.h"
 #include "pia.h"
@@ -18,7 +24,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: gtia.c,v 1.13 1996/09/04 23:46:43 david Exp $";
+static char *rcsid = "$Id: gtia.c,v 1.17 1997/02/15 13:57:11 david Exp $";
 
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
@@ -109,6 +115,8 @@ static UBYTE pm_scanline[ATARI_WIDTH];
 
 UBYTE colour_lookup[9];
 int colour_translation_table[256];
+
+int next_console_value = 7;
 
 UWORD pl0adr;
 UWORD pl1adr;
@@ -626,7 +634,6 @@ void PM_ScanLine (void)
 	    {
 	      UBYTE pf_pixel;
 	      UBYTE colreg;
-	      UBYTE colour;
 	      UBYTE player;
 	      int which_player;
 	      int which_missile;
@@ -764,7 +771,6 @@ void Atari_ScanLine (void)
       for (xpos=0;xpos<ATARI_WIDTH;xpos++)
 	{
 	  UBYTE pf_pixel;
-	  UBYTE colreg;
 	  UBYTE colour;
 
 	  pf_pixel = *t_scrn_ptr1++;
@@ -884,7 +890,15 @@ UBYTE GTIA_GetByte (UWORD addr)
   switch (addr)
     {
     case _CONSOL :
-      byte = Atari_CONSOL ();
+      if (next_console_value != 7)
+	{
+	  byte = next_console_value;
+	  next_console_value = 0x07;
+	}
+      else
+	{
+	  byte = Atari_CONSOL ();
+	}
       break;
     case _M0PF :
       byte = M0PF;
@@ -935,11 +949,10 @@ UBYTE GTIA_GetByte (UWORD addr)
       byte = P3PL & 0xf7;
       break;
     case _PAL :
-#ifdef PAL
-      byte = 0x00;
-#else
-      byte = 0x0e;
-#endif
+      if (tv_mode == PAL)
+	byte = 0x00;
+      else
+	byte = 0x0e;
       break;
     case _TRIG0 :
       byte = Atari_TRIG (0);

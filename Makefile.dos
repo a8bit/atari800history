@@ -16,8 +16,6 @@ LDLIBS          = -lm
 # LIB_PATH        = ${PREFIX}/lib
 # MAN_PATH        = ${PREFIX}/man
 
-ATARI_LIBRARY   = c:/atari800/ROMS
-
 default :
 	@echo To build the Atari 800 Emulator, type:
 	@echo make version
@@ -59,15 +57,6 @@ INCLUDES        =       Makefile \
 			pokey.h \
 			pia.h
 
-config config.h :       configure
-	configure
-
-configure       :       configure.o
-	$(LD) $(LDFLAGS) configure.o $(LDLIBS) -o configure
-
-configure.o     :       configure.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
-
 OBJECTS =       atari.o \
 		ffp.o \
 		cpu.o \
@@ -78,13 +67,17 @@ OBJECTS =       atari.o \
 		gtia.o \
 		pokey.o \
 		pia.o \
-		supercart.o
+                supercart.o \
+                rt-config.o \
+                prompts.o \
+                ui.o \
+                list.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
 
 atari.o         :       atari.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) -DATARI_LIBRARY="\"${ATARI_LIBRARY}\"" $(CFLAGS) atari.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
 
 ffp.o           :       ffp.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) ffp.c
@@ -115,6 +108,18 @@ pia.o           :       pia.c $(INCLUDES)
 
 supercart.o     :       supercart.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
+
+ui.o            :       ui.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) ui.c
+
+list.o          :       list.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) list.c
+
+rt-config.o     :       rt-config.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) rt-config.c
+
+prompts.o       :       prompts.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) prompts.c
 
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c

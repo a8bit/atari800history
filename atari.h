@@ -8,18 +8,24 @@
 */
 
 #ifdef VMS
-#define SBYTE	char
-#define SWORD	short int
-#define SLONG	long int
+#define SBYTE char
+#define SWORD short int
+#define SLONG long int
 #else
-#define	SBYTE	signed char
-#define	SWORD	signed short int
-#define	SLONG	signed long int
+#define	SBYTE signed char
+#define	SWORD signed short int
+#define	SLONG signed long int
 #endif
 
-#define	UBYTE	unsigned char
-#define	UWORD	unsigned short int
-#define	ULONG	unsigned long int
+#define	UBYTE unsigned char
+#define	UWORD unsigned short int
+#define	ULONG unsigned long int
+
+typedef enum
+{
+  PAL,
+  NTSC
+} TVmode;
 
 typedef enum
 {
@@ -29,106 +35,83 @@ typedef enum
   Atari5200
 } Machine;
 
-extern Machine	machine;
+extern TVmode tv_mode;
+extern Machine machine;
+extern int verbose;
 
-#define	ATARI_WIDTH	(384)
-#define	ATARI_HEIGHT	(192 + 24 + 24)
-#define	ATARI_TITLE	"Atari 800 Emulator, Version 0.6.0"
+#define ATARI_WIDTH  (384)
+#define ATARI_HEIGHT (192 + 24 + 24)
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.7.0"
 
-#define NO_CART		0
-#define	NORMAL8_CART	1
-#define	NORMAL16_CART	2
-#define AGS32_CART      3
-#define	OSS_SUPERCART	4
-#define	DB_SUPERCART	5
+#define NO_CART       0
+#define NORMAL8_CART  1
+#define NORMAL16_CART 2
+#define AGS32_CART    3
+#define OSS_SUPERCART 4
+#define DB_SUPERCART  5
 
 enum ESCAPE
 {
-	ESC_SIOV,
-	ESC_DSKINV,
-	ESC_SETVBV,
+  ESC_SIOV,
 
-	ESC_AFP,
-	ESC_FASC,
-	ESC_IFP,
-	ESC_FPI,
-	ESC_FADD,
-	ESC_FSUB,
-	ESC_FMUL,
-	ESC_FDIV,
-	ESC_LOG,
-	ESC_LOG10,
-	ESC_EXP,
-	ESC_EXP10,
-	ESC_PLYEVL,
-	ESC_ZFR0,
-	ESC_ZF1,
-	ESC_FLD0R,
-	ESC_FLD0P,
-	ESC_FLD1R,
-	ESC_FLD1P,
-	ESC_FST0R,
-	ESC_FST0P,
-	ESC_FMOVE,
+  ESC_AFP,
+  ESC_FASC,
+  ESC_IFP,
+  ESC_FPI,
+  ESC_FADD,
+  ESC_FSUB,
+  ESC_FMUL,
+  ESC_FDIV,
+  ESC_LOG,
+  ESC_LOG10,
+  ESC_EXP,
+  ESC_EXP10,
+  ESC_PLYEVL,
+  ESC_ZFR0,
+  ESC_ZF1,
+  ESC_FLD0R,
+  ESC_FLD0P,
+  ESC_FLD1R,
+  ESC_FLD1P,
+  ESC_FST0R,
+  ESC_FST0P,
+  ESC_FMOVE,
 /*
  * These are special device escape codes required by the Basic version
  */
-	ESC_E_OPEN,
-	ESC_E_CLOSE,
-	ESC_E_READ,
-	ESC_E_WRITE,
-	ESC_E_STATUS,
-	ESC_E_SPECIAL,
+  ESC_E_OPEN,
+  ESC_E_CLOSE,
+  ESC_E_READ,
+  ESC_E_WRITE,
+  ESC_E_STATUS,
+  ESC_E_SPECIAL,
 
-	ESC_K_OPEN,
-	ESC_K_CLOSE,
-	ESC_K_READ,
-	ESC_K_WRITE,
-	ESC_K_STATUS,
-	ESC_K_SPECIAL,
+  ESC_K_OPEN,
+  ESC_K_CLOSE,
+  ESC_K_READ,
+  ESC_K_WRITE,
+  ESC_K_STATUS,
+  ESC_K_SPECIAL,
 /*
  * These are Escape codes for the normal device handlers.
  * Some are never used and some are only sometimes used.
  */
-	ESC_KHOPEN = 0x80,
-	ESC_KHCLOS = 0x81,
-	ESC_KHREAD = 0x82,
-	ESC_KHWRIT = 0x83,
-	ESC_KHSTAT = 0x84,
-	ESC_KHSPEC = 0x85,
-	ESC_KHINIT = 0x86,
 
-	ESC_SHOPEN = 0x90,
-	ESC_SHCLOS = 0x91,
-	ESC_SHREAD = 0x92,
-	ESC_SHWRIT = 0x93,
-	ESC_SHSTAT = 0x94,
-	ESC_SHSPEC = 0x95,
-	ESC_SHINIT = 0x96,
+  ESC_PHOPEN = 0xb0,
+  ESC_PHCLOS = 0xb1,
+  ESC_PHREAD = 0xb2,
+  ESC_PHWRIT = 0xb3,
+  ESC_PHSTAT = 0xb4,
+  ESC_PHSPEC = 0xb5,
+  ESC_PHINIT = 0xb6,
 
-	ESC_EHOPEN = 0xa0,
-	ESC_EHCLOS = 0xa1,
-	ESC_EHREAD = 0xa2,
-	ESC_EHWRIT = 0xa3,
-	ESC_EHSTAT = 0xa4,
-	ESC_EHSPEC = 0xa5,
-	ESC_EHINIT = 0xa6,
-
-	ESC_PHOPEN = 0xb0,
-	ESC_PHCLOS = 0xb1,
-	ESC_PHREAD = 0xb2,
-	ESC_PHWRIT = 0xb3,
-	ESC_PHSTAT = 0xb4,
-	ESC_PHSPEC = 0xb5,
-	ESC_PHINIT = 0xb6,
-
-	ESC_HHOPEN = 0xc0,
-	ESC_HHCLOS = 0xc1,
-	ESC_HHREAD = 0xc2,
-	ESC_HHWRIT = 0xc3,
-	ESC_HHSTAT = 0xc4,
-	ESC_HHSPEC = 0xc5,
-	ESC_HHINIT = 0xc6
+  ESC_HHOPEN = 0xc0,
+  ESC_HHCLOS = 0xc1,
+  ESC_HHREAD = 0xc2,
+  ESC_HHWRIT = 0xc3,
+  ESC_HHSTAT = 0xc4,
+  ESC_HHSPEC = 0xc5,
+  ESC_HHINIT = 0xc6
 };
 
 /*
@@ -137,15 +120,15 @@ enum ESCAPE
 	=================
 */
 
-#define	STICK_LL	0x09;
-#define	STICK_BACK	0x0d;
-#define	STICK_LR	0x05;
-#define	STICK_LEFT	0x0b;
-#define	STICK_CENTRE	0x0f;
-#define	STICK_RIGHT	0x07;
-#define	STICK_UL	0x0a;
-#define	STICK_FORWARD	0x0e;
-#define	STICK_UR	0x06;
+#define	STICK_LL	0x09
+#define	STICK_BACK	0x0d
+#define	STICK_LR	0x05
+#define	STICK_LEFT	0x0b
+#define	STICK_CENTRE	0x0f
+#define	STICK_RIGHT	0x07
+#define	STICK_UL	0x0a
+#define	STICK_FORWARD	0x0e
+#define	STICK_UR	0x06
 
 /*
    ===========================
@@ -160,6 +143,7 @@ enum ESCAPE
 #define AKEY_BREAK -5
 #define AKEY_PIL -6
 #define AKEY_DISKCHANGE -7
+#define AKEY_UI -8
 
 #define AKEY_SHFT 0x40
 #define AKEY_CTRL 0x80

@@ -65,5 +65,18 @@ Maximum Entropy <entropy@zippy.bernstein.com>
   boundaries (e.g. SGI and SPARC).
 - Added FPS Monitor to X11 and Motif versions.
 - Changes to pattern matching for H: device.
+- Motif fileselector retains state from one invocation tothe next
+- Fixed an unitialized pointer
+- Tidied up declaration of various functions.
+- Removed Warning messages when compiled with -Wall
+- Configuration program detects if longwords need to be aligned.
+- Modification to X11 Paddle Emulation.
+- Removed annoying flicker present under some X11 platforms.
+- Removed hardcoded paths in MOTIF code.
+- Various fixes for curses mode.
 
-Sorry if I've forgotten anyone.
+Ed Kaminski <ekamins@ibm.net>
+- Correction of Antic 4&5 Bug affecting Galactic Chase & Mr. Do
+- Improved speed of MS-DOS version by synchronising with a high resolution
+  timer.
+- PORTB duplicated special handling of PORTA.

@@ -1,10 +1,96 @@
+Changes in 0.7.0
+----------------
+
+o F1 enters Menu System at any time. ESC returns you to the previous
+  screen. Items are lcoated using the cursor keys and selected by
+  either RETURN, SPACE, TAB or BACKSPACE. In most cases these keys
+  can be used interchangeably, the exception is in the Disk Management
+  Screen where RETURN is used to select a new disk and SPACE, TAB and
+  BACKSPACE are used to eject a disk - If there is no disk in the
+  virtual drive then SPACE, TAB and BACKSPACE will switch the drive
+  off (Useful for Shamus).
+
+o X11, SVGALIB & DOS - F5 is now Warmstart and Shift F5 is Coldstart.
+
+o X11 - F8 Single Shot Screen Dump, Shift F8 continuous Screen Dumps.
+
+o MS-DOS version runs about three times quicker now that the emulator is
+  synchronising with a high resolution timer.
+
+o MS-DOS version resets the screen back to text mode when finished.
+
+Changes in 0.6.2
+----------------
+
+o Antic Modes 2, 3 and f now display the normal Atari Colour and
+  Luminance by default. Extended Antic Modes 2, 3 and f are enabled
+  by starting the emulator with the "-xcolpf1" command line option.
+  This allows two completely different colours to be displayed in
+  these modes - as previously.
+
+o Improved Run-Time Configuration. Starting emulator with the "-configure"
+  command line option allows configuration of several items:-
+
+     1. Location of OS Roms
+     2. Default Directory for Disk Images
+     3. Default Directory for ROM Images
+     4. Default Directory for H1, H2, H3 and H4 pseudo devices
+     5. Command Print File (for Printer Support)
+     6. Default Screen Refresh Ratio
+     7. Default Startup System (OS/A, OS/B, XL, XE, 5200)
+     8. Default TV Mode (PAL, NTSC)
+     9. Hold Option during Coldstart
+    10. Enable C000-CFFF RAM in Atari 800 mode
+    11. Enable SIO Patch
+    12. Enable FFP Patch
+    13. Enable Extended COLPF1 (Two true colours in Antic Modes 2, 3 & F)
+
+  The emulator writes a file called "atari800.cfg" in your default
+  directory. When reading the configuration the emulator first checks
+  to see if you've specified a configuration on the command line with
+  the "-config" option otherwise it first tries to read a configuration
+  file from your default directory, failing this it then tries to read
+  a configuration file from "/etc/atari800.cfg".
+
+o JoyMouse for Toshiba Portables running SVGALIB - Probably also
+  suitable for Trackball devices with minor modifications.
+
+Changes in 0.6.1
+----------------
+
+*** IMPORTANT MESSAGE for EXISTING Users of Atari800 (Source Versions)
+
+You will need to make some changes during the sytem configuration
+stage - the emulator now expects the full path to each of the system
+ROM images to be explicitly stated. If you don't have all the ROM
+images then just pretend you have!
+
+o FPS and SIO Monitor are no longer compile time configuration options.
+  Enabled by "-fps" or "-sio" command line option or via an XVIEW
+  pulldown menu.
+o Motif fileselector retains state from one invocation to the next.
+o Configuration program detects if longwords need to be aligned.
+o Modification to X11 Paddle Emulation.
+o Removed hardcoded paths in MOTIF code.
+o Various fixes for curses mode.
+o Correction to Colours in Antic Modes 4&5 causing Incorrect colours
+  in Rally Speedway, Galactic Chase and Mr. DO)
+o Disabled DiskChange KEY (F8) in X11 version.
+o Added "-nobasic" command line parameter.
+o Added "-osa_rom", "-osb_rom", "-xlxe_rom", "-5200_rom" and "-basic_rom".
+  These command line options are used to specify the location of
+  various system ROMs on mis-configured systems or binary distributions.
+
+Note: To prevent cluttering up the CHANGES file all credits are listed
+      in the CREDITS file.
+
 Changes in 0.6.0
 ----------------
 
 - Emulator can now be compiled for DOS using the DJGPP port of GCC (Thanks
   to Ivo van Poorten)
 
-Thanks to Maximum Entropy for he following Changes:-
+Thanks to Maximum Entropy for the following Changes:-
 - Implementation of Disable Drive menu item for Motif.
 - Fixed scrolling problem for machines that can't access longwords on word
   boundaries (e.g. SGI and SPARC).

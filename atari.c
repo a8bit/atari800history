@@ -17,20 +17,10 @@
 #include "djgpp.h"
 #endif
 
-static char *rcsid = "$Id: atari.c,v 1.30 1996/09/29 22:01:05 david Exp $";
+static char *rcsid = "$Id: atari.c,v 1.39 1997/03/31 00:50:32 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
-
-#ifdef VMS
-#define DEFAULT_REFRESH_RATE 4
-#else
-#ifdef AMIGA
-#define DEFAULT_REFRESH_RATE 4
-#else
-#include "config.h"
-#endif
-#endif
 
 #include "atari.h"
 #include "cpu.h"
@@ -44,13 +34,15 @@ static char *rcsid = "$Id: atari.c,v 1.30 1996/09/29 22:01:05 david Exp $";
 #include "sio.h"
 #include "monitor.h"
 #include "platform.h"
+#include "prompts.h"
+#include "rt-config.h"
 
+TVmode tv_mode = PAL;
 Machine machine = Atari;
+int verbose = FALSE;
 
 static int os = 2;
-static int enable_c000 = FALSE;
-static int ffp_patch = FALSE;
-static int sio_patch = TRUE;
+static int enable_ffp_patch = FALSE;
 
 extern UBYTE NMIEN;
 extern UBYTE NMIST;
@@ -68,15 +60,7 @@ int DELAYED_SERIN_IRQ;
 int DELAYED_SEROUT_IRQ;
 int DELAYED_XMTDONE_IRQ;
 int countdown_rate = 4000;
-int refresh_rate = DEFAULT_REFRESH_RATE;
-
-#ifdef PAL
-double deltatime = (1.0 / 50.0);
-#else
-double deltatime = (1.0 / 60.0);
-#endif
-
-static char *atari_library = ATARI_LIBRARY;
+double deltatime;
 
 void add_esc (UWORD address, UBYTE esc_code);
 int Atari800_Exit (int run_monitor);
@@ -124,6 +108,10 @@ int load_image (char *filename, int addr, int nbytes)
       close (fd);
 
       status = TRUE;
+    }
+  else if (verbose)
+    {
+      perror (filename);
     }
 
   return status;
@@ -297,7 +285,7 @@ void PatchOS (void)
   const unsigned short	o_read = 4;
   const unsigned short	o_write = 6;
   const unsigned short	o_status = 8;
-  const unsigned short	o_special = 10;
+  /* const unsigned short	o_special = 10; */
   const unsigned short	o_init = 12;
 
   unsigned short addr;
@@ -309,7 +297,7 @@ void PatchOS (void)
    Disable Checksum Test
    =====================
 */
-  if (sio_patch)
+  if (enable_sio_patch)
     add_esc (0xe459, ESC_SIOV);
 
   switch (machine)
@@ -322,6 +310,11 @@ void PatchOS (void)
       memory[0xc315] = 0xff;
       memory[0xc319] = 0x8e;
       memory[0xc31a] = 0xff;
+      break;
+    default :
+      printf ("Fatal Error in atari.c: PatchOS(): Unknown machine\n");
+      Atari800_Exit (FALSE);
+      exit (1);
       break;
     }
 /*
@@ -337,6 +330,11 @@ void PatchOS (void)
     case AtariXL :
     case AtariXE :
       addr = 0xc42e;
+      break;
+    default :
+      printf ("Fatal Error in atari.c: PatchOS(): Unknown machine\n");
+      Atari800_Exit (FALSE);
+      exit (1);
       break;
     }
 
@@ -406,7 +404,7 @@ void PatchOS (void)
       addr += 3;	/* Next Device in HATABS */
     }
 
-  if (ffp_patch)
+  if (enable_ffp_patch)
     {
       add_esc (0xd800, ESC_AFP);
       add_esc (0xd8e6, ESC_FASC);
@@ -441,6 +439,9 @@ void Coldstart (void)
   PORTB = 0xff;
   memory[0x244] = 1;
   CPU_Reset ();
+
+  if (hold_option)
+    next_console_value = 0x03; /* Hold Option During Reboot */
 }
 
 void Warmstart (void)
@@ -454,22 +455,15 @@ void Warmstart (void)
 
 int Initialise_AtariOSA (void)
 {
-  char filename[128];
   int status;
 
-#ifdef VMS
-  sprintf (filename, "%s:atariosa.rom", atari_library);
-#else
-  sprintf (filename, "%s/atariosa.rom", atari_library);
-#endif
-
-  status = load_image (filename, 0xd800, 0x2800);
+  status = load_image (atari_osa_filename, 0xd800, 0x2800);
   if (status)
     {
       machine = Atari;
       PatchOS ();
       SetRAM (0x0000, 0xbfff);
-      if (enable_c000)
+      if (enable_c000_ram)
 	SetRAM (0xc000, 0xcfff);
       else
 	SetROM (0xc000, 0xcfff);
@@ -483,22 +477,15 @@ int Initialise_AtariOSA (void)
 
 int Initialise_AtariOSB (void)
 {
-  char filename[128];
   int status;
 
-#ifdef VMS
-  sprintf (filename, "%s:atariosb.rom", atari_library);
-#else
-  sprintf (filename, "%s/atariosb.rom", atari_library);
-#endif
-
-  status = load_image (filename, 0xd800, 0x2800);
+  status = load_image (atari_osb_filename, 0xd800, 0x2800);
   if (status)
     {
       machine = Atari;
       PatchOS ();
       SetRAM (0x0000, 0xbfff);
-      if (enable_c000)
+      if (enable_c000_ram)
 	SetRAM (0xc000, 0xcfff);
       else
 	SetROM (0xc000, 0xcfff);
@@ -512,31 +499,18 @@ int Initialise_AtariOSB (void)
 
 int Initialise_AtariXL (void)
 {
-  char filename[128];
   int status;
 
-#ifdef VMS
-  sprintf (filename, "%s:atarixl.rom", atari_library);
-#else
-  sprintf (filename, "%s/atarixl.rom", atari_library);
-#endif
-
-  status = load_image (filename, 0xc000, 0x4000);
+  status = load_image (atari_xlxe_filename, 0xc000, 0x4000);
   if (status)
     {
       machine = AtariXL;
       PatchOS ();
       memcpy (atarixl_os, memory+0xc000, 0x4000);
       
-#ifdef VMS
-      sprintf (filename, "%s:ataribas.rom", atari_library);
-#else
-      sprintf (filename, "%s/ataribas.rom", atari_library);
-#endif
-
       if (cart_type == NO_CART)
 	{
-	  status = Insert_8K_ROM (filename);
+	  status = Insert_8K_ROM (atari_basic_filename);
 	  if (status)
 	    {
 	      memcpy (atari_basic, memory+0xa000, 0x2000);
@@ -548,7 +522,7 @@ int Initialise_AtariXL (void)
 	    }
 	  else
 	    {
-	      printf ("Unable to load %s\n", filename);
+	      printf ("Unable to load %s\n", atari_basic_filename);
 	      Atari800_Exit (FALSE);
 	      exit (1);
 	    }
@@ -579,16 +553,14 @@ int Initialise_AtariXE (void)
 
 int Initialise_Atari5200 (void)
 {
-  char filename[128];
   int status;
 
-#ifdef VMS
-  sprintf (filename, "%s:atari5200.rom", atari_library);
-#else
-  sprintf (filename, "%s/atari5200.rom", atari_library);
-#endif
+  int i;
 
-  status = load_image (filename, 0xf800, 0x800);
+  for (i=0;i<0xf800;i++)
+    memory[i] = 0x00;
+
+  status = load_image (atari_5200_filename, 0xf800, 0x800);
   if (status)
     {
       machine = Atari5200;
@@ -605,20 +577,85 @@ int Initialise_Atari5200 (void)
   return status;
 }
 
-main (int argc, char **argv)
+int main (int argc, char **argv)
 {
-  char filename[128];
+  FILE *fp;
+
   int status;
   int error;
   int diskno = 1;
   int i;
   int j;
-  char *ptr;
 
-  ptr = getenv ("ATARI_LIBRARY");
-  if (ptr) atari_library = ptr;
+  char *rtconfig_filename = NULL;
+  int config = FALSE;
 
   error = FALSE;
+
+  for (i=j=1;i<argc;i++)
+    {
+      if (strcmp(argv[i],"-configure") == 0)
+        config = TRUE;
+      else if (strcmp(argv[i],"-config") == 0)
+        rtconfig_filename = argv[++i];
+      else if (strcmp(argv[i],"-v") == 0)
+	{
+	  printf ("%s\n", ATARI_TITLE);
+	  exit (1);
+	}
+      else if (strcmp(argv[i],"-verbose") == 0)
+        verbose = TRUE;
+      else
+	argv[j++] = argv[i];
+    }
+
+  argc = j;
+
+  if (!RtConfigLoad (rtconfig_filename))
+    config = TRUE;
+
+  if (config)
+    {
+      RtConfigUpdate ();
+      RtConfigSave ();
+    }
+
+  switch (default_system)
+    {
+      case 1 :
+        machine = Atari;
+        os = 1;
+        break;
+      case 2 :
+        machine = Atari;
+        os = 2;
+        break;
+      case 3 :
+        machine = AtariXL;
+        break;
+      case 4 :
+        machine = AtariXE;
+        break;
+      case 5 :
+        machine = Atari5200;
+        break;
+      default :
+        machine = AtariXL;
+        break;
+     } 
+
+  switch (default_tv_mode)
+    {
+      case 1 :
+        tv_mode = PAL;
+        break;
+      case 2 :
+        tv_mode = NTSC;
+        break;
+      default :
+        tv_mode = PAL;
+        break;
+    }
 
   for (i=j=1;i<argc;i++)
     {
@@ -630,10 +667,26 @@ main (int argc, char **argv)
 	machine = AtariXE;
       else if (strcmp(argv[i],"-5200") == 0)
 	machine = Atari5200;
+      else if (strcmp(argv[i],"-nobasic") == 0)
+        hold_option = TRUE;
       else if (strcmp(argv[i],"-ffp") == 0)
-	ffp_patch = TRUE;
+	enable_ffp_patch = TRUE;
       else if (strcmp(argv[i],"-nopatch") == 0)
-	sio_patch = FALSE;
+	enable_sio_patch = FALSE;
+      else if (strcmp(argv[i],"-pal") == 0)
+	tv_mode = PAL;
+      else if (strcmp(argv[i],"-ntsc") == 0)
+	tv_mode = NTSC;
+      else if (strcmp(argv[i],"-osa_rom") == 0)
+        strcpy (atari_osa_filename, argv[++i]);
+      else if (strcmp(argv[i],"-osb_rom") == 0)
+        strcpy (atari_osb_filename, argv[++i]);
+      else if (strcmp(argv[i],"-xlxe_rom") == 0)
+        strcpy (atari_xlxe_filename, argv[++i]);
+      else if (strcmp(argv[i],"-5200_rom") == 0)
+        strcpy (atari_5200_filename, argv[++i]);
+      else if (strcmp(argv[i],"-basic_rom") == 0)
+        strcpy (atari_basic_filename, argv[++i]);
       else if (strcmp(argv[i],"-rom") == 0)
 	{
 	  rom_filename = argv[++i];
@@ -667,17 +720,21 @@ main (int argc, char **argv)
 	}
       else if (strcmp(argv[i],"-help") == 0)
 	{
+          printf ("\t-configure    Update Configuration File\n");
+          printf ("\t-config fnm   Specify Alternate Configuration File\n");
 	  printf ("\t-atari        Standard Atari 800 mode\n");
 	  printf ("\t-xl           Atari XL mode\n");
 	  printf ("\t-xe           Atari XE mode (Currently same as -xl)\n");
 	  printf ("\t-5200         Atari 5200 Games System\n");
 	  printf ("\t-ffp          Use Fast Floating Point routines\n");
-	  printf ("\t-rom          Install standard 8K Cartridge\n");
-	  printf ("\t-rom16        Install standard 16K Cartridge\n");
-	  printf ("\t-oss %%s       Install OSS Super Cartridge\n");
-	  printf ("\t-db %%s        Install DB's 16/32K Cartridge (not for normal use)\n");
-	  printf ("\t-refresh %%d   Specify screen refresh rate\n");
-	  printf ("\t-nopatch      Don't patch SIO routine in OS (Ongoing Development)\n");
+	  printf ("\t-pal          Enable PAL TV mode\n");
+	  printf ("\t-ntsc         Enable NTSC TV mode\n");
+	  printf ("\t-rom fnm      Install standard 8K Cartridge\n");
+	  printf ("\t-rom16 fnm    Install standard 16K Cartridge\n");
+	  printf ("\t-oss fnm      Install OSS Super Cartridge\n");
+	  printf ("\t-db fnm       Install DB's 16/32K Cartridge (not for normal use)\n");
+	  printf ("\t-refresh num  Specify screen refresh rate\n");
+	  printf ("\t-nopatch      Don't patch SIO routine in OS\n");
 	  printf ("\t-a            Use A OS\n");
 	  printf ("\t-b            Use B OS\n");
 	  printf ("\t-c            Enable RAM between 0xc000 and 0xd000\n");
@@ -689,19 +746,20 @@ main (int argc, char **argv)
       else if (strcmp(argv[i],"-b") == 0)
 	os = 2;
       else if (strcmp(argv[i],"-c") == 0)
-	enable_c000 = TRUE;
-      else if (strcmp(argv[i],"-v") == 0)
-	{
-	  printf ("%s\n", ATARI_TITLE);
-	  exit (1);
-	}
+	enable_c000_ram = TRUE;
       else
 	argv[j++] = argv[i];
     }
 
   argc = j;
 
+  if (tv_mode == PAL)
+    deltatime = (1.0 / 50.0);
+  else
+    deltatime = (1.0 / 60.0);
+
   Device_Initialise (&argc, argv);
+  SIO_Initialise (&argc, argv);
 
   Atari_Initialise (&argc, argv); /* Platform Specific Initialisation */
 
@@ -723,6 +781,7 @@ main (int argc, char **argv)
    * Initialise Custom Chips
    */
 
+  ANTIC_Initialise (&argc, argv);
   GTIA_Initialise (&argc, argv);
   PIA_Initialise (&argc, argv);
 
@@ -839,6 +898,10 @@ main (int argc, char **argv)
  * ======================================
  */
   Atari800_Hardware ();
+  printf("Fatal error: Atari800_Hardware() returned\n");
+  Atari800_Exit(FALSE);
+  exit(1);
+  return 1;
 }
 
 void add_esc (UWORD address, UBYTE esc_code)
@@ -855,7 +918,7 @@ void add_esc (UWORD address, UBYTE esc_code)
    ================================
 */
 
-K_Device (UBYTE esc_code)
+void K_Device (UBYTE esc_code)
 {
   char	ch;
 
@@ -889,7 +952,7 @@ K_Device (UBYTE esc_code)
     }
 }
 
-E_Device (UBYTE esc_code)
+void E_Device (UBYTE esc_code)
 {
   UBYTE	ch;
 
@@ -935,11 +998,6 @@ E_Device (UBYTE esc_code)
     }
 }
 
-DSKIN ()
-{
-  SIO ();
-}
-
 #define CDTMV1 0x0218
 
 void Escape (UBYTE esc_code)
@@ -950,15 +1008,6 @@ void Escape (UBYTE esc_code)
     {
     case ESC_SIOV :
       SIO ();
-      break;
-    case ESC_DSKINV :
-      DSKIN ();
-      break;
-    case ESC_SETVBV :
-      printf ("SETVBV %d\n", regA);
-      addr = (CDTMV1 - 2) + (regA * 2);
-      memory[addr] = regY;
-      memory[addr+1] = regX;
       break;
     case ESC_AFP :
       ffp_afp() ;
@@ -1039,69 +1088,6 @@ void Escape (UBYTE esc_code)
     case ESC_E_WRITE :
       E_Device (esc_code);
       break;
-    case ESC_KHOPEN :
-      Device_KHOPEN ();
-      break;
-    case ESC_KHCLOS :
-      Device_KHCLOS ();
-      break;
-    case ESC_KHREAD :
-      Device_KHREAD ();
-      break;
-    case ESC_KHWRIT :
-      Device_KHWRIT ();
-      break;
-    case ESC_KHSTAT :
-      Device_KHSTAT ();
-      break;
-    case ESC_KHSPEC :
-      Device_KHSPEC ();
-      break;
-    case ESC_KHINIT :
-      Device_KHINIT ();
-      break;
-    case ESC_SHOPEN :
-      Device_SHOPEN ();
-      break;
-    case ESC_SHCLOS :
-      Device_SHCLOS ();
-      break;
-    case ESC_SHREAD :
-      Device_SHREAD ();
-      break;
-    case ESC_SHWRIT :
-      Device_SHWRIT ();
-      break;
-    case ESC_SHSTAT :
-      Device_SHSTAT ();
-      break;
-    case ESC_SHSPEC :
-      Device_SHSPEC ();
-      break;
-    case ESC_SHINIT :
-      Device_SHINIT ();
-      break;
-    case ESC_EHOPEN :
-      Device_EHOPEN ();
-      break;
-    case ESC_EHCLOS :
-      Device_EHCLOS ();
-      break;
-    case ESC_EHREAD :
-      Device_EHREAD ();
-      break;
-    case ESC_EHWRIT :
-      Device_EHWRIT ();
-      break;
-    case ESC_EHSTAT :
-      Device_EHSTAT ();
-      break;
-    case ESC_EHSPEC :
-      Device_EHSPEC ();
-      break;
-    case ESC_EHINIT :
-      Device_EHINIT ();
-      break;
     case ESC_PHOPEN :
       Device_PHOPEN ();
       break;
@@ -1158,11 +1144,7 @@ int Atari800_Exit (int run_monitor)
   return Atari_Exit (run_monitor);
 }
 
-#ifdef DEBUG
-UBYTE Atari800_GetByte (UWORD addr, UWORD PC)
-#else
 UBYTE Atari800_GetByte (UWORD addr)
-#endif
 {
   UBYTE	byte;
 /*
@@ -1202,11 +1184,7 @@ UBYTE Atari800_GetByte (UWORD addr)
   return byte;
 }
 
-#ifdef DEBUG
-int Atari800_PutByte (UWORD addr, UBYTE byte, UWORD PC)
-#else
 int Atari800_PutByte (UWORD addr, UBYTE byte)
-#endif
 {
   int abort = FALSE;
 /*
@@ -1281,6 +1259,9 @@ void Atari800_Hardware (void)
 	  IRQST &= 0x7f;
 	  IRQ = 1;
 	  break;
+        case AKEY_UI :
+          ui (atari_screen);
+          break;
 	case AKEY_PIL :
 	  if (pil_on)
 	    {
@@ -1345,6 +1326,7 @@ void Atari800_Hardware (void)
 	}
 #endif
 
+#ifndef DJGPP
       if (deltatime > 0.0)
 	{
 	  if (lasttime >= 0.0)
@@ -1365,6 +1347,31 @@ void Atari800_Hardware (void)
 	      lasttime = tp.tv_sec + (tp.tv_usec / 1000000.0);
 	    }
 	}
+#else  // for dos, count ticks and use the ticks_per_second global variable
+       // Use the high speed clock tick function uclock()
+      if (deltatime > 0.0) {
+        static uclock_t lasttime = 0;
+        uclock_t curtime, uclockd;
+        unsigned long uclockd_hi, uclockd_lo;
+        unsigned long uclocks_per_int;
+
+        uclocks_per_int = (deltatime * (double) UCLOCKS_PER_SEC) + 0.5;
+        // printf( "ticks_per_int %d, %.8X\n", uclocks_per_int, (unsigned long) lasttime );
+
+        do {
+          curtime = uclock();
+          if( curtime > lasttime ) {
+            uclockd = curtime - lasttime;
+          }
+          else {
+            uclockd = ((uclock_t) ~0 - lasttime) + curtime + (uclock_t) 1;
+          }
+          uclockd_lo = (unsigned long) uclockd;
+          uclockd_hi = (unsigned long) (uclockd >> 32);
+        } while( (uclockd_hi == 0) && (uclocks_per_int > uclockd_lo) );
+
+        lasttime = curtime;
+      }
+#endif
     }
 }
-

@@ -1,6 +1,6 @@
 #include <audio/audiolib.h>
 
-static char *rcsid = "$Id: nas.c,v 1.3 1996/07/02 22:53:05 david Exp $";
+static char *rcsid = "$Id: nas.c,v 1.4 1996/10/09 21:09:06 david Exp $";
 
 #define FALSE 0
 #define TRUE 1
@@ -209,17 +209,17 @@ void NAS_UpdateSound (void)
     }
 }
 
-int Atari_AUDC (int channel, int byte)
+void Atari_AUDC (int channel, int byte)
 {
   AUDC[channel-1] = byte;
 }
 
-int Atari_AUDF (int channel, int byte)
+void Atari_AUDF (int channel, int byte)
 {
   AUDF[channel-1] = byte;
 }
 
-int Atari_AUDCTL (int byte)
+void Atari_AUDCTL (int byte)
 {
   AUDCTL = byte;
 

@@ -1,7 +1,12 @@
 #include <stdio.h>
+#include <string.h>
 
+#ifndef AMIGA
 #include "config.h"
+#endif
+
 #include "atari.h"
+#include "rt-config.h"
 #include "cpu.h"
 #include "gtia.h"
 #include "antic.h"
@@ -9,7 +14,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: antic.c,v 1.12 1996/09/29 22:28:54 david Exp $";
+static char *rcsid = "$Id: antic.c,v 1.18 1997/03/22 21:48:27 david Exp $";
 
 UBYTE CHACTL;
 UBYTE CHBASE;
@@ -89,6 +94,22 @@ int wsync_halt = 0;
 
 ULONG *atari_screen = NULL;
 UBYTE *scrn_ptr;
+
+void ANTIC_Initialise (int *argc, char *argv[])
+{
+  int i;
+  int j;
+
+  for (i=j=1;i<*argc;i++)
+    {
+      if (strcmp(argv[i],"-xcolpf1") == 0)
+        enable_xcolpf1 = TRUE;
+      else
+        argv[j++] = argv[i];
+    }
+
+  *argc = j;
+}
 
 /*
 	*****************************************************************
@@ -216,7 +237,7 @@ void antic_2 ()
 		  *ptr++ = lookup1[0];
 		  *ptr++ = lookup1[0];
 #else
-#if 0
+#ifdef UNALIGNED_LONG_OK
 		  ULONG *l_ptr = (ULONG*)ptr;
 
 		  *l_ptr++ = PF4_COLPF2;
@@ -402,7 +423,7 @@ void antic_4 ()
   lookup1[0x80] = lookup1[0x20] = lookup1[0x08] =
     lookup1[0x02] = (colour_lookup[5] << 8) | colour_lookup[5];
   lookup1[0xc0] = lookup1[0x30] = lookup1[0x0c] =
-    lookup1[0x03] = (colour_lookup[7] << 8) | colour_lookup[7];
+    lookup1[0x03] = (colour_lookup[7] << 8) | colour_lookup[6];
 #else
   lookup1[0x00] = PF2_COLBK;
   lookup1[0x40] = lookup1[0x10] = lookup1[0x04] =
@@ -410,7 +431,7 @@ void antic_4 ()
   lookup1[0x80] = lookup1[0x20] = lookup1[0x08] =
     lookup1[0x02] = PF2_COLPF1;
   lookup1[0xc0] = lookup1[0x30] = lookup1[0x0c] =
-    lookup1[0x03] = PF2_COLPF3;
+    lookup1[0x03] = PF2_COLPF2;
 #endif
 /*
    ==================================
@@ -422,7 +443,7 @@ void antic_4 ()
   lookup2[0x40] = lookup2[0x10] = lookup2[0x04] =
     lookup2[0x01] = (colour_lookup[4] << 8) | colour_lookup[4];
   lookup2[0x80] = lookup2[0x20] = lookup2[0x08] =
-    lookup2[0x02] = (colour_lookup[6] << 8) | colour_lookup[6];
+    lookup2[0x02] = (colour_lookup[6] << 8) | colour_lookup[5];
   lookup2[0xc0] = lookup2[0x30] = lookup2[0x0c] =
     lookup2[0x03] = (colour_lookup[7] << 8) | colour_lookup[7];
 #else
@@ -430,7 +451,7 @@ void antic_4 ()
   lookup2[0x40] = lookup2[0x10] = lookup2[0x04] =
     lookup2[0x01] = PF2_COLPF0;
   lookup2[0x80] = lookup2[0x20] = lookup2[0x08] =
-    lookup2[0x02] = PF2_COLPF2;
+    lookup2[0x02] = PF2_COLPF1;
   lookup2[0xc0] = lookup2[0x30] = lookup2[0x0c] =
     lookup2[0x03] = PF2_COLPF3;
 #endif
@@ -521,7 +542,7 @@ void antic_5 ()
   lookup1[0x80] = lookup1[0x20] = lookup1[0x08] =
     lookup1[0x02] = (colour_lookup[5] << 8) | colour_lookup[5];
   lookup1[0xc0] = lookup1[0x30] = lookup1[0x0c] =
-    lookup1[0x03] = (colour_lookup[7] << 8) | colour_lookup[7];
+    lookup1[0x03] = (colour_lookup[7] << 8) | colour_lookup[6];
 #else
   lookup1[0x00] = PF2_COLBK;
   lookup1[0x40] = lookup1[0x10] = lookup1[0x04] =
@@ -529,7 +550,7 @@ void antic_5 ()
   lookup1[0x80] = lookup1[0x20] = lookup1[0x08] =
     lookup1[0x02] = PF2_COLPF1;
   lookup1[0xc0] = lookup1[0x30] = lookup1[0x0c] =
-    lookup1[0x03] = PF2_COLPF3;
+    lookup1[0x03] = PF2_COLPF2;
 #endif
 /*
    ==================================
@@ -541,7 +562,7 @@ void antic_5 ()
   lookup2[0x40] = lookup2[0x10] = lookup2[0x04] =
     lookup2[0x01] = (colour_lookup[4] << 8) | colour_lookup[4];
   lookup2[0x80] = lookup2[0x20] = lookup2[0x08] =
-    lookup2[0x02] = (colour_lookup[6] << 8) | colour_lookup[6];
+    lookup2[0x02] = (colour_lookup[6] << 8) | colour_lookup[5];
   lookup2[0xc0] = lookup2[0x30] = lookup2[0x0c] =
     lookup2[0x03] = (colour_lookup[7] << 8) | colour_lookup[7];
 #else
@@ -549,7 +570,7 @@ void antic_5 ()
   lookup2[0x40] = lookup2[0x10] = lookup2[0x04] =
     lookup2[0x01] = PF2_COLPF0;
   lookup2[0x80] = lookup2[0x20] = lookup2[0x08] =
-    lookup2[0x02] = PF2_COLPF2;
+    lookup2[0x02] = PF2_COLPF1;
   lookup2[0xc0] = lookup2[0x30] = lookup2[0x0c] =
     lookup2[0x03] = PF2_COLPF3;
 #endif
@@ -1129,7 +1150,9 @@ void antic_e ()
   UWORD *t_scrn_ptr = (UWORD*)&scrn_ptr[xmin+scroll_offset];
   int nbytes = (xmax - xmin) >> 3;
   int i;
+#ifdef UNALIGNED_LONG_OK
   int background;
+#endif
   UBYTE *ptr;
 
 #ifdef AMIGA_TEST
@@ -1155,7 +1178,7 @@ void antic_e ()
     PF2_COLPF2;
 #endif
 
-#if 0
+#ifdef UNALIGNED_LONG_OK
   background = (lookup1[0x00] << 16) | lookup1[0x00];
 #endif
 
@@ -1174,7 +1197,7 @@ void antic_e ()
 	}
       else
 	{
-#if 0
+#ifdef UNALIGNED_LONG_OK
 	  ULONG *l_ptr  = (ULONG*)t_scrn_ptr;
 
 	  *l_ptr++ = background;
@@ -1332,9 +1355,12 @@ void ANTIC_RunDisplayList (void)
 
   while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT+8)))
     {
-      UBYTE	IR;
+      UBYTE IR;
+      UBYTE colpf1;
+      int colpf1_fiddled = FALSE;
 
       IR = memory[dlist++];
+      colpf1 = COLPF1;
 
       switch (IR & 0x0f)
 	{
@@ -1395,10 +1421,20 @@ void ANTIC_RunDisplayList (void)
 	    {
 	    case 0x02 :
 	      nlines = 8;
+              if (!enable_xcolpf1)
+                {
+                  GTIA_PutByte (_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
+                  colpf1_fiddled = TRUE;
+                }
 	      antic_2 ();
 	      break;
 	    case 0x03 :
 	      nlines = 10;
+              if (!enable_xcolpf1)
+                {
+                  GTIA_PutByte (_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
+                  colpf1_fiddled = TRUE;
+                }
 	      antic_3 ();
 	      break;
 	    case 0x04 :
@@ -1447,6 +1483,11 @@ void ANTIC_RunDisplayList (void)
 	      break;
 	    case 0x0f :
 	      nlines = 1;
+              if (!enable_xcolpf1)
+                {
+                  GTIA_PutByte (_COLPF1, (COLPF2 & 0xf0) | (COLPF1 & 0x0f));
+                  colpf1_fiddled = TRUE;
+                }
 	      antic_f ();
 	      break;
 	    default :
@@ -1490,6 +1531,9 @@ void ANTIC_RunDisplayList (void)
 
       vskipbefore = 0;
       vskipafter = 99;
+
+      if (colpf1_fiddled)
+        GTIA_PutByte (_COLPF1, colpf1);
     }
 
   nlines = (ATARI_HEIGHT+8) - ypos;
@@ -1507,13 +1551,12 @@ void ANTIC_RunDisplayList (void)
       NMI ();
     }
 
-#ifdef PAL
-  for (ypos=248;ypos<312;ypos++)
-    GO (114);
-#else
-  for (ypos=248;ypos<262;ypos++)
-    GO (114);
-#endif
+  if (tv_mode == PAL)
+    for (ypos=248;ypos<312;ypos++)
+      GO (114);
+  else
+    for (ypos=248;ypos<262;ypos++)
+      GO (114);
 }
 
 UBYTE ANTIC_GetByte (UWORD addr)

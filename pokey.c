@@ -1,3 +1,11 @@
+#include <stdlib.h>
+#ifdef VMS
+#include <types.h>
+#else
+#include <sys/types.h>
+#endif
+#include <time.h>
+
 #include "atari.h"
 #include "pia.h"
 #include "pokey.h"
@@ -8,7 +16,7 @@
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: pokey.c,v 1.8 1996/09/04 23:46:44 david Exp $";
+static char *rcsid = "$Id: pokey.c,v 1.9 1996/10/09 21:34:33 david Exp $";
 
 UBYTE KBCODE;
 UBYTE IRQST;
@@ -19,6 +27,7 @@ static int SHIFT = 0x00;
 UBYTE POKEY_GetByte (UWORD addr)
 {
   UBYTE byte;
+  static int rand_init = 0;
 
   addr &= 0xff0f;
   switch (addr)
@@ -57,6 +66,11 @@ UBYTE POKEY_GetByte (UWORD addr)
       byte = Atari_POT (7);
       break;
     case _RANDOM :
+      if (!rand_init)
+      {
+	srand((int) time((time_t *) NULL));
+	rand_init = 1;
+      }
       byte = rand();
       break;
     case _SERIN :
