@@ -1,3 +1,34 @@
+Changes in 0.9.9a
+-----------------
+
+o full NOVA graphics support on Falcon including double sized screen
+
+o double buffering of screen on NOVA gfx
+
+o 16,32-bit X11 shared memory support. Compile with -DSHM. <Cameron>
+  Quote: "Just in case you're interested, here's a patch for Atari800 that will
+        allow shared memory to be used in 16-bit and 32-bit colour modes.  There
+      isn't much of a performance benefit on my system (the emulator's CPU usage
+      drop from around 68% to 53%, but the X server rises from 5% to 28%) but it
+      might be useful in some environments.
+
+      It's a bit of a hack since it adds another copy of each frame's data, but
+      it's probably the best that can be done without changing the
+      non-interface-dependent code."
+
+o SIO fix: register A should always contain 0 on return from ROM(?) <Marek>
+
+o Unix fix: call select() in the main sync loop to reduce system load <Marek>
+
+o SIO format fix: realsize is set - formatting should work (7 Cities of Gold)
+  <Jindroush>. Though I think we probably should not call SizeOfSector since
+  someone might want to reformat double density diskette to single density.
+  Thus I think realsize = 128; should work better. Let's test that.
+
+o Linux SVGALIB - proper keyboard support implemented using the rawkey lib
+  (http://sunsite.unc.edu/pub/Linux/libs/ui)
+
+
 Changes in 0.9.8
 ----------------
 

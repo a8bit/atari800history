@@ -18,6 +18,7 @@
 
 #include "cpu.h"
 #include "colours.h"
+#include "ui.h"         /* for ui_is_active */
 #include "config.h"
 #include "antic.h"		/* for BITPL_SCR */
 #include "platform.h"
@@ -100,7 +101,7 @@ static Video_HW video_hw = UNKNOWN;
 static int bitplanes = TRUE;	/* Atari 256 colour mode uses 8 bit planes */
 static int gl_vdi_handle;
 XCB	*NOVA_xcb = NULL;
-static int NOVA_double_size = 0;
+static int NOVA_double_size = FALSE;
 static int HOST_WIDTH, HOST_HEIGHT, HOST_PLANES;
 #define EMUL_WIDTH	(NOVA_double_size ? 2*336 : 336)
 #define EMUL_HEIGHT	(NOVA_double_size ? 2*240 : 240)
@@ -152,6 +153,7 @@ static int new_videl_mode_valid = FALSE;
 UBYTE *new_videoram = NULL;
 
 extern void rplanes(void);
+extern void rplanes_delta(void);
 extern void load_r(void);
 extern void save_r(void);
 extern ULONG *p_str_p;
@@ -383,7 +385,10 @@ void Atari_Initialise(int *argc, char *argv[])
 	else {
 		/* we may also try to switch into proper resolution using XBios call and then
 		   reinitialize VDI - we've been told it would work OK */
-		form_alert(1, "[1][Atari800 emulator needs |320x240 or higher res|in 256 colors][ OK ]");
+		if (video_hw == F030)
+			form_alert(1, "[1][Atari800 emulator needs 320x240|or higher res. in 256 colors.|Or use the -videl switch.][ OK ]");
+		else
+			form_alert(1, "[1][Atari800 emulator needs 320x240|or higher res. in 256 colors.][ OK ]");
 		exit(-1);
 	}
 
@@ -460,6 +465,21 @@ int Atari_Exit(int run_monitor)
 
 /* -------------------------------------------------------------------------- */
 
+inline long DoubleSizeIt(short data)
+{
+	long result;
+	__asm__ __volatile__("\n\t\
+		movew	%1,%0\n\t\
+		swap	%0\n\t\
+		movew	%1,%0\n\t\
+		rorw	#8,%0\n\t\
+		rorl	#8,%0"
+		: "=d" (result)
+		: "d" (data)
+	);
+	return result;
+}
+
 void Atari_DisplayScreen(UBYTE *screen)
 {
 	static int i = 0;
@@ -480,67 +500,102 @@ void Atari_DisplayScreen(UBYTE *screen)
 	kam = Logbase();
 #ifdef BITPL_SCR
 	oldscreen = atari_screen_b;
+
+	if (delta_screen) {
+		/* switch between screens to enable delta output */
+		if (atari_screen==atari_screen1) {
+			atari_screen = atari_screen2;
+			atari_screen_b = atari_screen1;
+		}
+		else {
+			atari_screen = atari_screen1;
+			atari_screen_b = atari_screen2;
+		}
+	}
 #endif
 
 	if (bitplanes) {
-		rplanes();
 #ifdef BITPL_SCR
-		if (delta_screen) {
-			/* switch between screens to enable delta output */
-			if (atari_screen==atari_screen1) {
-				atari_screen = atari_screen2;
-				atari_screen_b = atari_screen1;
-			}
-			else {
-				atari_screen = atari_screen1;
-				atari_screen_b = atari_screen2;
-			}
-		}
+		if (delta_screen && !ui_is_active)
+			rplanes_delta();
+		else
 #endif
+			rplanes();
 	}
 	else {
 		UBYTE *ptr_from = screen + 24;
+		UBYTE *ptr_mirror = oldscreen + 24;
 		UBYTE *ptr_dest = kam + CENTER;
 		int j;
 
 		for(j=0; j<ATARI_HEIGHT; j++) {
-			int cycles;
-			long tmp=0, tmp2=0;
+			short cycles;
+			long *long_ptr_from = ptr_from;
+			long *long_ptr_mirror = ptr_mirror;
+			long *long_ptr_dest = ptr_dest;
 
 			if (NOVA_double_size) {
-				cycles = 167;
+				cycles = 83;
 
-				__asm__ __volatile__("\n\t\
-				1:\n\t\
-					movew	%3@+,%4\n\t\
-					movew	%4,%5\n\t\
-					swap	%4\n\t\
-					movew	%5,%4\n\t\
-					rorw	#8,%4\n\t\
-					rorl	#8,%4\n\t\
-					movel	%4,%2@+\n\t\
-
-					dbra	%0,1b"
-					: "=d" (cycles)
-					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from), "d" (tmp), "d" (tmp2)
-				);
-				ptr_dest += HOST_WIDTH;	/* odd lines only */
+				if (delta_screen && !ui_is_active) {
+					do {
+						long data = *long_ptr_from++;
+						if (data == *long_ptr_mirror++)
+							long_ptr_dest+=2;
+						else {
+							long data2 = DoubleSizeIt((short)data);
+							long data1 = DoubleSizeIt((short)(data >> 16));
+							*(long_ptr_dest + HOST_WIDTH/4) = data1;
+							*long_ptr_dest++ = data1;
+							*(long_ptr_dest + HOST_WIDTH/4) = data2;
+							*long_ptr_dest++ = data2;
+						}
+					} while(cycles--);
+				}
+				else {
+					do {
+						long data = *long_ptr_from++;
+						long data2 = DoubleSizeIt((short)data);
+						long data1 = DoubleSizeIt((short)(data >> 16));
+						*(long_ptr_dest + HOST_WIDTH/4) = data1;
+						*long_ptr_dest++ = data1;
+						*(long_ptr_dest + HOST_WIDTH/4) = data2;
+						*long_ptr_dest++ = data2;
+					} while(cycles--);
+				}
+				ptr_dest += HOST_WIDTH;
 			}
 			else {
 				cycles = 20;
-				__asm__ __volatile__("\n\t\
-				1:\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					movel	%3@+,%2@+\n\t\
-					dbra	%0,1b"
-					: "=d" (cycles)
-					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
-				);
+				if (delta_screen && !ui_is_active) {
+					do {
+						long data;
+#define	CHECK_AND_WRITE									\
+						data = *long_ptr_from++;		\
+						if (data == *long_ptr_mirror++)	\
+							long_ptr_dest++;			\
+						else							\
+							*long_ptr_dest++ = data;
+
+						CHECK_AND_WRITE
+						CHECK_AND_WRITE
+						CHECK_AND_WRITE
+						CHECK_AND_WRITE
+					} while(cycles--);
+				}
+				else {
+					do {
+						*long_ptr_dest++ = *long_ptr_from++;
+						*long_ptr_dest++ = *long_ptr_from++;
+						*long_ptr_dest++ = *long_ptr_from++;
+						*long_ptr_dest++ = *long_ptr_from++;
+					} while(cycles--);
+				}
 			}
-			ptr_from += ATARI_WIDTH-336;
-			ptr_dest += HOST_WIDTH-EMUL_WIDTH;
+
+			ptr_from += ATARI_WIDTH;
+			ptr_mirror += ATARI_WIDTH;
+			ptr_dest += HOST_WIDTH;
 		}
 	}
 }

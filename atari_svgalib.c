@@ -1,5 +1,4 @@
 
-
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -7,12 +6,16 @@
 #include <vga.h>
 #include <vgagl.h>
 
+#include <rawkey.h>
+
 #include "config.h"
 #include "atari.h"
 #include "colours.h"
 #include "monitor.h"
 #include "nas.h"
 #include "platform.h"
+
+#define ikp(k) is_key_pressed(scancode_trans(k))
 
 #ifdef JOYMOUSE
 #include <vgamouse.h>
@@ -41,8 +44,11 @@ static struct JS_DATA_TYPE js_data;
 #define FALSE 0
 #define TRUE 1
 
-/* static int vgamouse_stick; */
-/* static int vgamouse_strig; */
+#ifdef JOYMOUSE
+static int vgamouse_stick;
+static int vgamouse_strig;
+#endif
+
 static int trig0;
 static int stick0;
 static int consol;
@@ -57,6 +63,12 @@ static int first_lno = 24;
 static int ypos_inc = 1;
 static int svga_ptr_inc = 320;
 static int scrn_ptr_inc = ATARI_WIDTH;
+
+/* define some functions */
+/*
+void Atari_DisplayScreen(UBYTE * screen);
+void LeaveVGAMode(void);
+*/
 
 void Atari_Initialise(int *argc, char *argv[])
 {
@@ -93,7 +105,7 @@ void Atari_Initialise(int *argc, char *argv[])
 	*argc = j;
 
 #ifdef JOYMOUSE
-	if (mouse_init("/dev/mouse", MOUSE_PS2, MOUSE_DEFAULTSAMPLERATE) == -1) {
+	if (mouse_init("/dev/mouse", vga_getmousetype(), MOUSE_DEFAULTSAMPLERATE) == -1) {
 		perror("/dev/mouse");
 		exit(1);
 	}
@@ -130,12 +142,23 @@ void Atari_Initialise(int *argc, char *argv[])
 	vga_init();
 
 	if (!vga_hasmode(VGAMODE)) {
-		printf("Mode not available\n");
+		fprintf(stderr,"Mode not available\n");
 		exit(1);
 	}
 	vga_setmode(VGAMODE);
 
 	gl_setcontextvga(VGAMODE);
+
+	if (!rawmode_init()) {
+	  fprintf(stderr,"Error entering rawmode\n");
+	  vga_setmode(TEXT);
+	  exit(1);
+	}
+
+/*
+        set_switch_functions(LeaveVGAMode,Atari_DisplayScreen);
+        allow_switch(1);
+*/
 
 	for (i = 0; i < 256; i++) {
 		int rgb = colortable[i];
@@ -159,6 +182,7 @@ int Atari_Exit(int run_monitor)
 {
 	int restart;
 
+	rawmode_exit();
 	vga_setmode(TEXT);
 
 	if (run_monitor)
@@ -172,13 +196,23 @@ int Atari_Exit(int run_monitor)
 		int i;
 
 		if (!vga_hasmode(VGAMODE)) {
-			printf("Mode not available\n");
+			fprintf(stderr,"Mode not available\n");
 			exit(1);
 		}
 		vga_setmode(VGAMODE);
 
 		gl_setcontextvga(VGAMODE);
 
+		if (!rawmode_init()) {
+		  fprintf(stderr,"Error entering rawmode\n");
+		  vga_setmode(TEXT);
+		  exit(1);
+		}
+
+/*
+		set_switch_functions(LeaveVGAMode,Atari_DisplayScreen);
+		allow_switch(1);
+*/
 		for (i = 0; i < 256; i++) {
 			int rgb = colortable[i];
 			int red;
@@ -285,566 +319,238 @@ void Atari_DisplayScreen(UBYTE * screen)
 #endif
 }
 
-static int special_keycode = -1;
+/* static int special_keycode = -1; */
+static int GCK = 1;  /* Generate_Cursor_Keys */
 
 int Atari_Keyboard(void)
 {
-	int keycode;
+	int keycode = AKEY_NONE;
 
 	consol = 7;
 	trig0 = 1;
+ 
+	scan_keyboard();
 
-	if (special_keycode != -1) {
-		keycode = special_keycode;
-		special_keycode = -1;
+/* First of all: cursor arrows and emulating joystick on keyboard */
+
+	if ( is_key_pressed(INSERT_KEY) || is_key_pressed(RIGHT_SHIFT) )
+	  trig0 = 0;
+
+	stick0 = STICK_CENTRE;
+	if ( is_key_pressed(CURSOR_DOWN) ) {
+	  stick0 &= 0xfd;    /* 1101 */
+	  if (GCK) keycode = AKEY_DOWN;
 	}
-	else
-		keycode = vga_getkey();
-
-	switch (keycode) {
-	case 0x01:
-		keycode = AKEY_CTRL_a;
-		break;
-	case 0x02:
-		keycode = AKEY_CTRL_b;
-		break;
-/*
-   case 0x03 :
-   keycode = AKEY_CTRL_c;
-   break;
- */
-	case 0x04:
-		keycode = AKEY_CTRL_d;
-		break;
-	case 0x05:
-		keycode = AKEY_CTRL_e;
-		break;
-	case 0x06:
-		keycode = AKEY_CTRL_f;
-		break;
-	case 0x07:
-		keycode = AKEY_CTRL_g;
-		break;
-	case 0x08:
-		keycode = AKEY_CTRL_h;
-		break;
-	case 0x09:
-		keycode = AKEY_CTRL_i;
-		break;
-/*
-   case 0x0a :
-   keycode = AKEY_CTRL_j;
-   break;
- */
-	case 0x0b:
-		keycode = AKEY_CTRL_k;
-		break;
-	case 0x0c:
-		keycode = AKEY_CTRL_l;
-		break;
-/*
-   case 0x0d :
-   keycode = AKEY_CTRL_m;
-   break;
- */
-	case 0x0e:
-		keycode = AKEY_CTRL_n;
-		break;
-	case 0x0f:
-		keycode = AKEY_CTRL_o;
-		break;
-	case 0x10:
-		keycode = AKEY_CTRL_p;
-		break;
-	case 0x11:
-		keycode = AKEY_CTRL_q;
-		break;
-	case 0x12:
-		keycode = AKEY_CTRL_r;
-		break;
-	case 0x13:
-		keycode = AKEY_CTRL_s;
-		break;
-	case 0x14:
-		keycode = AKEY_CTRL_t;
-		break;
-	case 0x15:
-		keycode = AKEY_CTRL_u;
-		break;
-	case 0x16:
-		keycode = AKEY_CTRL_v;
-		break;
-	case 0x17:
-		keycode = AKEY_CTRL_w;
-		break;
-	case 0x18:
-		keycode = AKEY_CTRL_x;
-		break;
-	case 0x19:
-		keycode = AKEY_CTRL_y;
-		break;
-	case 0x1a:
-		keycode = AKEY_CTRL_z;
-		break;
-	case ' ':
-		keycode = AKEY_SPACE;
-		break;
-	case '`':
-		keycode = AKEY_CAPSTOGGLE;
-		break;
-	case '~':
-		keycode = AKEY_CAPSLOCK;
-		break;
-	case '!':
-		keycode = AKEY_EXCLAMATION;
-		break;
-	case '"':
-		keycode = AKEY_DBLQUOTE;
-		break;
-	case '#':
-		keycode = AKEY_HASH;
-		break;
-	case '$':
-		keycode = AKEY_DOLLAR;
-		break;
-	case '%':
-		keycode = AKEY_PERCENT;
-		break;
-	case '&':
-		keycode = AKEY_AMPERSAND;
-		break;
-	case '\'':
-		keycode = AKEY_QUOTE;
-		break;
-	case '@':
-		keycode = AKEY_AT;
-		break;
-	case '(':
-		keycode = AKEY_PARENLEFT;
-		break;
-	case ')':
-		keycode = AKEY_PARENRIGHT;
-		break;
-	case '[':
-		keycode = AKEY_BRACKETLEFT;
-		break;
-	case ']':
-		keycode = AKEY_BRACKETRIGHT;
-		break;
-	case '<':
-		keycode = AKEY_LESS;
-		break;
-	case '>':
-		keycode = AKEY_GREATER;
-		break;
-	case '=':
-		keycode = AKEY_EQUAL;
-		break;
-	case '?':
-		keycode = AKEY_QUESTION;
-		break;
-	case '-':
-		keycode = AKEY_MINUS;
-		break;
-	case '+':
-		keycode = AKEY_PLUS;
-		break;
-	case '*':
-		keycode = AKEY_ASTERISK;
-		break;
-	case '/':
-		keycode = AKEY_SLASH;
-		break;
-	case ':':
-		keycode = AKEY_COLON;
-		break;
-	case ';':
-		keycode = AKEY_SEMICOLON;
-		break;
-	case ',':
-		keycode = AKEY_COMMA;
-		break;
-	case '.':
-		keycode = AKEY_FULLSTOP;
-		break;
-	case '_':
-		keycode = AKEY_UNDERSCORE;
-		break;
-	case '{':
-		keycode = AKEY_NONE;
-		break;
-	case '}':
-		keycode = AKEY_NONE;
-		break;
-	case '^':
-		keycode = AKEY_CIRCUMFLEX;
-		break;
-	case '\\':
-		keycode = AKEY_BACKSLASH;
-		break;
-	case '|':
-		keycode = AKEY_BAR;
-		break;
-	case '0':
-		keycode = AKEY_0;
-		break;
-	case '1':
-		keycode = AKEY_1;
-		break;
-	case '2':
-		keycode = AKEY_2;
-		break;
-	case '3':
-		keycode = AKEY_3;
-		break;
-	case '4':
-		keycode = AKEY_4;
-		break;
-	case '5':
-		keycode = AKEY_5;
-		break;
-	case '6':
-		keycode = AKEY_6;
-		break;
-	case '7':
-		keycode = AKEY_7;
-		break;
-	case '8':
-		keycode = AKEY_8;
-		break;
-	case '9':
-		keycode = AKEY_9;
-		break;
-	case 'a':
-		keycode = AKEY_a;
-		break;
-	case 'b':
-		keycode = AKEY_b;
-		break;
-	case 'c':
-		keycode = AKEY_c;
-		break;
-	case 'd':
-		keycode = AKEY_d;
-		break;
-	case 'e':
-		keycode = AKEY_e;
-		break;
-	case 'f':
-		keycode = AKEY_f;
-		break;
-	case 'g':
-		keycode = AKEY_g;
-		break;
-	case 'h':
-		keycode = AKEY_h;
-		break;
-	case 'i':
-		keycode = AKEY_i;
-		break;
-	case 'j':
-		keycode = AKEY_j;
-		break;
-	case 'k':
-		keycode = AKEY_k;
-		break;
-	case 'l':
-		keycode = AKEY_l;
-		break;
-	case 'm':
-		keycode = AKEY_m;
-		break;
-	case 'n':
-		keycode = AKEY_n;
-		break;
-	case 'o':
-		keycode = AKEY_o;
-		break;
-	case 'p':
-		keycode = AKEY_p;
-		break;
-	case 'q':
-		keycode = AKEY_q;
-		break;
-	case 'r':
-		keycode = AKEY_r;
-		break;
-	case 's':
-		keycode = AKEY_s;
-		break;
-	case 't':
-		keycode = AKEY_t;
-		break;
-	case 'u':
-		keycode = AKEY_u;
-		break;
-	case 'v':
-		keycode = AKEY_v;
-		break;
-	case 'w':
-		keycode = AKEY_w;
-		break;
-	case 'x':
-		keycode = AKEY_x;
-		break;
-	case 'y':
-		keycode = AKEY_y;
-		break;
-	case 'z':
-		keycode = AKEY_z;
-		break;
-	case 'A':
-		keycode = AKEY_A;
-		break;
-	case 'B':
-		keycode = AKEY_B;
-		break;
-	case 'C':
-		keycode = AKEY_C;
-		break;
-	case 'D':
-		keycode = AKEY_D;
-		break;
-	case 'E':
-		keycode = AKEY_E;
-		break;
-	case 'F':
-		keycode = AKEY_F;
-		break;
-	case 'G':
-		keycode = AKEY_G;
-		break;
-	case 'H':
-		keycode = AKEY_H;
-		break;
-	case 'I':
-		keycode = AKEY_I;
-		break;
-	case 'J':
-		keycode = AKEY_J;
-		break;
-	case 'K':
-		keycode = AKEY_K;
-		break;
-	case 'L':
-		keycode = AKEY_L;
-		break;
-	case 'M':
-		keycode = AKEY_M;
-		break;
-	case 'N':
-		keycode = AKEY_N;
-		break;
-	case 'O':
-		keycode = AKEY_O;
-		break;
-	case 'P':
-		keycode = AKEY_P;
-		break;
-	case 'Q':
-		keycode = AKEY_Q;
-		break;
-	case 'R':
-		keycode = AKEY_R;
-		break;
-	case 'S':
-		keycode = AKEY_S;
-		break;
-	case 'T':
-		keycode = AKEY_T;
-		break;
-	case 'U':
-		keycode = AKEY_U;
-		break;
-	case 'V':
-		keycode = AKEY_V;
-		break;
-	case 'W':
-		keycode = AKEY_W;
-		break;
-	case 'X':
-		keycode = AKEY_X;
-		break;
-	case 'Y':
-		keycode = AKEY_Y;
-		break;
-	case 'Z':
-		keycode = AKEY_Z;
-		break;
-	case 0x7f:					/* Backspace */
-		keycode = AKEY_BACKSPACE;
-		break;
-	case '\n':
-		keycode = AKEY_RETURN;
-		break;
-	case 0x1b:
-		{
-			char buff[10];
-			int nc;
-
-			nc = 0;
-			while (((keycode = vga_getkey()) != 0) && (nc < 8))
-				buff[nc++] = keycode;
-			buff[nc++] = '\0';
-
-			if (nc == 1) {
-				keycode = AKEY_ESCAPE;
-			}
-			else if (strcmp(buff, "\133\133\101") == 0)		/* F1 */
-				keycode = AKEY_UI;
-			else if (strcmp(buff, "\133\133\102") == 0) {	/* F2 */
-				consol &= 0x03;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\133\103") == 0) {	/* F3 */
-				consol &= 0x05;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\133\104") == 0) {	/* F4 */
-				consol &= 0x06;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "[28~") == 0)		/* Shift F5 */
-				keycode = AKEY_COLDSTART;
-			else if (strcmp(buff, "\133\133\105") == 0)		/* F5 */
-				keycode = AKEY_WARMSTART;
-			else if (strcmp(buff, "\133\061\067\176") == 0) {	/* F6 */
-				keycode = AKEY_PIL;
-			}
-			else if (strcmp(buff, "\133\061\070\176") == 0) {	/* F7 */
-				keycode = AKEY_BREAK;
-			}
-			else if (strcmp(buff, "\133\061\071\176") == 0) {	/* F8 */
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\062\060\176") == 0) {	/* F9 */
-				keycode = AKEY_EXIT;
-			}
-			else if (strcmp(buff, "\133\062\061\176") == 0) {	/* F10 */
-				keycode = AKEY_NONE;
-				if (deltatime == 0.0)
-					deltatime = (1.0 / 8.0);
-				else
-					deltatime = 0.0;
-			}
-			else if (strcmp(buff, "\133\062\063\176") == 0) {	/* F11 */
-				if (first_lno > 0)
-					first_lno--;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\062\064\176") == 0) {	/* F12 */
-				if (first_lno < (ATARI_HEIGHT - 200))
-					first_lno++;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\141\000") == 0)
-				keycode = AKEY_CTRL_A;
-			else if (strcmp(buff, "\142\000") == 0)
-				keycode = AKEY_CTRL_B;
-			else if (strcmp(buff, "\143\000") == 0)
-				keycode = AKEY_CTRL_C;
-			else if (strcmp(buff, "\144\000") == 0)
-				keycode = AKEY_CTRL_D;
-			else if (strcmp(buff, "\145\000") == 0)
-				keycode = AKEY_CTRL_E;
-			else if (strcmp(buff, "\146\000") == 0)
-				keycode = AKEY_CTRL_F;
-			else if (strcmp(buff, "\147\000") == 0)
-				keycode = AKEY_CTRL_G;
-			else if (strcmp(buff, "\150\000") == 0)
-				keycode = AKEY_CTRL_H;
-			else if (strcmp(buff, "\151\000") == 0)
-				keycode = AKEY_CTRL_I;
-			else if (strcmp(buff, "\152\000") == 0)
-				keycode = AKEY_CTRL_J;
-			else if (strcmp(buff, "\153\000") == 0)
-				keycode = AKEY_CTRL_K;
-			else if (strcmp(buff, "\154\000") == 0)
-				keycode = AKEY_CTRL_L;
-			else if (strcmp(buff, "\155\000") == 0)
-				keycode = AKEY_CTRL_M;
-			else if (strcmp(buff, "\156\000") == 0)
-				keycode = AKEY_CTRL_N;
-			else if (strcmp(buff, "\157\000") == 0)
-				keycode = AKEY_CTRL_O;
-			else if (strcmp(buff, "\160\000") == 0)
-				keycode = AKEY_CTRL_P;
-			else if (strcmp(buff, "\161\000") == 0)
-				keycode = AKEY_CTRL_Q;
-			else if (strcmp(buff, "\162\000") == 0)
-				keycode = AKEY_CTRL_R;
-			else if (strcmp(buff, "\163\000") == 0)
-				keycode = AKEY_CTRL_S;
-			else if (strcmp(buff, "\164\000") == 0)
-				keycode = AKEY_CTRL_T;
-			else if (strcmp(buff, "\165\000") == 0)
-				keycode = AKEY_CTRL_U;
-			else if (strcmp(buff, "\166\000") == 0)
-				keycode = AKEY_CTRL_V;
-			else if (strcmp(buff, "\167\000") == 0)
-				keycode = AKEY_CTRL_W;
-			else if (strcmp(buff, "\170\000") == 0)
-				keycode = AKEY_CTRL_X;
-			else if (strcmp(buff, "\171\000") == 0)
-				keycode = AKEY_CTRL_Y;
-			else if (strcmp(buff, "\172\000") == 0)
-				keycode = AKEY_CTRL_Z;
-			else if (strcmp(buff, "\133\062\176") == 0) {	/* Keypad 0 */
-				trig0 = 0;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\064\176") == 0) {	/* Keypad 1 */
-				stick0 = STICK_LL;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\102") == 0) {	/* Keypad 2 */
-				stick0 = STICK_BACK;
-				keycode = AKEY_DOWN;
-			}
-			else if (strcmp(buff, "\133\066\176") == 0) {	/* Keypad 3 */
-				stick0 = STICK_LR;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\104") == 0) {	/* Keypad 4 */
-				stick0 = STICK_LEFT;
-				keycode = AKEY_LEFT;
-			}
-			else if (strcmp(buff, "\133\107") == 0) {	/* Keypad 5 */
-				stick0 = STICK_CENTRE;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\103") == 0) {	/* Keypad 6 */
-				stick0 = STICK_RIGHT;
-				keycode = AKEY_RIGHT;
-			}
-			else if (strcmp(buff, "\133\061\176") == 0) {	/* Keypad 7 */
-				stick0 = STICK_UL;
-				keycode = AKEY_NONE;
-			}
-			else if (strcmp(buff, "\133\101") == 0) {	/* Keypad 8 */
-				stick0 = STICK_FORWARD;
-				keycode = AKEY_UP;
-			}
-			else if (strcmp(buff, "\133\065\176") == 0) {	/* Keypad 9 */
-				stick0 = STICK_UR;
-				keycode = AKEY_NONE;
-			}
-			else {
-				int i;
-				printf("Unknown key (%s): 0x1b ", buff);
-				for (i = 0; i < nc; i++)
-					printf("0x%02x ", buff[i]);
-				printf("\n");
-				keycode = AKEY_NONE;
-			}
-		}
-		break;
-	default:
-		printf("Unknown Keycode: %d\n", keycode);
-	case 0:
-		keycode = AKEY_NONE;
-		break;
+	if ( is_key_pressed(CURSOR_UP) ) {
+	  stick0 &= 0xfe;    /* 1110 */
+	  if (GCK) keycode = AKEY_UP;
 	}
+	if ( is_key_pressed(CURSOR_LEFT) ) {
+	  stick0 &= 0xfb;    /* 1011 */
+	  if (GCK) keycode = AKEY_LEFT;
+	}
+	if ( is_key_pressed(CURSOR_RIGHT) ) {
+	  stick0 &= 0xf7;    /* 0111 */
+	  if (GCK) keycode = AKEY_RIGHT;
+	}
+
+
+/* Now testing function keys and some specials */
+
+	if ( is_key_pressed(FUNC_KEY(1)) ) keycode = AKEY_UI;
+
+	else if ( is_key_pressed(FUNC_KEY(2)) ) {
+		consol &= 0x03;
+		keycode = AKEY_NONE;
+	}
+
+	else if ( is_key_pressed(FUNC_KEY(3)) ) {
+		consol &= 0x05;
+		keycode = AKEY_NONE;
+	}
+
+	else if ( is_key_pressed(FUNC_KEY(4)) ) {
+		consol &= 0x06;
+		keycode = AKEY_NONE;
+	}
+
+	else if ( is_key_pressed(FUNC_KEY(5)) ) {
+	  if ( is_key_pressed(LEFT_SHIFT) )
+	    keycode = AKEY_COLDSTART;           /* Shift F5 */
+	  else
+	    keycode = AKEY_WARMSTART;           /* F5 */
+	}
+
+	else if ( is_key_pressed(FUNC_KEY(6)) ) keycode = AKEY_PIL;
+	      
+	else if ( is_key_pressed(FUNC_KEY(7)) ) keycode = AKEY_BREAK;
+
+	else if ( is_key_pressed(FUNC_KEY(8)) ) {
+	  keycode = AKEY_NONE;
+	  GCK = !GCK ;
+	}
+	else if ( is_key_pressed(FUNC_KEY(9)) ) keycode = AKEY_EXIT;
+
+	else if ( is_key_pressed(FUNC_KEY(10)) ) keycode = AKEY_NONE;
+
+	else if ( is_key_pressed(FUNC_KEY(11)) ) keycode = AKEY_NONE;
+
+	else if ( is_key_pressed(FUNC_KEY(12)) ) keycode = AKEY_NONE;
+
+	if ( keycode != AKEY_NONE ) return keycode;
+/* To prevent these keycodes from modifying by SHIFT or CTRL */
+
+
+	if ( ikp('a') ) keycode = AKEY_a;
+
+	else if ( ikp('b') ) keycode = AKEY_b;
+
+	else if ( ikp('c') ) keycode = AKEY_c;
+
+	else if ( ikp('d') ) keycode = AKEY_d;
+
+	else if ( ikp('e') ) keycode = AKEY_e;
+
+	else if ( ikp('f') ) keycode = AKEY_f;
+
+	else if ( ikp('g') ) keycode = AKEY_g;
+
+	else if ( ikp('h') ) keycode = AKEY_h;
+
+	else if ( ikp('i') ) keycode = AKEY_i;
+
+	else if ( ikp('j') ) keycode = AKEY_j;
+
+	else if ( ikp('k') ) keycode = AKEY_k;
+
+	else if ( ikp('l') ) keycode = AKEY_l;
+
+	else if ( ikp('m') ) keycode = AKEY_m;
+
+	else if ( ikp('n') ) keycode = AKEY_n;
+
+	else if ( ikp('o') ) keycode = AKEY_o;
+
+	else if ( ikp('p') ) keycode = AKEY_p;
+
+	else if ( ikp('q') ) keycode = AKEY_q;
+
+	else if ( ikp('r') ) keycode = AKEY_r;
+
+	else if ( ikp('s') ) keycode = AKEY_s;
+
+	else if ( ikp('t') ) keycode = AKEY_t;
+
+	else if ( ikp('u') ) keycode = AKEY_u;
+
+	else if ( ikp('v') ) keycode = AKEY_v;
+
+	else if ( ikp('w') ) keycode = AKEY_w;
+
+	else if ( ikp('x') ) keycode = AKEY_x;
+
+	else if ( ikp('y') ) keycode = AKEY_y;
+
+	else if ( ikp('z') ) keycode = AKEY_z;
+
+	else if ( ikp(' ') ) keycode = AKEY_SPACE;
+
+	else if ( ikp('`') ) keycode = AKEY_CAPSTOGGLE;
+
+	else if ( ikp('~') ) keycode = AKEY_CAPSLOCK;
+
+	else if ( ikp('!') ) keycode = AKEY_EXCLAMATION;
+
+	else if ( ikp('"') ) keycode = AKEY_DBLQUOTE;
+
+	else if ( ikp('#') ) keycode = AKEY_HASH;
+
+	else if ( ikp('$') ) keycode = AKEY_DOLLAR;
+
+	else if ( ikp('%') ) keycode = AKEY_PERCENT;
+
+	else if ( ikp('&') ) keycode = AKEY_AMPERSAND;
+
+	else if ( ikp('\'') ) keycode = AKEY_QUOTE;
+
+	else if ( ikp('@') ) keycode = AKEY_AT;
+
+	else if ( ikp('(') ) keycode = AKEY_PARENLEFT;
+
+	else if ( ikp(')') ) keycode = AKEY_PARENRIGHT;
+
+	else if ( ikp('[') ) keycode = AKEY_BRACKETLEFT;
+
+	else if ( ikp(']') ) keycode = AKEY_BRACKETRIGHT;
+
+	else if ( ikp('<') ) keycode = AKEY_LESS;
+
+	else if ( ikp('>') ) keycode = AKEY_GREATER;
+
+	else if ( ikp('=') ) keycode = AKEY_EQUAL;
+
+	else if ( ikp('?') ) keycode = AKEY_QUESTION;
+
+	else if ( ikp('-') ) keycode = AKEY_MINUS;
+
+	else if ( ikp('+') ) keycode = AKEY_PLUS;
+
+	else if ( ikp('*') ) keycode = AKEY_ASTERISK;
+
+	else if ( ikp('/') ) keycode = AKEY_SLASH;
+
+	else if ( ikp(':') ) keycode = AKEY_COLON;
+
+	else if ( ikp(';') ) keycode = AKEY_SEMICOLON;
+
+	else if ( ikp(',') ) keycode = AKEY_COMMA;
+
+	else if ( ikp('.') ) keycode = AKEY_FULLSTOP;
+
+	else if ( ikp('_') ) keycode = AKEY_UNDERSCORE;
+
+	else if ( ikp('{') ) keycode = AKEY_NONE;
+
+	else if ( ikp('}') ) keycode = AKEY_NONE;
+
+	else if ( ikp('^') ) keycode = AKEY_CIRCUMFLEX;
+
+	else if ( ikp('\\') ) keycode = AKEY_BACKSLASH;
+
+	else if ( ikp('|') ) keycode = AKEY_BAR;
+
+	else if ( ikp('0') ) keycode = AKEY_0;
+
+	else if ( ikp('1') ) keycode = AKEY_1;
+
+	else if ( ikp('2') ) keycode = AKEY_2;
+
+	else if ( ikp('3') ) keycode = AKEY_3;
+
+	else if ( ikp('4') ) keycode = AKEY_4;
+
+	else if ( ikp('5') ) keycode = AKEY_5;
+
+	else if ( ikp('6') ) keycode = AKEY_6;
+
+	else if ( ikp('7') ) keycode = AKEY_7;
+
+	else if ( ikp('8') ) keycode = AKEY_8;
+
+	else if ( ikp('9') ) keycode = AKEY_9;
+
+	else if ( is_key_pressed(BACKSPACE) ) keycode = AKEY_BACKSPACE;
+
+	else if ( is_key_pressed(ENTER_KEY) ) keycode = AKEY_RETURN;
+
+	else if ( is_key_pressed(ESCAPE_KEY) ) keycode = AKEY_ESCAPE;
+
+/* Keys are tested, now comes SHIFT and CTRL */
+
+	if ( is_key_pressed(LEFT_SHIFT) ) keycode |= AKEY_SHFT;
+	if ( is_key_pressed(LEFT_CTRL) ) keycode |= AKEY_CTRL;
+
+/* printf("Unknown Keycode: %d\n", keycode); */
 
 	return keycode;
 }
@@ -930,3 +636,18 @@ int Atari_CONSOL(void)
 {
 	return consol;
 }
+
+/*
+void LeaveVGAMode(void)
+{
+  printf("Leaving VGA mode\n");
+}
+*/
+
+
+
+
+
+
+
+

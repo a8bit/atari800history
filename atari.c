@@ -1045,13 +1045,28 @@ void Atari800_Hardware(void)
 		if (deltatime > 0.0) {
 			double curtime;
 
+#ifdef linux
+		gettimeofday(&tp, NULL);
+		curtime = (lasttime + deltatime)
+			- tp.tv_sec - (tp.tv_usec / 1000000.0);
+		if( curtime>0 )
+		{	tp.tv_sec=  (int)(curtime);
+			tp.tv_usec= (int)((curtime-tp.tv_sec)*1000000);
+//printf("delta=%f sec=%d usec=%d\n",curtime,tp.tv_sec,tp.tv_usec);
+			select(1,NULL,NULL,NULL,&tp);
+		}
+		gettimeofday(&tp, NULL);
+		curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
+#else
+
 			emu_too_fast = -1;
 			do {
 				gettimeofday(&tp, &tzp);
 				curtime = tp.tv_sec + (tp.tv_usec / 1000000.0);
 				emu_too_fast++;
 			} while (curtime < (lasttime + deltatime));
-
+#endif
+			
 			fps = 1.0 / (curtime - lasttime);
 			lasttime = curtime;
 		}

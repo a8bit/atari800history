@@ -650,7 +650,8 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x21:				/* Single Density Format */
-			if (length == 128) {
+			SizeOfSector(unit, sector, &realsize, NULL);
+			if (realsize == length) {
 				result = FormatSingle(unit, DataBuffer);
 				if (result == 'C')
 					CopyToMem(DataBuffer, data, realsize);
@@ -659,7 +660,8 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x22:				/* Enhanced Density Format */
-			if (length == 128) {
+			SizeOfSector(unit, sector, &realsize, NULL);
+			if (realsize == length) {
 				result = FormatEnhanced(unit, DataBuffer);
 				if (result == 'C')
 					CopyToMem(DataBuffer, data, realsize);
@@ -696,7 +698,7 @@ void SIO(void)
 		SetN;
 		break;
 	}
-
+	regA = 0;	/* MMM */
 	Poke(0x0303, regY);
 
 #ifdef SET_LED

@@ -161,5 +161,17 @@ Gerhard Janka <gerhard.janka@siemens.at>
 - double buffering of screen output
 
 Jindroush <kubecj@asw.cz>
-- various corrections and refinements
+- various corrections and refinements (SIO)
   hours of testing on real Atari800XL
+
+Ken Sider
+- his binary loader has been used by Rich for developing our EXE LOADER
+
+Cameron Heide <cheide@home.com>
+- 16,32-bit X11 SHM support
+
+Marek Zelem <marek@formax.elf.stuba.sk>
+- little improvements in SIO and main sync loop for Unix
+
+Petr Mojzisek <mojzisek@bimbo.fjfi.cvut.cz>
+- rawkey support for svgalib

@@ -2281,6 +2281,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		int minor;
 		Bool pixmaps;
 		Status status;
+                int shmsize;
 
 		status = XShmQueryVersion(display, &major, &minor, &pixmaps);
 		if (!status) {
@@ -2292,10 +2293,10 @@ void Atari_Initialise(int *argc, char *argv[])
 		image = XShmCreateImage(display, visual, depth, ZPixmap,
 							NULL, &shminfo, window_width, window_height);
 
-		shminfo.shmid = shmget(IPC_PRIVATE,
-							   (ATARI_HEIGHT + 16) * ATARI_WIDTH,
-							   IPC_CREAT | 0777);
-		shminfo.shmaddr = image->data = atari_screen = shmat(shminfo.shmid, 0, 0);
+                shmsize = ((ATARI_HEIGHT + 16) * ATARI_WIDTH *
+                                 image->bits_per_pixel) / 8;
+		shminfo.shmid = shmget(IPC_PRIVATE, shmsize, IPC_CREAT | 0777);
+		shminfo.shmaddr = image->data = shmat(shminfo.shmid, 0, 0);
 		shminfo.readOnly = False;
 
 		XShmAttach(display, &shminfo);
@@ -2303,6 +2304,9 @@ void Atari_Initialise(int *argc, char *argv[])
 		XSync(display, False);
 
 		shmctl(shminfo.shmid, IPC_RMID, 0);
+
+                if(depth == 8)
+                        atari_screen = image->data;
 	}
 #else
 	pixmap = XCreatePixmap(display, window,
@@ -2477,6 +2481,25 @@ void Atari_DisplayScreen(UBYTE * screen)
 	int update_status_line;
 
 #ifdef SHM
+        if(image->bits_per_pixel == 32)
+        {
+                ULONG *ptr = image->data;
+                UBYTE *ptr2 = screen;
+                int i;
+
+                for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
+                        *ptr++ = colours[*ptr2++];
+        }
+        else if(image->bits_per_pixel == 16)
+        {
+                UWORD *ptr = image->data;
+                UBYTE *ptr2 = screen;
+                int i;
+
+                for(i = 0; i < ATARI_HEIGHT * ATARI_WIDTH; i++)
+                        *ptr++ = colours[*ptr2++];
+        }
+
 	XShmPutImage(display, window, gc, image, 0, 0, 0, 0,
 				 window_width, window_height, 0);
 	XSync(display, FALSE);
