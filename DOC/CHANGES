@@ -1,3 +1,37 @@
+Changes in 1.0.3  - 2000/06/13
+----------------
+
+o SVGALIB and Falcon ports save interlaced and non-interlaced screenshots
+  by pressing Shift+F10/F10 (this is just to sync it with DOS version)
+
+-- Piotr:
+o new BIN loader rewritten - hopefully it can load any valid executable.
+  Please test if there's a file, which it can't run.
+
+o special support for Montezuma's Revenge removed - it's not needed
+  for playing this game
+
+o UI:
+- fixed 'Cold Start' item - name was too long
+- fixed background width - was too wide
+- charset extracted from 5200's ROM - menu is visible in 5200 mode
+- whenever prompted for filename, you can cancel with ESC
+- added 'Enter monitor' item
+- added PCX screenshots with user-specified filename
+  (F10 and Shift+F10 still generate it automatically)
+
+-- Raster:
+o hot keys in UI aligned right
+
+o when CPU encounters invalid instruction (CIM or unassigned
+  ESC) the new Crash menu appears. Now you can select Reset,
+  Reboot, go to Menu or Monitor. You can also try to continue
+  running the program or exit the emulator.
+
+o CPU.C: CIM instruction emulation doesn't do PC-- so that the
+  'continue' function of Crash menu can work
+
+
 Changes in 1.0.2  - 2000/05/29
 ----------------
 

@@ -79,6 +79,9 @@
 #include "memory.h"
 #include "statesav.h"
 
+extern ULONG *atari_screen;
+extern void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address);
+
 #ifdef CPUASS
 extern UBYTE IRQ;
 
@@ -1967,7 +1970,17 @@ void GO(int limit)
 	OPCODE(b2)
 	/* OPCODE(d2) Used for ESCRTS #ab (CIM) */
 	/* OPCODE(f2) Used for ESC #ab (CIM) */
-		PC--;
+
+		/* Sound_Pause(); */
+		UPDATE_GLOBAL_REGS;
+		CPU_GetStatus();
+		CrashMenu((UBYTE *)atari_screen, insn, PC-1);
+		CPU_PutStatus();
+		UPDATE_LOCAL_REGS;
+
+		/* Sound_Continue(); */
+		DONE
+/*
 		data = 0;
 #ifdef MONITOR_BREAK
 		break_cim = 1;
@@ -1979,7 +1992,7 @@ void GO(int limit)
 		CPU_PutStatus();
 		UPDATE_LOCAL_REGS;
 		DONE
-
+*/
 
 /* ---------------------------------------------- */
 /* ADC and SBC routines */

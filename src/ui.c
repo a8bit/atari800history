@@ -22,6 +22,8 @@
 #include "log.h"
 #include "statesav.h"
 #include "config.h"
+#include "antic.h"
+#include "ataripcx.h"
 
 #ifdef USE_NEW_BINLOAD
 #include "binload.h"
@@ -223,16 +225,15 @@ void CenterPrint(UBYTE * screen, int fg, int bg, char *string, int y)
 	Print(screen, fg, bg, string, (40 - strlen(string)) / 2, y);
 }
 
-void EditString(UBYTE * screen, int fg, int bg,
+int EditString(UBYTE * screen, int fg, int bg,
 				int len, char *string,
 				int x, int y)
 {
 	int offset = 0;
-	int done = FALSE;
 
 	Print(screen, fg, bg, string, x, y);
 
-	while (!done) {
+	for(;;) {
 		int ascii;
 
 		Plot(screen, bg, fg, string[offset], x + offset, y);
@@ -257,8 +258,9 @@ void EditString(UBYTE * screen, int fg, int bg,
 			}
 			break;
 		case 0x9b:				/* Return */
-			done = TRUE;
-			break;
+			return TRUE;
+		case 0x1b:				/* Esc */
+			return FALSE;
 		default:
 			string[offset] = (char) ascii;
 			Plot(screen, fg, bg, string[offset], x + offset, y);
@@ -295,12 +297,12 @@ void ClearScreen(UBYTE * screen)
 	UBYTE *ptr;
 #ifdef USE_COLOUR_TRANSLATION_TABLE
 	memset(screen, colour_translation_table[0x00], ATARI_HEIGHT * ATARI_WIDTH);
-	for (ptr = screen + ATARI_WIDTH * 24; ptr < screen + ATARI_WIDTH * (24 + 192); ptr += ATARI_WIDTH)
-		memset(ptr, colour_translation_table[0x94], ATARI_WIDTH);
+	for (ptr = screen + ATARI_WIDTH * 24 + 32; ptr < screen + ATARI_WIDTH * (24 + 192); ptr += ATARI_WIDTH)
+		memset(ptr, colour_translation_table[0x94], 320);
 #else
 	memset(screen, 0x00, ATARI_HEIGHT * ATARI_WIDTH);
-	for (ptr = screen + ATARI_WIDTH * 24; ptr < screen + ATARI_WIDTH * (24 + 192); ptr += ATARI_WIDTH)
-		memset(ptr, 0x94, ATARI_WIDTH);
+	for (ptr = screen + ATARI_WIDTH * 24 + 32; ptr < screen + ATARI_WIDTH * (24 + 192); ptr += ATARI_WIDTH)
+		memset(ptr, 0x94, 320);
 #endif
 }
 
@@ -463,6 +465,19 @@ int Select(UBYTE * screen,
 			SelectItem(screen, 0x94, 0x9a, index, items, nrows, ncolumns, xoffset, yoffset, TRUE);
 		}
 	}
+}
+
+/* returns TRUE if valid filename */
+int EditFilename(UBYTE *screen, char *fname)
+{
+	memset(fname, ' ', FILENAME_SIZE);
+	fname[FILENAME_SIZE] = '\0';
+	Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
+	Print(screen, 0x94, 0x9a, "Filename", 4, 9);
+	if (!EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10))
+		return FALSE;
+	RemoveSpaces(fname);
+	return fname[0] != '\0';
 }
 
 void SelectSystem(UBYTE * screen)
@@ -998,12 +1013,8 @@ void CartManagement(UBYTE * screen)
 
 					char fname[FILENAME_SIZE+1];
 
-					memset(fname, ' ', FILENAME_SIZE);
-					fname[FILENAME_SIZE] = '\0';
-					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
-					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-					RemoveSpaces(fname);
+					if (!EditFilename(screen, fname))
+						break;
 
 					for (i = 0; i < nbytes; i++)
 						checksum += image[i];
@@ -1051,12 +1062,8 @@ void CartManagement(UBYTE * screen)
 
 					close(fd);
 
-					memset(fname, ' ', FILENAME_SIZE);
-					fname[FILENAME_SIZE] = '\0';
-					Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
-					Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-					EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-					RemoveSpaces(fname);
+					if (!EditFilename(screen, fname))
+						break;
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
 
@@ -1171,14 +1178,8 @@ int SaveState(UBYTE *screen)
 	char statename[MAX_FILENAME_LEN];
 	char fname[FILENAME_SIZE+1];
 
-	memset(fname, ' ', FILENAME_SIZE);
-	fname[FILENAME_SIZE] = '\0';
-	Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
-	Print(screen, 0x94, 0x9a, "Filename", 4, 9);
-	EditString(screen, 0x9a, 0x94, FILENAME_SIZE, fname, 4, 10);
-	RemoveSpaces(fname);
-        if (!fname[0])
-          return 0;
+	if (!EditFilename(screen, fname))
+		return 0;
 
 	strcpy(statename, atari_state_dir);
 	if (*statename) {
@@ -1216,18 +1217,21 @@ void ui(UBYTE *screen)
 
 	char *menu[] =
 	{
-		"Disk Management (Alt+D)",
-		"Cartridge Management (Alt+C)",
-		"Run BIN file directly (Alt+R)",
-		"Select System (Alt+Y)",
-		"Sound Mono/Stereo",
-		"Save State (Alt+S)",
-		"Load State (Alt+L)",
-		"Back to emulated Atari (Esc)",
-		"Power On Reset (Warm Start) (F5)",
-		"Power Off Reset (Cold Start) (Shift+F5)",
-		"About the Emulator (Alt+A)",
-		"Exit Emulator (F9)"
+		"Disk Management                  Alt+D",
+		"Cartridge Management             Alt+C",
+		"Run BIN file directly            Alt+R",
+		"Select System                    Alt+Y",
+		"Sound Mono/Stereo                Alt+O",
+		"Save State                       Alt+S",
+		"Load State                       Alt+L",
+		"PCX screenshot                     F10",
+		"PCX interlaced screenshot    Shift+F10",
+		"Back to emulated Atari             Esc",
+		"Reset (Warm Start)                  F5",
+		"Reboot (Cold Start)           Shift+F5",
+		"Enter monitor                       F8",
+		"About the Emulator               Alt+A",
+		"Exit Emulator                       F9"
 	};
 	const int nitems = sizeof(menu) / sizeof(menu[0]);
 #ifdef CURSES
@@ -1303,6 +1307,24 @@ void ui(UBYTE *screen)
 		case MENU_LOADSTATE:
 			LoadState(screen);
 			break;
+		case MENU_PCX:
+			{
+				char fname[FILENAME_SIZE + 1];
+				if (EditFilename(screen, fname)) {
+					ANTIC_RunDisplayList();
+					Save_PCX_file(0, fname);
+				}
+			}
+			break;
+		case MENU_PCXI:
+			{
+				char fname[FILENAME_SIZE + 1];
+				if (EditFilename(screen, fname)) {
+					ANTIC_RunDisplayList();
+					Save_PCX_file(1, fname);
+				}
+			}
+			break;
 		case MENU_BACK:
 			done = TRUE;	/* back to emulator */
 			break;
@@ -1317,6 +1339,12 @@ void ui(UBYTE *screen)
 		case MENU_ABOUT:
 			AboutEmulator(screen);
 			break;
+		case MENU_MONITOR:
+			if (Atari_Exit(1)) {
+				done = TRUE;
+				break;
+			}
+			/* if 'quit' typed in monitor, exit emulator */
 		case MENU_EXIT:
 #ifdef WIN32
 			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
@@ -1344,4 +1372,91 @@ void ui(UBYTE *screen)
 	/* ExitThread(0); */
 	_endthread();
 #endif
+}
+
+void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address)
+{
+	static int initialised = FALSE;
+	int option = 0;
+	int done = FALSE;
+	char bf[40];	/* CIM info */
+	char *menu[] =
+	{
+		"Power On Reset (Warm Start)",
+		"Power Off Reset (Cold Start)",
+		"Menu",
+		"Monitor",
+		"Continue                           Esc",
+		"Exit Emulator"
+	};
+	const int nitems = 6;
+
+#ifdef CURSES
+        char *screenbackup = malloc(40*24);
+        if (screenbackup) memcpy(screenbackup,&memory[(memory[89] << 8) | memory[88]],40*24);  /* backup of textmode screen */
+#endif
+	if (!initialised) {
+		get_charset(charset);
+		initialised = TRUE;
+	}
+	while (!done) {
+		int ascii;
+
+		ClearScreen(screen);
+		TitleScreen(screen, "!!! The Atari computer has crashed !!!");
+		Box(screen, 0x9a, 0x94, 0, 6, 39, 23);
+
+		sprintf(bf,"Code $%02X (CIM) at address $%04X", cimcode, address);
+		CenterPrint(screen, 0x9a, 0x94, bf, 4);
+
+		option = Select(screen, option, nitems, menu,
+							nitems, 1, 1, 7, FALSE, &ascii);
+
+		switch (option) {
+		case -2:
+		case -1:		/* ESC key */
+			done = TRUE;
+			break;
+		case 0:			/* Power On Reset */
+			Warmstart();
+			done = TRUE;
+			break;
+		case 1:			/* Power Off Reset */
+			Coldstart();
+			done = TRUE;
+			break;
+		case 2:			/* Menu */
+#ifdef CURSES
+        if (screenbackup) {
+          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
+        }
+#endif
+			ui(screen);
+			done = TRUE;
+			break;
+		case 3:			/* Monitor */
+#ifdef CURSES
+        if (screenbackup) {
+          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
+        }
+#endif
+			if ( !Atari_Exit(1) ) exit(0);		/* Invoke monitor now */
+			done = TRUE;
+			break;
+		case 4:			/* Continue */
+			done = TRUE;
+			break;
+		case 5:			/* Exit */
+			Atari800_Exit(0);
+			exit(0);
+		}
+	}
+#ifdef CURSES
+        if (screenbackup) {
+          memcpy(&memory[(memory[89] << 8) | memory[88]],screenbackup,40*24);  /* restore textmode screen */
+          free(screenbackup);
+        }
+#endif
+
+	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
 }

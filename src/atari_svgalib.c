@@ -238,15 +238,18 @@ int Atari_Keyboard(void)
             kbcode = 0;
             break;
           case SCANCODE_PRINTSCREEN:
-            keycode = AKEY_SCREENSHOT;
-            kbcode = 0;
-            break;
+          case SCANCODE_F10:
+			keycode = SHIFT_KEY ? AKEY_SCREENSHOT_INTERLACE : AKEY_SCREENSHOT;
+			kbcode = 0;
+			break;
+
           case SCANCODE_F1:
             return AKEY_UI;
             break;
           case SCANCODE_F5:
             return SHIFT_KEY ? AKEY_COLDSTART : AKEY_WARMSTART;
             break;
+
 #define KBSCAN(name) \
           case SCANCODE_##name: \
             keycode |= (AKEY_##name & ~(AKEY_CTRL | AKEY_SHFT)); \

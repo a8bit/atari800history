@@ -58,6 +58,8 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "binload.h"
 #endif
 
+extern void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address);
+
 void Sound_Pause(void);	/* cross-platform sound.h would be better :) */
 void Sound_Continue(void);
 
@@ -135,9 +137,6 @@ void sigint_handler(int num)
 
 void Warmstart(void)
 {
-	if (os == 3)
-		Initialise_Monty();
-
 	PORTA = 0x00;
 /* After reset must by actived rom os */
 	if (mach_xlxe) {
@@ -152,11 +151,6 @@ void Warmstart(void)
 
 void Coldstart(void)
 {
-	if (os == 3) {
-		os = 2;		/* Fiddle OS to prevent infinite recursion */
-		Initialise_Monty();
-		os = 3;
-	}
 	PORTA = 0x00;
 	if (mach_xlxe) {
 		selftest_enabled = TRUE;	/* necessary for init RAM */
@@ -191,15 +185,6 @@ int Initialise_Atari320XE(void)
 	machine = Atari320XE;
 	return status;
 }
-
-/*
- * Initialise System with Montezuma's Revenge
- * image. Standard Atari OS is not required.
- */
-
-#ifdef __BUILT_IN_MONTY__
-#include "monty.h"
-#endif
 
 #ifdef linux
 #ifdef REALTIME
@@ -422,10 +407,6 @@ int main(int argc, char **argv)
 			os = 1;
 		else if (strcmp(argv[i], "-b") == 0)
 			os = 2;
-		else if (strcmp(argv[i], "-monty") == 0) {
-			machine = Atari;
-			os = 3;
-		}
 		else if (strcmp(argv[i], "-emuos") == 0) {
 			machine = Atari;
 			os = 4;
@@ -531,8 +512,6 @@ int main(int argc, char **argv)
 			status = Initialise_AtariOSA();
 		else if (os == 2)
 			status = Initialise_AtariOSB();
-		else if (os == 3)
-			status = Initialise_Monty();
 		else
 			status = Initialise_EmuOS();
 		break;
@@ -873,8 +852,7 @@ void AtariEscape(UBYTE esc_code)
 	}
 	/* for all codes that fall through the cases */
 	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
-	if(!Atari800_Exit(TRUE))
-		exit(0);
+	CrashMenu((UBYTE*)atari_screen,dGetByte(regPC-2),regPC-2);
 }
 
 int Atari800_Exit(int run_monitor)

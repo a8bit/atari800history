@@ -17,14 +17,27 @@
 #define XMax 335
 #define YMax 239
 
-UBYTE Save_PCX_file(int interlace)
+char *Find_PCX_name(void)
 {
-	static int pcx_no = -1;
+	int pcx_no = -1;
+	static char filename[20];
+	FILE *fp;
+
+	while (++pcx_no < 1000) {
+		sprintf(filename, "atari%03i.pcx", pcx_no);
+		if ((fp = fopen(filename, "r")) == NULL)
+			return filename; /*file does not exist - we can create it */
+		fclose(fp);
+	}
+	return NULL;
+}
+
+UBYTE Save_PCX_file(int interlace, char *filename)
+{
 	ULONG *temp_screen = atari_screen;
 	UBYTE *ptr1;
 	UBYTE *ptr2 = NULL;
 	UBYTE plane = 16;	/* 16 = Red, 8 = Green, 0 = Blue */
-	char filename[30];
 	int i;
 	int xpos;
 	int ypos;
@@ -32,16 +45,7 @@ UBYTE Save_PCX_file(int interlace)
 	UBYTE count;
 	FILE *fp;
 
-	for (;;) {
-		if (++pcx_no >= 10000)
-			return FALSE;
-		sprintf(filename,"pict%04i.pcx",pcx_no);
-		if ((fp=fopen(filename,"rb"))==NULL)
-			break;	 /*file does not exist - we can create it */
-		fclose(fp);
-	}
-
-	if ((fp=fopen(filename,"wb"))==NULL)
+	if (filename == NULL || (fp = fopen(filename,"wb")) == NULL)
 		return FALSE;
 
 	/*write header*/

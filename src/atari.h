@@ -71,7 +71,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define ATARI_WIDTH  384
 #define ATARI_HEIGHT 240
 
-#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.2"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 1.0.3"
 
 extern int xpos;
 extern int xpos_limit;
@@ -405,11 +405,14 @@ struct ATR_Header {
 #define MENU_SOUND		4
 #define MENU_SAVESTATE	5
 #define MENU_LOADSTATE	6
-#define MENU_BACK		7
-#define MENU_RESETW		8
-#define MENU_RESETC		9
-#define MENU_ABOUT		10
-#define MENU_EXIT		11
+#define MENU_PCX		7
+#define MENU_PCXI		8
+#define MENU_BACK		9
+#define MENU_RESETW		10
+#define MENU_RESETC		11
+#define MENU_MONITOR	12
+#define MENU_ABOUT		13
+#define MENU_EXIT		14
 
 
 

@@ -487,34 +487,6 @@ void PatchOS(void)
 	}
 }
 
-int Initialise_Monty(void)
-{
-	int status;
-
-	status = load_image("monty-emuos.img", 0x0000, 0x10000);
-#ifdef __BUILT_IN_MONTY__
-	if (!status) {
-		memcpy(&memory[0x0000], monty_h, 0xc000);
-		memcpy(&memory[0xc000], emuos_h, 0x4000);
-		status = TRUE;
-	}
-#endif
-
-	if (status) {
-		machine = Atari;
-		/* PatchOS (); */
-		SetRAM(0x0000, 0xbfff);
-		if (enable_c000_ram)
-			SetRAM(0xc000, 0xcfff);
-		else
-			SetROM(0xc000, 0xcfff);
-		SetROM(0xd800, 0xffff);
-		SetHARDWARE(0xd000, 0xd7ff);
-		Coldstart();
-	}
-	return status;
-}
-
 int Initialise_AtariXL(void)
 {
 	int status;
@@ -631,18 +603,14 @@ int bounty_bob2(UWORD addr)
 
 void EnablePILL(void)
 {
-	if (os != 3) {				/* Disable PIL when running Montezumma's Revenge */
-		SetROM(0x8000, 0xbfff);
-		pil_on = TRUE;
-	}
+	SetROM(0x8000, 0xbfff);
+	pil_on = TRUE;
 }
 
 void DisablePILL(void)
 {
-	if (os != 3) {				/* Disable PIL when running Montezumma's Revenge */
-		SetRAM(0x8000, 0xbfff);
-		pil_on = FALSE;
-	}
+	SetRAM(0x8000, 0xbfff);
+	pil_on = FALSE;
 }
 
 int Initialise_AtariOSA(void)
@@ -914,6 +882,8 @@ void get_charset(char * cs)
 {
 	if (mach_xlxe)
 		memcpy(cs, atarixl_os + 0x2000, 1024);
+	else if (machine == Atari5200)
+		memcpy(cs, memory + 0xf800, 1024);
 	else
 		memcpy(cs, memory + 0xe000, 1024);
 }

@@ -1121,6 +1121,9 @@ int Atari_Keyboard(void)
 			case 0x43:			/* F9 */
 				keycode = AKEY_EXIT;
 				break;
+			case 0x44:			/* F10*/
+				keycode = SHIFT_KEY ? AKEY_SCREENSHOT_INTERLACE : AKEY_SCREENSHOT;
+				break;
 			case 0x50:
 				keycode = AKEY_DOWN;
 				break;

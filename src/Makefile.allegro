@@ -15,6 +15,12 @@ LDLIBS		+= -lz
 endif
 
 default :
+	@echo ****************************************************************
+	@echo WARNING  WARNING  WARNING  WARNING  WARNING  WARNING  WARNING 
+	@echo Allegro build of Atari800 has not been updated lately.
+	@echo Allegro support will be removed from future versions of Atari800
+	@echo ****************************************************************
+	@echo
 	@echo To build the Atari 800 Emulator, type:
 	@echo make version
 	@echo .

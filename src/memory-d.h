@@ -32,7 +32,6 @@ int Remove_ROM(void);
 int Insert_Cartridge(char *filename);
 void RestoreSIO( void );
 void Coldstart(void);
-int Initialise_Monty(void);
 int Initialise_AtariXL(void);
 int Initialise_Atari5200(void);
 int Initialise_EmuOS(void);
