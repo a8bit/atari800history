@@ -51,10 +51,14 @@ static int i_love_bill = TRUE;	/* Perry, why this? */
 #include "ataripcx.h"		/* for Save_PCX() */
 #include "log.h"
 #include "statesav.h"
+#include "diskled.h"
 
 #ifdef USE_NEW_BINLOAD
 #include "binload.h"
 #endif
+
+void Sound_Pause(void);	/* cross-platform sound.h would be better :) */
+void Sound_Continue(void);
 
 int tv_mode = TV_PAL;
 Machine machine = Atari;
@@ -776,7 +780,8 @@ void AtariEscape(UBYTE esc_code)
 	switch (esc_code) {
 #ifdef MONITOR_BREAK
 	case ESC_BREAK:
-		Atari800_Exit(TRUE);
+		if (!Atari800_Exit(TRUE))
+			exit(0);
 		return;
 #endif
 	case ESC_SIOV:
@@ -866,7 +871,8 @@ void AtariEscape(UBYTE esc_code)
 	}
 	/* for all codes that fall through the cases */
 	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
-	Atari800_Exit(TRUE);
+	if(!Atari800_Exit(TRUE))
+		exit(0);
 }
 
 int Atari800_Exit(int run_monitor)
@@ -1059,7 +1065,9 @@ void Atari800_Hardware(void)
 			}
 			break;
 		case AKEY_UI:
+			Sound_Pause();
 			ui((UBYTE *)atari_screen);
+			Sound_Continue();
 			break;
 		case AKEY_PIL:
 			if (pil_on)
@@ -1098,6 +1106,9 @@ void Atari800_Hardware(void)
 		if (++test_val == refresh_rate) {
 #endif
 			ANTIC_RunDisplayList();			/* generate screen */
+#if defined(SET_LED) && !defined(NO_LED_ON_SCREEN)
+			Draw_LED();
+#endif
 #ifdef SNAILMETER
 			if (emu_too_fast == 0)
 				ShowRealSpeed(atari_screen, refresh_rate);

@@ -57,7 +57,7 @@ void POKEY_Scanline(void);
 extern UBYTE AUDF[8];    /* AUDFx (D200, D202, D204, D206) */
 extern UBYTE AUDC[8];    /* AUDCx (D201, D203, D205, D207) */
 extern UBYTE AUDCTL;     /* AUDCTL (D208) */      
-extern unsigned int /* ULONG */ DivNIRQ[4],DivNMax[4];
+extern int DivNIRQ[4],DivNMax[4];
 
 #define DIV_64      28			/* divisor for 1.79MHz clock to 64 kHz */
 #define DIV_15      114			/* divisor for 1.79MHz clock to 15 kHz */

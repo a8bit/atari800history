@@ -72,18 +72,7 @@ SVGALIB Options
 Amiga Options
 -------------
 
--ocs	Select this if you are using an OCS based Amiga. Note: This
-	option has only been tested under OCS emulation on an A1200.
-	There could be Workbench compatibility problems on a real OCS
-	Amiga.
--ecs	Select this if you are using an ECS based Amiga. Note: This
-	option has only been test under ECS emulation on an A1200.
-	There could be Workbench compatibility problems on a real ECS
-	Amiga.
--aga	Select this if you are using an AGA based Amiga.
--grey	Produce a grey scale display.
--colour	Produce a full colour display on AGA Amigas and up to 32
-	simultaneous colours on OCS and ECS Amigas.
+Please look into the supplied Atari800.guide
 
 Curses Options
 --------------
@@ -214,19 +203,7 @@ No Joystick or Paddle support in this version.
 AMIGA Keyboard + Joystick & Paddle Controllers
 ==============================================
 
-F1	Warm Reset (This doesn't work under Open Windows)
-F2	Option
-F3	Select
-F4	Start
-F5	Cold Reset
-F6	Toggle RAM/ROM between 0x8000 and 0xbfff (PIL Mode)
-F7	Break Key
-F8	---
-F9	EXIT Emulator
-F10	---
-
-Joystick is operated as normal with joystick plugged into port 2.
-Paddles are not support at the moment.
+Please look into the supplied Atari800.guide
 
 BASIC Keyboard + Joystick & Paddle Controllers
 ==============================================

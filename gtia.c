@@ -178,7 +178,7 @@ void GTIA_Initialise(int *argc, char *argv[])
 
 void new_pm_scanline(void)
 {
-	static int dirty;
+	static int dirty = TRUE;
 	if (dirty) {
 		memset(pm_scanline, 0, ATARI_WIDTH / 2);
 		dirty = FALSE;
@@ -218,80 +218,36 @@ void new_pm_scanline(void)
    Display graphics for Missiles
    =============================
  */
+
+#define DO_MISSILE(n,p,m,r,l)	if (GRAFM & m) {	\
+	if (GRAFM & r) {								\
+		int j = global_sizem[n];					\
+		unsigned hposm = global_hposm##n;			\
+		if (GRAFM & l)								\
+			j <<= 1;								\
+		do {										\
+			if (hposm < ATARI_WIDTH / 2)			\
+				M##n##PL |= pm_scanline[hposm] |= p;\
+			hposm++;								\
+		} while (--j);								\
+	}												\
+	else {											\
+		int j = global_sizem[n];					\
+		unsigned hposm = global_hposm##n + j;		\
+		do {										\
+			if (hposm < ATARI_WIDTH / 2)			\
+				M##n##PL |= pm_scanline[hposm] |= p;\
+			hposm++;								\
+		} while (--j);								\
+	}												\
+}
+
 	if (GRAFM) {
-		UBYTE grafm = GRAFM;
-		int hposm0 = global_hposm0;
-		int hposm1 = global_hposm1;
-		int hposm2 = global_hposm2;
-		int hposm3 = global_hposm3;
-		int i;
-
 		dirty = TRUE;
-
-		for (i = 0; i < 8; i++) {
-			if (grafm & 0x80) {
-				int j;
-
-				for (j = 0; j < global_sizem[3 - (i >> 1)]; j++) {
-					switch (i & 0x06) {
-					case 0x00:
-						if ((hposm3 >= 0) && (hposm3 < ATARI_WIDTH / 2)) {
-							/* UBYTE playfield = scrn_ptr[hposm3 << 1]; */
-							UBYTE player = pm_scanline[hposm3];
-							pm_scanline[hposm3] |= 0x80;
-							M3PL |= player;
-						}
-						hposm3++;
-						break;
-					case 0x02:
-						if ((hposm2 >= 0) && (hposm2 < ATARI_WIDTH / 2)) {
-							/* UBYTE playfield = scrn_ptr[hposm2 << 1]; */
-							UBYTE player = pm_scanline[hposm2];
-							pm_scanline[hposm2] |= 0x40;
-							M2PL |= player;
-						}
-						hposm2++;
-						break;
-					case 0x04:
-						if ((hposm1 >= 0) && (hposm1 < ATARI_WIDTH / 2)) {
-							/* UBYTE playfield = scrn_ptr[hposm1 << 1]; */
-							UBYTE player = pm_scanline[hposm1];
-							pm_scanline[hposm1] |= 0x20;
-							M1PL |= player;
-						}
-						hposm1++;
-						break;
-					case 0x06:
-						if ((hposm0 >= 0) && (hposm0 < ATARI_WIDTH / 2)) {
-							/* UBYTE playfield = scrn_ptr[hposm0 << 1]; */
-							UBYTE player = pm_scanline[hposm0];
-							pm_scanline[hposm0] |= 0x10;
-							M0PL |= player;
-						}
-						hposm0++;
-						break;
-					}
-				}
-			}
-			else {
-				switch (i & 0x06) {
-				case 0x00:
-					hposm3 += global_sizem[3];
-					break;
-				case 0x02:
-					hposm2 += global_sizem[2];
-					break;
-				case 0x04:
-					hposm1 += global_sizem[1];
-					break;
-				case 0x06:
-					hposm0 += global_sizem[0];
-					break;
-				}
-			}
-
-			grafm <<= 1;
-		}
+		DO_MISSILE(3,0x80,0xc0,0x80,0x40)
+		DO_MISSILE(2,0x40,0x30,0x20,0x10)
+		DO_MISSILE(1,0x20,0x0c,0x08,0x04)
+		DO_MISSILE(0,0x10,0x03,0x02,0x01)
 	}
 }
 

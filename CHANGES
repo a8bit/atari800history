@@ -1,3 +1,101 @@
+Changes in 0.9.9i (pre-1.0)
+-----------------
+
+o fixed my stupid bug in Stereo sound emulation (thanks Marek)
+
+o SHIFT_KEY exported from atari_x11.c now (thanks Mark Watson for the hint)
+
+o UI: Select System does cancel the selection by Esc correctly now
+  (thanks Raster for the hint)
+
+o SIO: result wasn't set in default: (thanks Sebastian)
+
+o Amiga changes by <Sebastian>
+  -------------
+  atari_amiga.c
+    old Joystick code was buggy, it does work now.
+    supports the global draw_display variable now.
+    about Requester works now.
+    general cleanup and some comments in atari_amiga.c
+
+  amiga/support.c
+    Added
+
+  amiga/ReadMe
+    Added
+
+  amiga/Atari800.guide
+     has been rewritten (not really finished yet)
+
+  USAGE
+    removed old Amiga descriptions and refered to the
+    Atari800.guide file
+
+  sio.c
+    removed the #ifndef AMIGA. Only one is still left (devices.c,
+    that's because I can't test this).
+
+List of changes from Piotr
+--------------------------
+
+o ANTIC: WSYNC fixed - changed xpos < WSYNC_C to xpos <= WSYNC_C :)
+  This fixes colours in Pitfall II
+
+o ANTIC: PMG flickering fixed. Data should be taken from data bus,
+  not rand(). :) However, it is get now from memory at regPC.
+
+o monitor: COLPM0 typo in symtable[] fixed
+
+o IRQ interrupts fixed:
+- are reset by POKEY, not CPU
+- real SIO is faster and more accurate
+- POKEY counters are more accurate
+
+o diskled: Platform-independent disk LED - drawn on screen.
+  Can be disabled with #define NO_LED_ON_SCREEN.
+
+o DOS version:
+- 320x240 made default video mode
+- keyboard layout PC/Atari can be set at startup with 'KEYBOARD'
+  in configuration file or '-keyboard' command line option
+- Num Lock LED indicates current keyboard layout and Caps Lock LED - disk LED,
+  if it isn't drawn on screen. Scroll Lock still indicates joy-only mode.
+- paddles/touch pad emulation is enabled with 'MOUSE PAD' in configuration file
+  or '-mouse pad' command line option
+  Horizontal position of mouse is paddle 0, vertical is paddle 1,
+  buttons left and right are buttons of paddles 0 and 1 respectively.
+  Tested in ARKANOID and KABOOM. Should be tested on more programs,
+  especially those using touch pad.
+- light pen emulation is enabled with 'MOUSE PEN' in configuration file
+  or '-mouse pen' command line option
+  Mouse emulates position of light pen. Left button is pen's button.
+  Right button is unused.
+  Tested in Atari BASIC only. Should also work in games using light gun.
+
+Atari_PEN() has to be added to all platforms. Atari_PEN(0) returns
+horizontal, Atari_PEN(1) vertical position. If light pen emulation isn't
+supported, the function should look like this:
+
+int Atari_PEN(int vertical)
+{
+	return vertical ? 0xff : 0;
+}
+
+o ANTIC: mode 3 can be now artifacted and in GTIA modes 9/11
+  (ANTIC mode 2 routines used)
+
+o GTIA: missiles optimized a bit
+
+o Delay before reading sector 2. Now OVERMIND works with both emulated
+  and real SIO
+
+o DOS version: sound disabled in UI and monitor
+
+o QUIT works when invalid opcode encountered
+
+o Monitor: you can enter system commands with !cmd, for example !dir
+
+
 Changes in 0.9.9h (pre-1.0)
 -----------------
 

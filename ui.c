@@ -473,7 +473,7 @@ void SelectSystem(UBYTE * screen)
 {
 	int system;
 	int ascii;
-	int status = 0;
+	int status;
 
 	char *menu[7] =
 	{
@@ -491,6 +491,8 @@ void SelectSystem(UBYTE * screen)
 	Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
 
 	system = Select(screen, 0, 7, menu, 7, 1, 1, 4, FALSE, &ascii);
+	if (system < 0)
+		return;
 
 	switch (system) {
 	case 0:
@@ -522,10 +524,11 @@ void SelectSystem(UBYTE * screen)
 		status = Initialise_Atari5200();
 		break;
 	default:
+		status = 1;	/* don't init EmuOS */
 		break;
 	}
 	if (!status) {
-		/* printf("Operating System not available - using Emulated OS\n"); */
+		Aprint("Operating System not available - using Emulated OS\n");
 		status = Initialise_EmuOS();
 	}
 }

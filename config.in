@@ -33,6 +33,7 @@ by configure's build-in test.
 ?MONITOR_ASSEMBLER	Enable assembler in monitor (you can enter ASM insns directly)
 ?(!X11)BUFFERED_LOG	Buffer debug output (until the graphics mode switches back to text mode)
 ?(!X11)SET_LED		Emulate disk LED diode
+?!(SET_LED)NO_LED_ON_SCREEN	Display LED on screen
 ?USE_NEW_BINLOAD	Use new routine for direct loading of binary files
 ?ZLIB_CAPABLE		Enable compressed state files (you'll need ZLIB for this)
 ?(ALLEGRO)NEW_ALLEGRO312	Update source for newer Allegro lib v3.12

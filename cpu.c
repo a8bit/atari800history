@@ -1,6 +1,6 @@
 /* CPU.C
  *    Original Author     :   David Firth          *
- *    Last changes        :   17th March 2000, Piotr Fusik */
+ *    Last changes        :   22nd March 2000, Piotr Fusik */
 /*
    Ideas for Speed Improvements
    ============================
@@ -238,7 +238,6 @@ void NMI(void)
 			PHPB0;						\
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
-			IRQ = 0;					\
 			xpos += 7;					\
 			ret_nesting+=1;					\
 		}							\
@@ -253,7 +252,6 @@ void NMI(void)
 			PHPB0;						\
 			SetI;						\
 			PC = dGetWord(0xfffe);				\
-			IRQ = 0;					\
 			xpos += 7;					\
 		}							\
 	}								\

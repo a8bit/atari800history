@@ -80,6 +80,7 @@ void Aprint(char *format, ... ){}
 
 #include "atari_amiga.h"
 #include "amiga/amiga_asm.h"
+#include "amiga/support.h"
 
 extern int refresh_rate;
 
@@ -98,20 +99,17 @@ struct Library *CGXVideoBase;
 struct Library *CyberGfxBase;
 
 /* Gameport */
-
 struct InputEvent gameport_data;
 struct MsgPort *gameport_msg_port;
 struct IOStdReq *gameport_io_msg;
 BOOL gameport_error;
 
 /* Timer */
-
 struct MsgPort *timer_msg_port;
 struct timerequest *timer_request;
 BOOL timer_error;
 
 /* Sound */
-
 struct MsgPort *ahi_msg_port;
 struct AHIRequest *ahi_request;
 struct AHIRequest *ahi_soundreq[2];
@@ -163,9 +161,6 @@ struct Hook settings_screenmode_stophook;
 
 /* Emulation */
 
-int old_stick_0 = 0x1f;
-int old_stick_1 = 0x1f;
-
 static int consol;
 static int trig0;
 static int stick0;
@@ -203,9 +198,6 @@ static int PaddlePos;
 #define controller_Joystick 1
 #define controller_Paddle 2
 
-#define InnerWidth(w) (w->Width - w->BorderLeft - w->BorderRight)
-#define InnerHeight(w) (w->Height - w->BorderTop - w->BorderBottom)
-
 /**************************************************************************
  usleep() function. (because select() is too slow and not needed to be
  emulated for the client). Complete.
@@ -217,73 +209,36 @@ void usleep(unsigned long usec)
 	DoIO((struct IORequest*)timer_request);
 }
 
-//-------------------------------------
-// Menü
+/**************************************************************************
+ gettimeofday() function emulation
+**************************************************************************/
+VOID gettimeofday( struct timeval *tv, APTR null )
+{
+	if( TimerBase )
+	{
+		GetSysTime(tv);
+	}
+}
 
-enum{
-	MEN_PROJECT=1,
-	MEN_PROJECT_ABOUT,
-	MEN_PROJECT_LOADSTATE,
-	MEN_PROJECT_SAVESTATE,
-	MEN_PROJECT_LOADBIN,
-	MEN_PROJECT_RECORDSOUND,
-	MEN_PROJECT_SOUNDPATH,
-	MEN_PROJECT_ICONIFY,
-	MEN_PROJECT_HELP,
-	MEN_PROJECT_QUIT,
+/**************************************************************************
+ strcasecmp() emulation
+**************************************************************************/
+LONG strcasecmp(char *str1, char *str2)
+{
+	return stricmp(str1,str2);
+}
 
-	MEN_SYSTEM,
-	MEN_SYSTEM_BOOT,
-	MEN_SYSTEM_ID,
-	MEN_SYSTEM_ID1,
-	MEN_SYSTEM_ID2,
-	MEN_SYSTEM_ID3,
-	MEN_SYSTEM_ID4,
-	MEN_SYSTEM_ID5,
-	MEN_SYSTEM_ID6,
-	MEN_SYSTEM_ID7,
-	MEN_SYSTEM_ID8,
-	MEN_SYSTEM_ED,
-	MEN_SYSTEM_ED1,
-	MEN_SYSTEM_ED2,
-	MEN_SYSTEM_ED3,
-	MEN_SYSTEM_ED4,
-	MEN_SYSTEM_ED5,
-	MEN_SYSTEM_ED6,
-	MEN_SYSTEM_ED7,
-	MEN_SYSTEM_ED8,
-	MEN_SYSTEM_IC,
-	MEN_SYSTEM_IC8K,
-	MEN_SYSTEM_IC16K,
-	MEN_SYSTEM_ICOSS,
-	MEN_SYSTEM_REMOVEC,
-	MEN_SYSTEM_PILL,
-	MEN_SYSTEM_ATARI800A,
-	MEN_SYSTEM_ATARI800B,
-	MEN_SYSTEM_ATARI800XL,
-	MEN_SYSTEM_ATARI130XL,
-	MEN_SYSTEM_UI,
 
-	MEN_CONSOLE,
-	MEN_CONSOLE_RESET,
-	MEN_CONSOLE_OPTION,
-	MEN_CONSOLE_SELECT,
-	MEN_CONSOLE_START,
-	MEN_CONSOLE_HELP,
-	MEN_CONSOLE_BREAK,
-	MEN_CONSOLE_COLDSTART,
-
-	MEN_SETTINGS,
-	MEN_SETTINGS_FRAMERATE
-};
-
+/**************************************************************************
+ This is the menu when the emulator is running
+**************************************************************************/
 static struct NewMenu MenuEntries[] =
 {
 	NM_TITLE, "Project", NULL, 0, 0L, (APTR)MEN_PROJECT,
 	NM_ITEM, "About...", "?", 0, 0L, (APTR)MEN_PROJECT_ABOUT,
 	NM_ITEM, NM_BARLABEL, NULL,	0, 0L, NULL,
-	NM_ITEM, "Load State...", "S", 0, 0L, (APTR)MEN_PROJECT_LOADSTATE,
-	NM_ITEM, "Save State...", "L", 0, 0L, (APTR)MEN_PROJECT_SAVESTATE,
+	NM_ITEM, "Load State...", "L", 0, 0L, (APTR)MEN_PROJECT_LOADSTATE,
+	NM_ITEM, "Save State...", "S", 0, 0L, (APTR)MEN_PROJECT_SAVESTATE,
 	NM_ITEM, NM_BARLABEL, NULL,	0, 0L, NULL,
 	NM_ITEM, "Load BIN...", NULL, 0, 0L, (APTR)MEN_PROJECT_LOADBIN,
 	NM_ITEM, NM_BARLABEL, NULL,	0, 0L, NULL,
@@ -323,7 +278,7 @@ static struct NewMenu MenuEntries[] =
 	NM_ITEM, "Remove Cartride", NULL, 0, 0L, (APTR)MEN_SYSTEM_REMOVEC,
 	NM_ITEM, "Enable PILL", "F6", NM_COMMANDSTRING, 0L, (APTR)MEN_SYSTEM_PILL,
 	NM_ITEM, NM_BARLABEL, NULL,   0, 0L, NULL,
-	NM_ITEM, "Internal User Interface", NULL, 0, 0L, (APTR)MEN_SYSTEM_UI,
+	NM_ITEM, "Internal User Interface", "F1", NM_COMMANDSTRING, 0L, (APTR)MEN_SYSTEM_UI,
 /*	NM_ITEM, "Atari 800 OS/A", NULL, 0, 0L, (APTR)NULL,
 	NM_ITEM, "Atari 800 OS/B", NULL, 0, 0L, NULL,
 	NM_ITEM, "Atari 800XL", NULL, 0, 0L, NULL,
@@ -346,315 +301,15 @@ static struct NewMenu MenuEntries[] =
 	NM_ITEM, "Save Settings", NULL, 0, 0L, NULL,
 	NM_END, NULL, NULL, 0, 0L, NULL
 };
-//-------------------------------------
-// MUI Support
 
 #define GUI_SAVE		1
 #define GUI_USE		2
 #define GUI_CANCEL	MUIV_Application_ReturnID_Quit
 
-//#define get(obj,attr,store) GetAttr(attr,obj,(ULONG *)store)
-//#define set(obj,attr,value) SetAttrs(obj,attr,value,TAG_DONE)
-//#define nnset(obj,attr,value) SetAttrs(obj,MUIA_NoNotify,TRUE,attr,value,TAG_DONE)
 
-/*#define setmutex(obj,n)     set(obj,MUIA_Radio_Active,n)
-#define setcycle(obj,n)     set(obj,MUIA_Cycle_Active,n)
-#define setstring(obj,s)    set(obj,MUIA_String_Contents,s)
-*/
-#define nnsetstring(obj,s)  nnset(obj,MUIA_String_Contents,s)
-/*#define setcheckmark(obj,b) set(obj,MUIA_Selected,b)
-#define setslider(obj,l)    set(obj,MUIA_Numeric_Value,l)
-*/
-
-LONG xget(Object *obj,ULONG attribute)
-{
-	LONG x;
-	get(obj,attribute,&x);
-	return(x);
-}
-
-char *getstr(Object *obj)
-{
-	return((char *)xget(obj,MUIA_String_Contents));
-}
-
-BOOL getbool(Object *obj)
-{
-	return((BOOL)xget(obj,MUIA_Selected));
-}
-
-Object *MUI_NewObject          (char *classname,Tag tag1,...)
-{
-	return MUI_NewObjectA(classname, (struct TagItem*)&tag1);
-}
-
-BOOL MUI_AslRequestTags(APTR requester, Tag Tag1, ...)
-{
-	return MUI_AslRequest(requester, (struct TagItem*)&Tag1);
-}
-
-Object *MUI_MakeObject         (LONG type,...)
-{
-	return MUI_MakeObjectA(type, ((ULONG*)&type)+1);
-}
-
-LONG    MUI_Request            (APTR app,APTR win,LONGBITS flags,char *title,char *gadgets,char *format,...)
-{
-	return MUI_RequestA(app,win,flags,title,gadgets,format,((ULONG*)&format)+1);
-}
-
-
-Object *MakeLabel(STRPTR str)  { return(MUI_MakeObject(MUIO_Label,str,0)); }
-Object *MakeLabel1(STRPTR str)  { return(MUI_MakeObject(MUIO_Label,str,MUIO_Label_SingleFrame)); }
-Object *MakeLabel2(STRPTR str)  { return(MUI_MakeObject(MUIO_Label,str,MUIO_Label_DoubleFrame)); }
-Object *MakeLLabel(STRPTR str)  { return(MUI_MakeObject(MUIO_Label,str,MUIO_Label_LeftAligned)); }
-Object *MakeLLabel1(STRPTR str)  { return(MUI_MakeObject(MUIO_Label,str,MUIO_Label_LeftAligned|MUIO_Label_SingleFrame)); }
-
-Object *MakeCheck(BOOL check)
-{
-	Object *obj = MUI_MakeObject(MUIO_Checkmark,NULL);
-	if (obj) set(obj,MUIA_CycleChain,1);
-	return(obj);
-}
-
-Object *MakeButton(STRPTR str)
-{
-	Object *obj = MUI_MakeObject(MUIO_Button,str);
-	if (obj) set(obj,MUIA_CycleChain,1);
-	return(obj);
-}
-
-Object *MakeCycle(STRPTR *array)
-{
-	Object *obj = MUI_MakeObject(MUIO_Cycle, NULL, array);
-	if (obj) set(obj,MUIA_CycleChain,1);
-	return(obj);
-}
-
-Object *MakeString(STRPTR def, LONG maxlen)
-{
-	Object *obj = MUI_MakeObject(MUIO_String,NULL,maxlen);
-
-	if (obj)
-	{
-		SetAttrs(obj,
-			MUIA_CycleChain,1,
-			MUIA_String_Contents,def,
-//			MUIA_String_AdvanceOnCR,TRUE,
-			TAG_DONE);
-	}
-
-	return(obj);
-}
-
-/*Object *MakeInteger(LONG num)
-{
-	Object *obj = MUI_MakeObject(MUIO_String,NULL,10);
-
-	if (obj)
-	{
-		SetAttrs(obj,
-			MUIA_CycleChain,1,
-  		MUIA_String_Accept, "0123456789",
-  		MUIA_String_Integer,0,//num,
-			TAG_DONE);
-	}
-
-	return(obj);
-}*/
-
-Object *MakeImageButton(ULONG image)
-{
-	return ImageObject,ImageButtonFrame,
-								MUIA_Image_Spec,image,
-								MUIA_Background, MUII_ButtonBack,
-								MUIA_InputMode, MUIV_InputMode_RelVerify,
-								MUIA_Image_FreeVert, TRUE,
-								MUIA_CycleChain,1,
-								End;
-
-}
-
-Object *MakeLV(APTR pool)
-{
-	return(
-		ListviewObject,
-			MUIA_Listview_Input, TRUE,
-			MUIA_Listview_List , ListObject,
-				InputListFrame,
-				MUIA_List_ConstructHook, MUIV_List_ConstructHook_String,
-				MUIA_List_DestructHook , MUIV_List_DestructHook_String,
-				pool?MUIA_List_Pool:TAG_IGNORE,pool,
-				End,
-			End
-	);
-}
-
-ULONG DoSuperNew(struct IClass *cl,Object *obj,ULONG tag1,...)
-{
-	return(DoSuperMethod(cl,obj,OM_NEW,&tag1,NULL));
-}
-
-//-------------------------------------
-
-//-------------------------------------
-LONG StrLen( const STRPTR str)
-{
-	if(str) return (LONG)strlen(str);
-	return 0;
-}
-//-------------------------------------
-STRPTR StrCopy( const STRPTR str )
-{
-	STRPTR dst;
-	if( !str ) return NULL;
-	if( !*str) return NULL;
-
-	dst = (STRPTR)AllocVec(strlen(str)+1,0);
-	if(dst) strcpy(dst,str);
-	return dst;
-}
-//-------------------------------------
-STRPTR GetFullPath( STRPTR drw, STRPTR file)
-{
-	WORD dl = StrLen(drw);
-	WORD fl = StrLen( file );
-	LONG length = dl + fl + 6;
-	STRPTR fp = (STRPTR)AllocVec( length+1, 0 );
-
-	if( fp )
-	{
-		strcpy( fp, drw );
-
-		if( AddPart( fp, file, length ))	return fp;
-		else FreeVec( fp );
-	}
-	return NULL;
-}
-//-------------------------------------
-STRPTR AddSuffix(const STRPTR name, const STRPTR suf)
-{
-	STRPTR str;
-	if(!strstr(name,suf))
-	{
-		LONG len = StrLen(name)+StrLen(suf)+2;
-		str = (STRPTR)AllocVec(len,0);
-		if(str)
-		{
-			strcpy(str,name);
-			strcat(str,suf);
-		}
-	}	else str = StrCopy(name);
-	return str;
-}
-//-------------------------------------
-ULONG GetBestID( ULONG width, ULONG height, ULONG depth )
-{
-	struct Screen *defscr = LockPubScreen( NULL );
-	struct ViewPort *vp = NULL;
-	ULONG displayID;
-	if( defscr ) vp = &defscr->ViewPort;
-
-	displayID = BestModeID( BIDTAG_Depth,depth,
-									BIDTAG_NominalWidth, width,
-									BIDTAG_NominalHeight, height,
-									BIDTAG_MonitorID, GetVPModeID( vp ) & MONITOR_ID_MASK,
-									TAG_DONE);
-
-	if( displayID == INVALID_ID )
-	{
-		displayID = BestModeID( BIDTAG_Depth,depth,
-									BIDTAG_NominalWidth, width,
-									BIDTAG_NominalHeight, height,
-									TAG_DONE);
-	}
-
-	
-
-	if( defscr ) UnlockPubScreen( NULL, defscr );
-	return displayID;
-}
-//-------------------------------------
-STRPTR GetDisplayName(ULONG displayid)
-{
-	STATIC struct NameInfo DisplayNameInfo;
-	STATIC char DisplayNameBuffer[256];
-
-	LONG i, v;
-
-	i	= 0;
-	v	= GetDisplayInfoData(NULL,	(UBYTE *) &DisplayNameInfo, sizeof(DisplayNameInfo),
-									DTAG_NAME, displayid);
-
-	if(v > sizeof(struct QueryHeader))
-    {
-		for(; (i < sizeof(DisplayNameBuffer) - 1) && DisplayNameInfo.Name[i]; i++)
-			DisplayNameBuffer[i]	= DisplayNameInfo.Name[i];
-	}
-
-	if(displayid == INVALID_ID)
-		strcpy(DisplayNameBuffer, "InvalidID"/*GetMessage(MSG_INVALID)*/);
-	else
-	{
-		if(i < sizeof(DisplayNameBuffer) - sizeof(" (0x00000000)"))
-		{
-			DisplayNameBuffer[i++]	= ' ';
-			DisplayNameBuffer[i++]	= '(';
-			DisplayNameBuffer[i++]	= '0';
-			DisplayNameBuffer[i++]	= 'x';
-
-			for(v = 28; (v >= 0) && (!((displayid >> v) & 0xf)); v -= 4);
-
-			if(v < 0)
-				DisplayNameBuffer[i++]	= '0';
-
-			for(; (v >= 0); v -= 4)
-			{
-				if(((displayid >> v) & 0xf) > 9)
-					DisplayNameBuffer[i++]	= ((displayid >> v) & 0xf) + 'a' - 10;
-				else
-					DisplayNameBuffer[i++]	= ((displayid >> v) & 0xf) + '0';
-			}
-			DisplayNameBuffer[i++]	= ')';
-		}
-
-		DisplayNameBuffer[i++]	= 0;
-	}
-
-	return DisplayNameBuffer;
-//	set(DisplayName, MUIA_Text_Contents, (ULONG) DisplayNameBuffer);
-}
-//-------------------------------------
-APTR FindUserData( struct Menu *menu, APTR userdata)
-{
-	while(menu)
-	{
-		struct MenuItem *mi;
-
-		if(GTMENU_USERDATA( menu ) == userdata) return menu;
-
-		mi = menu->FirstItem;
-		while(mi)
-		{
-			struct MenuItem *smi;
-
-			if(GTMENUITEM_USERDATA( mi ) == userdata) return mi;
-
-			smi = mi->SubItem;
-			while(smi)
-			{
-				if(GTMENUITEM_USERDATA( smi ) == userdata) return smi;
-				smi = smi->NextItem;
-			}
-			mi = mi->NextItem;
-		}
-		menu = menu->NextMenu;
-	}
-	return NULL;
-}
-//-------------------------------------
-
-//-------------------------------------
+/**************************************************************************
+ Close all previously opened libraries
+**************************************************************************/
 VOID CloseLibraries(void)
 {
 	if( CyberGfxBase ) CloseLibrary(CyberGfxBase);
@@ -665,7 +320,10 @@ VOID CloseLibraries(void)
 	if( GfxBase ) CloseLibrary((struct Library*)GfxBase);
 	if( IntuitionBase ) CloseLibrary((struct Library*)IntuitionBase);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Open all necessary and optional libraries. Returns TRUE if succeeded
+**************************************************************************/
 BOOL OpenLibraries(void)
 {
 	if((IntuitionBase = (struct IntuitionBase*)OpenLibrary ("intuition.library", 39)))
@@ -679,7 +337,7 @@ BOOL OpenLibraries(void)
 					if((GadToolsBase = OpenLibrary("gadtools.library",39)))
 					{
 						CGXVideoBase = OpenLibrary("cgxvideo.library",41);
-						CyberGfxBase=OpenLibrary("cybergraphics.library",41);
+						CyberGfxBase = OpenLibrary("cybergraphics.library",41);
 
 						return TRUE;
 					}
@@ -689,7 +347,10 @@ BOOL OpenLibraries(void)
 	}
 	return FALSE;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Close gameport.device
+**************************************************************************/
 VOID FreeJoystick(void)
 {
 	if( gameport_io_msg )
@@ -718,7 +379,10 @@ VOID FreeJoystick(void)
 		gameport_msg_port = NULL;
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Open gameport.device
+**************************************************************************/
 BOOL SetupJoystick(void)
 {
 	if((gameport_msg_port = CreateMsgPort()))
@@ -784,11 +448,12 @@ BOOL SetupJoystick(void)
 	}
 	return FALSE;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Free sound stuff
+**************************************************************************/
 VOID FreeSound(void)
 {
-//	if(ahi_audio_ctrl) AHI_FreeAudio(ahi_audio_ctrl);
-
 	if(ahi_soundreq[0])
 	{
 		if(!CheckIO((struct IORequest*)ahi_soundreq[0]))
@@ -826,7 +491,10 @@ VOID FreeSound(void)
 	if(ahi_streambuf[0]) FreeVec(ahi_streambuf[0]);
 	if(ahi_streambuf[1]) FreeVec(ahi_streambuf[1]);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Allocate Soundstuff
+**************************************************************************/
 BOOL SetupSound(void)
 {
 	if(tv_mode== TV_PAL)
@@ -853,13 +521,22 @@ BOOL SetupSound(void)
 				AHIBase = (struct Library *) ahi_request->ahir_Std.io_Device;
 
 				ahi_streamlen = ahi_streamfreq/ahi_fps;
+
+#ifdef STEREO
+        ahi_streamlen *= 2;
+#endif
+
 				ahi_samplepos = 0;
 
+#ifdef STEREO
+				Pokey_sound_init(FREQ_17_EXACT, ahi_streamfreq, 2);
+#else
 				Pokey_sound_init(FREQ_17_EXACT, ahi_streamfreq, 1);
+#endif
 
-				if((ahi_streambuf[0] = (STRPTR)AllocVec(ahi_streamlen, MEMF_PUBLIC|MEMF_CLEAR)))
+				if((ahi_streambuf[0] = (STRPTR)AllocVec(ahi_streamlen*3, MEMF_PUBLIC|MEMF_CLEAR)))
 				{
-					if((ahi_streambuf[1] = (STRPTR)AllocVec(ahi_streamlen, MEMF_PUBLIC|MEMF_CLEAR)))
+					if((ahi_streambuf[1] = (STRPTR)AllocVec(ahi_streamlen*3, MEMF_PUBLIC|MEMF_CLEAR)))
 					{
 						ahi_request->ahir_Std.io_Message.mn_Node.ln_Pri = -50;
 						ahi_request->ahir_Std.io_Command  = CMD_WRITE;
@@ -867,7 +544,12 @@ BOOL SetupSound(void)
 						ahi_request->ahir_Std.io_Length   = ahi_streamlen;
 						ahi_request->ahir_Std.io_Offset   = 0;
 						ahi_request->ahir_Frequency       = ahi_streamfreq;
+
+#ifdef STEREO
+						ahi_request->ahir_Type            = AHIST_S8S;
+#else
 						ahi_request->ahir_Type            = AHIST_M8S;
+#endif
 						ahi_request->ahir_Volume          = 0x10000;          // Full volume
 						ahi_request->ahir_Position        = 0x8000;           // Centered
 						ahi_request->ahir_Link            = NULL;
@@ -897,7 +579,10 @@ BOOL SetupSound(void)
 	}
 	SoundEnabled = FALSE;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Closes RecordSoundfile handle
+**************************************************************************/
 VOID FreeSoundFile(void)
 {
 	if(ahi_soundhandle)
@@ -906,7 +591,10 @@ VOID FreeSoundFile(void)
 		ahi_soundhandle = NULL;
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Opens the Recordsoundfile handle
+**************************************************************************/
 VOID SetupSoundFile(void)
 {
 	FreeSoundFile();
@@ -916,7 +604,10 @@ VOID SetupSoundFile(void)
 		ahi_soundhandle = OpenAsync(ahi_soundpath,MODE_WRITE,8192);
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Free timer stuff
+**************************************************************************/
 VOID FreeTimer(void)
 {
 	if( timer_request )
@@ -932,7 +623,10 @@ VOID FreeTimer(void)
 		timer_msg_port = NULL;
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Setup Timer
+**************************************************************************/
 BOOL SetupTimer(void)
 {
 	if((timer_msg_port = CreateMsgPort()))
@@ -950,9 +644,8 @@ BOOL SetupTimer(void)
 	}
 	return FALSE;
 }
-//-------------------------------------
 
-//-------------------------------------
+
 ASM LONG Settings_ScreenType_Func(register __a1 ULONG *active)
 {
 	if(*active)
@@ -970,7 +663,7 @@ ASM LONG Settings_ScreenType_Func(register __a1 ULONG *active)
 	}
 	return 0;
 }
-//-------------------------------------
+
 ASM ULONG Settings_ScreenMode_StartFunc(register __a0 struct Hook *hook, register __a2 Object *popasl, register __a1 struct TagItem *taglist)
 {
 	static struct TagItem tl[]=
@@ -993,7 +686,7 @@ ASM ULONG Settings_ScreenMode_StartFunc(register __a0 struct Hook *hook, registe
 
 	return(TRUE);
 }
-//-------------------------------------
+
 ASM ULONG Settings_ScreenMode_StopFunc(register __a0 struct Hook *hook, register __a2 Object *popasl, register __a1 struct ScreenModeRequester *smreq)
 {
 	DisplayID = smreq->sm_DisplayID;
@@ -1001,9 +694,10 @@ ASM ULONG Settings_ScreenMode_StopFunc(register __a0 struct Hook *hook, register
 
 	return(0);
 }
-//-------------------------------------
 
-//-------------------------------------
+/**************************************************************************
+ Free Start GUI
+**************************************************************************/
 VOID FreeMUI(void)
 {
 	if(app) MUI_DisposeObject(app);
@@ -1011,7 +705,10 @@ VOID FreeMUI(void)
 	app = NULL;
 	MUIMasterBase = NULL;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Setup Start GUI
+**************************************************************************/
 BOOL SetupMUI(void)
 {
 	static STRPTR SettingsPages[] = {"General","Paths","Graphics","Sound",NULL};
@@ -1031,7 +728,7 @@ BOOL SetupMUI(void)
 #else
 				MUIA_Application_Version    , "$VER: Atari800 1.0 "__AMIGADATE__,
 #endif
-				MUIA_Application_Copyright  , "©1999 by Sebastian Bauer",
+				MUIA_Application_Copyright  , "©2000 by Sebastian Bauer",
 				MUIA_Application_Author     , "Sebastian Bauer",
 				MUIA_Application_Description, "Emulates an Atari 8 bit Computer",
 				MUIA_Application_Base       , "Atari800",
@@ -1199,7 +896,10 @@ BOOL SetupMUI(void)
 	}
 	return FALSE;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Set gadgets to the current values
+**************************************************************************/
 VOID SetGadgets(void)
 {
 	IMPORT Machine machine;
@@ -1250,17 +950,21 @@ VOID SetGadgets(void)
 	setstring(settings_xlxe_string,atari_xlxe_filename);
 	setstring(settings_basic_string,atari_basic_filename);
 	setstring(settings_cartriges_string,atari_rom_dir);
-	setstring(settings_disks_string,DiskPath);
+	setstring(settings_disks_string,atari_disk_dirs[0]);
 	setstring(settings_exes_string,atari_exe_dir);
 	setstring(settings_states_string,atari_state_dir);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Set the values
+**************************************************************************/
 VOID SetAtari(void)
 {
 	IMPORT Machine machine;
 	IMPORT int hold_option;
 	IMPORT int enable_sio_patch;
 	IMPORT int enable_c000_ram;
+	int i;
 
 	switch(xget(settings_model_cycle, MUIA_Cycle_Active))
 	{
@@ -1297,6 +1001,8 @@ VOID SetAtari(void)
 	hold_option = getbool(settings_holdoption_check);
 	enable_sio_patch = getbool(settings_patch_check);
 
+  refresh_rate = xget(settings_skipframe_slider, MUIA_Numeric_Value) + 1;
+
 	if( !xget(settings_screentype_cycle,MUIA_Cycle_Active))
 	{
 		ScreenType = CUSTOMSCREEN;
@@ -1318,12 +1024,18 @@ VOID SetAtari(void)
 
 	if(DiskPath) FreeVec(DiskPath);
 	DiskPath = StrCopy(getstr(settings_disks_string));
+  strcpy(atari_disk_dirs[0], DiskPath);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Configure the Atari800 Emulator
+ This opens the GUI and waits until the new settings are accepted
+ or canceled
+**************************************************************************/
 VOID Configure(void)
 {
 	ULONG sigs=0;
-	ULONG retID;
+	ULONG retID=GUI_CANCEL;
 	BOOL ready = FALSE;
 
 	SetGadgets();
@@ -1364,9 +1076,10 @@ VOID Configure(void)
 	if(retID == GUI_SAVE) RtConfigSave();
 }
 
-//-------------------------------------
 
-//-------------------------------------
+/**************************************************************************
+ Record Sound menu entry selected
+**************************************************************************/
 VOID Project_RecordSound(void)
 {
 	struct MenuItem *mi = (struct MenuItem*)FindUserData(MenuMain,(APTR)MEN_PROJECT_RECORDSOUND);
@@ -1376,7 +1089,10 @@ VOID Project_RecordSound(void)
 		else FreeSoundFile();
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Select the filename for the recorded sound
+**************************************************************************/
 VOID Project_SelectSoundPath(void)
 {
 	struct FileRequester *filereq = (struct FileRequester*)AllocAslRequest( ASL_FileRequest, NULL);
@@ -1392,7 +1108,10 @@ VOID Project_SelectSoundPath(void)
 		}
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Handle the menu
+**************************************************************************/
 int HandleMenu(UWORD code)
 {
 	int keycode = -1;
@@ -1406,7 +1125,16 @@ int HandleMenu(UWORD code)
 			switch(udata)
 			{
 				case	MEN_PROJECT_ABOUT:
-//							DisplayAboutWindow();
+              {
+                struct EasyStruct easy;
+                easy.es_StructSize = sizeof(struct EasyStruct);
+                easy.es_Flags = 0;
+                easy.es_Title = "Atari800";
+                easy.es_TextFormat = "Atari800 version 0.9.9\n\nAmiga port done by Sebastian Bauer";
+                easy.es_GadgetFormat = "Ok";
+
+                EasyRequestArgs( WindowMain, &easy, NULL, NULL );
+              }
 							break;
 
 				case	MEN_PROJECT_LOADSTATE:
@@ -1680,31 +1408,11 @@ int HandleMenu(UWORD code)
 	return keycode;
 }
 
-//-------------------------------------
 
-//-------------------------------------
-VOID gettimeofday( struct timeval *tv, APTR null )
-{
-	if( TimerBase )
-	{
-/*		EClockVal e;
-		ULONG ticks = ReadEClock(&e);
-		unsigned long long micro = (e.ev_lo % ticks) * 1000000 / ticks;
 
-		tv->tv_secs = e.ev_lo / ticks;
-		tv->tv_micro = micro;
-*/
-		GetSysTime(tv);
-	}
-}
-//-------------------------------------
-LONG strcasecmp(char *str1, char *str2)
-{
-	return stricmp(str1,str2);
-}
-//-------------------------------------
-
-//-------------------------------------
+/**************************************************************************
+ Play the sound. Also stores it to a sound file if requested
+**************************************************************************/
 void UpdateSound(void)
 {
 	static long send[2] = {NULL,NULL};
@@ -1740,9 +1448,11 @@ void UpdateSound(void)
 		else ahi_current=1;
 	}
 }
-//-------------------------------------
 
-//-------------------------------------
+
+/**************************************************************************
+ Initialize the Atari Prefs to sensible values
+**************************************************************************/
 void Atari_ConfigInit(void)
 {
 	strcpy(atari_osa_filename, "PROGDIR:atariosa.rom");
@@ -1750,8 +1460,8 @@ void Atari_ConfigInit(void)
 	strcpy(atari_xlxe_filename, "PROGDIR:atarixl.rom");
 	strcpy(atari_basic_filename, "PROGDIR:ataribas.rom");
 	atari_5200_filename[0] = '\0';
-	atari_disk_dirs[0][0] = '\0';
-	disk_directories = 0;
+	strcpy(atari_disk_dirs[0], "PROGDIR:Disks");
+	disk_directories = 1;
 	strcpy(atari_rom_dir,"PROGDIR:Cartriges");
 	atari_h1_dir[0] = '\0';
 	atari_h2_dir[0] = '\0';
@@ -1760,7 +1470,10 @@ void Atari_ConfigInit(void)
 	strcpy(atari_exe_dir,"PROGDIR:EXEs");
 	strcpy(atari_state_dir,"PROGDIR:States");
 }
-//-------------------------------------
+
+/**************************************************************************
+ Set additional Amiga config parameters
+**************************************************************************/
 int Atari_Configure(char* option,char *parameters)
 {
 	if(!strcmp(option,"AMIGA_GFX_USEBESTMODE")) StrToLong(parameters,&UseBestID);
@@ -1784,7 +1497,10 @@ int Atari_Configure(char* option,char *parameters)
 	}	else return FALSE;
 	return TRUE;
 }
-//-------------------------------------
+
+/**************************************************************************
+ Save additional Amiga config parameters
+**************************************************************************/
 void Atari_ConfigSave( FILE *fp)
 {
 	fprintf(fp,"AMIGA_PATHS_DISKS=%s\n",DiskPath);
@@ -1802,7 +1518,10 @@ void Atari_ConfigSave( FILE *fp)
 	if(SoundEnabled) fputs("AHI\n",fp);
 	else fputs("NO\n",fp);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Initialize the Amiga specific part of the Atari800 Emulator.
+**************************************************************************/
 void Atari_Initialise (int *argc, unsigned char **argv)
 {
 	Controller = controller_Joystick;
@@ -1857,7 +1576,10 @@ void Atari_Initialise (int *argc, unsigned char **argv)
 		}
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Exit the emulator
+**************************************************************************/
 int Atari_Exit (int run_monitor)
 {
 	if (run_monitor)
@@ -1883,127 +1605,106 @@ int Atari_Exit (int run_monitor)
 	CloseLibraries();
 	exit(0);
 }
-//-------------------------------------
+
+/**************************************************************************
+ Do the graphical output (also call the sound play routine)
+**************************************************************************/
 void Atari_DisplayScreen(UBYTE *screen)
 {
-	static char fpsbuf[32];
+	extern int draw_display;
 
-	if(ShowFPS)
-	{
-		IMPORT double fps;
-		double fpsv;
-		double fpsn = modf(fps, &fpsv);
+/*
+	struct timeval tv;
+	struct timeval tv2;
+	gettimeofday(&tv,NULL);
+*/
 
-		sprintf(fpsbuf,"%ld.%ld/%ld (%ld%%)",(LONG)fpsv,(LONG)(fpsn*10),ahi_fps,(LONG)(100*fps/ahi_fps));
-	}
-
-//	struct timeval tv;
-//	struct timeval tv2;
-//	gettimeofday(&tv,NULL);
-
-	if( ScreenType == WBENCHSCREEN)
-	{
-		if(VLHandle)
+  if (draw_display)
+  {
+		static char fpsbuf[32];
+		if(ShowFPS)
 		{
-			if(VLAttached)
-			{
-				if(LockVLayer(VLHandle))
-				{
-					ScreenData215bit(screen, (UWORD*)GetVLayerAttr(VLHandle, VOA_BaseAddress),colortable15,ATARI_WIDTH,ATARI_HEIGHT);
+			IMPORT double fps;
+			double fpsv;
+			double fpsn = modf(fps, &fpsv);
 
-/*				ULONG *destdata = (ULONG*)GetVLayerAttr(VLHandle, VOA_BaseAddress);
-				UBYTE *srcdata = screen;
-	
-				destdata = 
-	
-				for(y=0;y<ATARI_HEIGHT;y++)
+			sprintf(fpsbuf,"%ld.%ld/%ld (%ld%%)",(LONG)fpsv,(LONG)(fpsn*10),ahi_fps,(LONG)(100*fps/ahi_fps));
+		}
+
+		if (ScreenType == WBENCHSCREEN)
+		{
+			if(VLHandle)
+			{
+				if(VLAttached)
 				{
-					for(x=0; x<ATARI_WIDTH/2; x++)
+					if(LockVLayer(VLHandle))
 					{
-						UWORD data1 = colortable15[*srcdata++];
-						UWORD data2 = colortable15[*srcdata++];
-	
-						*destdata++ = data1<<16|data2;
+						ScreenData215bit(screen, (UWORD*)GetVLayerAttr(VLHandle, VOA_BaseAddress),colortable15,ATARI_WIDTH,ATARI_HEIGHT);
+						UnLockVLayer(VLHandle);
 					}
-				}*/
+				}
+			}	else
+			{
+				LONG offx = WindowMain->BorderLeft;
+				LONG offy = WindowMain->BorderTop;
+
+				ScreenData28bit(screen, tempscreendata,colortable8,ATARI_WIDTH,ATARI_HEIGHT);
+
+				if(Scalable && (InnerWidth(WindowMain)!=ATARI_WIDTH || InnerHeight(WindowMain) != ATARI_HEIGHT))
+				{
+					ScalePixelArray( tempscreendata, ATARI_WIDTH, ATARI_HEIGHT, ATARI_WIDTH, WindowMain->RPort, offx, offy,
+												InnerWidth(WindowMain), InnerHeight(WindowMain), RECTFMT_LUT8);
+				}	else
+				{
+					struct RastPort temprp;
+					InitRastPort(&temprp);
+					WritePixelArray8( WindowMain->RPort,offx,offy,offx+ATARI_WIDTH-1,offy+ATARI_HEIGHT-1, tempscreendata, &temprp);
+				}
+
+				if(ShowFPS)
+				{
+					LONG len;
 	
-					UnLockVLayer(VLHandle);
+					SetABPenDrMd(WindowMain->RPort,colortable8[15],colortable8[0],JAM2);
+					len = TextLength(WindowMain->RPort,fpsbuf,strlen(fpsbuf));
+					Move(WindowMain->RPort, offx + WindowMain->Width - 20 - len, offy + 4 + WindowMain->RPort->TxBaseline);
+					Text(WindowMain->RPort, fpsbuf,strlen(fpsbuf));
 				}
 			}
 		}	else
 		{
-//			LONG x,y;
-			LONG offx = WindowMain->BorderLeft;
-			LONG offy = WindowMain->BorderTop;
+			struct RastPort temprp;
+			LONG x = -32;
+			LONG y = 0;
 
-			ScreenData28bit(screen, tempscreendata,colortable8,ATARI_WIDTH,ATARI_HEIGHT);
-
-/*			UBYTE *srcdata = screen;
-			ULONG *destdata = (ULONG*)tempscreendata;
-
-			for(y=offy;y<ATARI_HEIGHT+offy;y++)
-			{
-				for(x=0;x<ATARI_WIDTH/4;x++)
-				{
-					UBYTE data1 = colortable8[*srcdata++];
-					UBYTE data2 = colortable8[*srcdata++];
-					UBYTE data3 = colortable8[*srcdata++];
-					UBYTE data4 = colortable8[*srcdata++];
-
-					*destdata++ = (data1<<24)|(data2<<16)|(data3<<8)|data4;
-				}
-			}*/
-
-			if(Scalable && (InnerWidth(WindowMain)!=ATARI_WIDTH || InnerHeight(WindowMain) != ATARI_HEIGHT))
-			{
-				ScalePixelArray( tempscreendata, ATARI_WIDTH, ATARI_HEIGHT, ATARI_WIDTH, WindowMain->RPort, offx, offy,
-											InnerWidth(WindowMain), InnerHeight(WindowMain), RECTFMT_LUT8);
-			}	else
-			{
-				struct RastPort temprp;
-				InitRastPort(&temprp);
-				WritePixelArray8( WindowMain->RPort,offx,offy,offx+ATARI_WIDTH-1,offy+ATARI_HEIGHT-1, tempscreendata, &temprp);
-			}
+			InitRastPort(&temprp);
+			WritePixelArray8( WindowMain->RPort,x,y,x+ATARI_WIDTH-1,y+ATARI_HEIGHT-1, screen, &temprp);
 
 			if(ShowFPS)
 			{
 				LONG len;
-	
-				SetABPenDrMd(WindowMain->RPort,colortable8[15],colortable8[0],JAM2);
+
+				SetABPenDrMd(WindowMain->RPort,15,0,JAM2);
 				len = TextLength(WindowMain->RPort,fpsbuf,strlen(fpsbuf));
-				Move(WindowMain->RPort, offx + WindowMain->Width - 20 - len, offy + 4 + WindowMain->RPort->TxBaseline);
+				Move(WindowMain->RPort, WindowMain->Width - 20 - len, 4 + WindowMain->RPort->TxBaseline);
 				Text(WindowMain->RPort, fpsbuf,strlen(fpsbuf));
 			}
 		}
-	}	else
-	{
-		struct RastPort temprp;
-		LONG x = -32;
-		LONG y = 0;
-
-		InitRastPort(&temprp);
-		WritePixelArray8( WindowMain->RPort,x,y,x+ATARI_WIDTH-1,y+ATARI_HEIGHT-1, screen, &temprp);
-
-		if(ShowFPS)
-		{
-			LONG len;
-
-			SetABPenDrMd(WindowMain->RPort,15,0,JAM2);
-			len = TextLength(WindowMain->RPort,fpsbuf,strlen(fpsbuf));
-			Move(WindowMain->RPort, WindowMain->Width - 20 - len, 4 + WindowMain->RPort->TxBaseline);
-			Text(WindowMain->RPort, fpsbuf,strlen(fpsbuf));
-		}
 	}
 
-//	gettimeofday(&tv2,NULL);
-//	SubTime(&tv2,&tv);
+/*
+	gettimeofday(&tv2,NULL);
+	SubTime(&tv2,&tv);
 
-//	printf("secs: %ld  mics: %ld\n",tv2.tv_secs,tv2.tv_micro);
+	printf("secs: %ld  mics: %ld\n",tv2.tv_secs,tv2.tv_micro);
+*/
 
 	UpdateSound();
 }
 
-//-------------------------------------
+/**************************************************************************
+ Handle Keyboard
+**************************************************************************/
 int Atari_Keyboard (void)
 {
 	int keycode=-1;
@@ -2343,9 +2044,12 @@ int Atari_Keyboard (void)
 						break;
 
 			case	IDCMP_RAWKEY:
-						printf("%lx  %lx\n",code,qual);
 						switch (code)
 						{
+							case	0x50:					/* F1 */
+										keycode = AKEY_UI;
+										break;
+
 							case	0x51:					/* F2 */
 										consol &= 0x03;
 										keycode = AKEY_NONE;
@@ -2460,147 +2164,64 @@ int Atari_Keyboard (void)
 	return keycode;
 }
 
-//-------------------------------------
-int Atari_Joystick(void)
+/**************************************************************************
+ Handle the joysting
+**************************************************************************/
+static void Atari_Joystick(void)
 {
-	WORD x;
-	WORD y;
-	UWORD code;
+  static int old_stick = 0xf;
 
-	int stick = 0;
+  if (GetMsg (gameport_msg_port))
+  {
+    WORD x = gameport_data.ie_X;
+    WORD y = gameport_data.ie_Y;
+    UWORD code = gameport_data.ie_Code;
+    int stick=0;
 
-	if(GetMsg (gameport_msg_port))
-	{
-		x = gameport_data.ie_X;
-		y = gameport_data.ie_Y;
-		code = gameport_data.ie_Code;
+    switch(x)
+    {
+      case  -1:
+            switch (y)
+            {
+              case  -1: stick = 10; break;
+              case   0: stick = 11; break;
+              case   1: stick = 9; break;
+            }
+            break;
 
-		switch(x)
-		{
-			case	-1:
-						switch (y)
-						{
-							case	-1 :
-										stick = 10;
-										break;
+      case  0:
+            switch (y)
+            {
+              case  -1: stick = 14; break;
+              case   0: stick = 15; break;
+              case   1: stick = 13; break;
+            }
+            break;
 
-							case	0:
-										stick = 11;
-										break;
+      case  1:
+            switch (y)
+            {
+              case	-1: stick = 6; break;
+              case	 0: stick = 7; break;
+              case	 1: stick = 5; break;
+            }
+            break;
+    }
+    if (stick != 0) old_stick = stick;
 
-							case	1:
-										stick = 9;
-										break;
+    if(code == IECODE_LBUTTON) trig0 = 0;
+    else if (code == IECODE_LBUTTON | IECODE_UP_PREFIX) trig0 = 1;
 
-							default :
-										break;
-						}
-						break;
+    SendIO ((struct IORequest*)gameport_io_msg);
+  }
 
-			case	0:
-						switch (y)
-						{
-							case	-1:
-										stick = 14;
-										break;
-
-							case	0:
-										stick = 15;
-										break;
-
-							case	1:
-										stick = 13;
-										break;
-
-							default :
-										break;
-						}
-						break;
-
-			case	1:
-						switch (y)
-						{
-							case	-1:
-										stick = 6;
-										break;
-
-							case	0:
-										stick = 7;
-										break;
-
-							case	1:
-										stick = 5;
-										break;
-
-							default:
-										break;
-						}
-						break;
-
-			default :
-						break;
-		}
-
-		if(code == IECODE_LBUTTON)
-		{
-			if (stick == 0)
-			{
-				stick = old_stick_0 & 15;
-			}
-			else
-			{
-				stick = stick & 15;
-			}
-		}
-
-		if (code == IECODE_LBUTTON + IECODE_UP_PREFIX)
-		{
-			if (stick == 0)
-			{
-				stick = old_stick_0 | 16;
-			}
-			else
-			{
-				stick = stick | 16;
-			}
-		}
-
-		old_stick_0 = stick;
-		SendIO ((struct IORequest*)gameport_io_msg);
-	}
-	
-	if (stick == 0)
-	{
-		stick = old_stick_0;
-	}
-
-	stick0 = stick & 0x0f;
-	trig0 = (stick & 0x10) >> 4;
-
-/*	printf ("stick0 = %d   trig0 = %d\n", stick0, trig0);
-	return stick;
-*/
-	return stick;
+  stick0 = old_stick;
 }
 
-//-------------------------------------
+/**************************************************************************
+ Handle Joystick Port (direction)
+**************************************************************************/
 int Atari_PORT (int num)
-
-/*
- * ==========
- * Atari_PORT
- * ==========
- */
-
-/*
- * Revision     : v0.2.0a
- * Introduced   : 2nd September 1995
- * Last updated : 3rd September 1995
- *
- * Notes: Hook required by v0.2.0. All the work is actually done in
- * Atari_Joystick and Atari_Paddle.
- */
-
 {
 	if (num == 0)
 	{
@@ -2620,24 +2241,10 @@ int Atari_PORT (int num)
 	}
 }
 
-//-------------------------------------
+/**************************************************************************
+ Initialize the Atari Prefs to sensible values
+**************************************************************************/
 int Atari_TRIG (int num)
-
-/*
- * ==========
- * Atari_TRIG
- * ==========
- */
-
-/*
- * Revision     : v0.1.9a
- * Introduced   : 2nd September 1995
- * Last updated : 2nd September 1995
- *
- * Notes: Hook required by v0.1.9. All the work is actually done in
- * Atari_Joystick.
- */
-
 {
 	if (num == 0)
 	{
@@ -2648,68 +2255,61 @@ int Atari_TRIG (int num)
 		return 1;
 }
 
-//-------------------------------------
 int Atari_POT (int num)
-
-/*
- * =========
- * Atari_POT
- * =========
- */
-
-/*
- * Revision     : v0.2.0a
- * Introduced   : 2nd September 1995
- * Last updated : 3rd September 1995
- *
- * Notes: Currently acts as nothing more than a hook.
- */
-
-
 {
 	return PaddlePos;
 }
 
-//-------------------------------------
+/**************************************************************************
+ Handle the Console Keys. Note that all the work is done
+ in Atari_Keyboard
+**************************************************************************/
 int Atari_CONSOL (void)
-
-/*
- * ============
- * Atari_CONSOL
- * ============
- */
-
-/*
- * Revision     : v0.1.9a
- * Introduced   : 2nd September 1995
- * Last updated : 2nd September 1995
- *
- * Notes: Hook required by v0.1.9. All the work is actually done in
- * Atari_Keyboard.
- */
-
 {
 	return consol;
 }
 
-//-------------------------------------
+/**************************************************************************
+ AUDC Hook
+**************************************************************************/
 void Atari_AUDC(int channel, int byte)
 {
 	channel--;
-	Update_pokey_sound(0xd201 + channel + channel, byte, 0, 4);
+#ifdef STEREO
+	Update_pokey_sound(/*0xd200 +*/ 1 + channel + channel, byte, 0, 4);
+#else
+	Update_pokey_sound(0xd200 + 1 + channel + channel, byte, 0, 4);
+#endif
 }
-//-------------------------------------
+
+/**************************************************************************
+ AUDF Hook
+**************************************************************************/
 void Atari_AUDF(int channel, int byte)
 {
 	channel--;
+#ifdef STEREO
+	Update_pokey_sound(/*0xd200 +*/ channel + channel, byte, 0, 4);
+#else
 	Update_pokey_sound(0xd200 + channel + channel, byte, 0, 4);
+#endif
 }
-//-------------------------------------
+
+/**************************************************************************
+ AUDCTL Hook
+**************************************************************************/
 void Atari_AUDCTL(int byte)
 {
-	Update_pokey_sound(0xd208, byte, 0, 4);
+#ifdef STEREO
+	Update_pokey_sound(/*0xd200+*/8, byte, 0, 4);
+#else
+	Update_pokey_sound(0xd200+8, byte, 0, 4);
+#endif
 }
-//-------------------------------------
+
+/**************************************************************************
+ Process some sound data (not used currently
+**************************************************************************/
 void pokey_update(void)
 {
 	LONG newpos;
@@ -2724,241 +2324,11 @@ void pokey_update(void)
 	ahi_samplepos = newpos;
 	ahi_updatecount++;
 }
-//-------------------------------------
 
-//-------------------------------------
-STATIC VOID DisplayControllerWindow(int Port)
-
-/*
- * =======================
- * DisplayControllerWindow
- * =======================
- */
-
-/*
- * Revision     : v0.2.1a
- * Introduced   : 3rd October 1995
- * Last updated : 12th October 1995
- */
-{
-}
-/*	struct Gadget *glist;
-	struct Gadget *g = CreateContext( &glist );
-	if( g )
-	{
-		struct NewGadget ng;
-		struct TextFont *font = dinfo->dri_Font;
-		UWORD fontY = font->tf_YSize;
-		UWORD offX = scr->WBorLeft;
-		UWORD offY = scr->WBorTop + fontY + 1;
-
-		struct RastPort *rp = &scr->RastPort;
-
-					UWORD modeLeft = TextLength( rp, setupModeText, strlen( setupModeText ))+2;
-					UWORD modeWidth = CalcMinLength( rp, setupModeLabels ) + 20;
-					UWORD wndWidth = 2*offX + modeLeft + modeWidth + 8;
-					UWORD butWidth = (wndWidth - 2*offX - 4)/2-1;
-					UWORD wndHeight = offY + 2*(fontY+6)+3+4;
-
-					ng.ng_VisualInfo = vis;
-					ng.ng_TextAttr = scr->Font;
-					ng.ng_LeftEdge = offX + modeLeft + 2;
-					ng.ng_TopEdge = offY + 2;
-					ng.ng_Width = modeWidth + 4;
-					ng.ng_Height = fontY + 6;
-					ng.ng_GadgetID = 1;
-					ng.ng_UserData = NULL;
-					ng.ng_Flags = PLACETEXT_LEFT;
-					ng.ng_GadgetText = setupModeText;
-
-					g = CreateGadget( CYCLE_KIND, g, &ng,
-													GTCY_Labels, setupModeLabels,
-													GTCY_Active, 1,
-													GT_Underscore, '_',
-													TAG_DONE );
-
-}
-*/
-/*static void DisplayControllerWindow (int Port)
-
-{
-	ULONG Class;
-	USHORT Code;
-	APTR Address;
-
-	struct IntuiMessage *IntuiMessage;
-
-	struct NewWindow	NewWindow;
-
-	struct Gadget *Gadget1 = NULL;
-	struct Gadget *Gadget2 = NULL;
-	struct Gadget *Gadget3 = NULL;
-	struct Gadget *Gadget4 = NULL;
-	struct Gadget *Gadget5 = NULL;
-	struct Gadget *Gadget6 = NULL;
-	struct Gadget *Gadget7 = NULL;
-	struct Gadget *Gadget8 = NULL;
-	struct Gadget *Gadget9 = NULL;
-
-	int QuitRoutine;
-	int Accepted;
-	int NewController;
-
-	NewWindow.LeftEdge = 0;
-	NewWindow.TopEdge = 11;
-	NewWindow.Width = 296;
-// Re-insert for v.0.2.2
-	NewWindow.Height = 155;
-
-	NewWindow.Height = 92; // 177
-	NewWindow.DetailPen = 0;
-	NewWindow.BlockPen = 15;
-	NewWindow.IDCMPFlags = CLOSEWINDOW | GADGETUP;
-	NewWindow.Flags = WINDOWCLOSE | GIMMEZEROZERO | WINDOWDRAG | SMART_REFRESH | ACTIVATE;
-	NewWindow.FirstGadget = NULL;
-	NewWindow.CheckMark = NULL;
-	NewWindow.Title = "Controller Options";
-	NewWindow.Screen = ScreenMain;
-	NewWindow.Type = ScreenType;
-	NewWindow.BitMap = NULL;
-	NewWindow.MinWidth = 92;
-	NewWindow.MinHeight = 65;
-	NewWindow.MaxWidth = 1280;
-	NewWindow.MaxHeight = 512;
-
-	WindowController = (struct Window*) OpenWindowTags
-	(
-		&NewWindow,
-		WA_NewLookMenus, TRUE,
-		WA_MenuHelp, TRUE,
-		WA_ScreenTitle, ATARI_TITLE,
-		TAG_DONE
-	);
-
-	if (ScreenType == CUSTOMSCREEN)
-	{
-		SetRast (WindowController->RPort, 6);
-	}
-
-// Re-insert for v0.2.2
-//	Rule (0, 16, 288, WindowController);
-
-	Rule (0, 7, 288, WindowController);
-
-	ShowText (1, 1, WindowController, "Emulate:");
-
-	Gadget1 = MakeGadget (3, 3, 16, 14, 0, WindowController, "Joystick", gadget_Mutual);
-
-	if (Controller == controller_Joystick)
-	{
-		Gadget1->Flags = GADGIMAGE | GADGHIMAGE | SELECTED;
-	}
-
-	Gadget2 = MakeGadget (3, 5, 16, 14, 0, WindowController, "Paddle", gadget_Mutual);
-
-	if (Controller == controller_Paddle)
-	{
-		Gadget2->Flags = GADGIMAGE | GADGHIMAGE | SELECTED;
-	}
-
-// Re-insert for v0.2.2
-//	ShowText (36, 1, WindowController, "Via:");
-
-	Gadget3 = MakeGadget (38, 3, 16, 14, 0, WindowController, "Joystick", gadget_Mutual);
-	Gadget4 = MakeGadget (38, 5, 16, 14, 0, WindowController, "Mouse", gadget_Mutual);
-
-	ShowText (1, 8, WindowController, "Amiga port:");
-
-	Gadget5 = MakeGadget (3, 10, 16, 14, 0, WindowController, "0", gadget_Mutual);
-	Gadget6 = MakeGadget (3, 12, 16, 14, 0, WindowController, "1", gadget_Mutual);
-	Gadget7 = MakeGadget (3, 14, 16, 14, 0, WindowController, "None", gadget_Mutual);
-
-	Gadget8 = MakeGadget (39, 18, 64, 14, 0, WindowController, "Ok", gadget_Button);
-	Gadget9 = MakeGadget (55, 18, 64, 14, 0, WindowController, "Cancel", gadget_Button);
-
-
-	Gadget8 = MakeGadget (39, 9, 64, 14, 0, WindowController, "Ok", gadget_Button);
-	Gadget9 = MakeGadget (55, 9, 64, 14, 0, WindowController, "Cancel", gadget_Button);
-
-	RefreshGadgets (Gadget1, WindowController, NULL);
-
-	QuitRoutine = FALSE;
-	Accepted = FALSE;
-
-	NewController = Controller;
-
-	while (QuitRoutine == FALSE)
-	{
-		while (IntuiMessage = (struct IntuiMessage*) GetMsg (WindowController->UserPort))
-		{
-			Class = IntuiMessage->Class;
-			Code = IntuiMessage->Code;
-			Address = IntuiMessage->IAddress;
-
-			ReplyMsg ((struct Message*)IntuiMessage);
-
-			switch (Class)
-			{
-				case CLOSEWINDOW :
-					QuitRoutine = TRUE;
-					break;
-				case GADGETUP :
-					if (Address == (APTR) Gadget1)
-					{
-						Gadget1->Flags = GADGIMAGE | GADGHIMAGE | SELECTED;
-						Gadget2->Flags = GADGIMAGE | GADGHIMAGE;
-						RefreshGadgets (Gadget1, WindowController, NULL);
-						NewController = controller_Joystick;
-					}
-					else if (Address == (APTR) Gadget2)
-					{
-						Gadget1->Flags = GADGIMAGE | GADGHIMAGE;
-						Gadget2->Flags = GADGIMAGE | GADGHIMAGE | SELECTED;
-						RefreshGadgets (Gadget1, WindowController, NULL);
-						NewController = controller_Paddle;
-					}
-// Re-insert for v0.2.2
-					else if (Address == (APTR) Gadget3)
-					{
-					}
-					else if (Address == (APTR) Gadget4)
-					{
-					}
-					else if (Address == (APTR) Gadget5)
-					{
-					}
-					else if (Address == (APTR) Gadget6)
-					{
-					}
-					else if (Address == (APTR) Gadget7)
-					{
-					}
-
-					else if (Address == (APTR) Gadget8)
-					{
-						QuitRoutine = TRUE;
-						Accepted = TRUE;
-					}
-					else if (Address == (APTR) Gadget9)
-					{
-						QuitRoutine = TRUE;
-					}
-					break;
-				default :
-					break;
-			}
-		}
-	}
-
-	if (Accepted)
-	{
-		Controller = NewController;
-	}
-
-	CloseWindow (WindowController);
-}*/
-
-//-------------------------------------
+/**************************************************************************
+ Display a question requester. Returns TRUE for a positive
+ answer otherwise FALSE
+**************************************************************************/
 LONG DisplayYesNoWindow(void)
 {
 	struct EasyStruct easy;
@@ -2971,10 +2341,9 @@ LONG DisplayYesNoWindow(void)
 	return EasyRequestArgs( WindowMain, &easy, NULL, NULL );
 }
 
-
-//-------------------------------------
-
-//-------------------------------------
+/**************************************************************************
+ Insert a disk into the drive
+**************************************************************************/
 LONG InsertDisk( LONG Drive )
 {
 	char Filename[256];
@@ -2989,19 +2358,19 @@ LONG InsertDisk( LONG Drive )
 		strcpy( Filename, DiskFileReq->rf_Dir );
 		if( AddPart( Filename, DiskFileReq->rf_File,255) != DOSFALSE )
 		{
-//			printf("File selected: %s  ",Filename);
 			if(SIO_Mount (Drive, Filename))
 			{
-//				printf("OK\n");
 				Success = TRUE;
-			}//	else printf("Error!\n");
+			}
 		}
 	}
 
 	return Success;
 }
 
-//-------------------------------------
+/**************************************************************************
+ Insert a ROM (not improved yet)
+**************************************************************************/
 LONG InsertROM(LONG CartType)
 {
 	struct FileRequester *FileRequester = NULL;
@@ -3069,9 +2438,11 @@ LONG InsertROM(LONG CartType)
 	return Success;
 }
 
-//-------------------------------------
 
-//-------------------------------------
+/**************************************************************************
+ Free everything which is assoicated with the Atari Screen while
+ Emulating
+**************************************************************************/
 VOID FreeDisplay(void)
 {
 	if( MenuMain )
@@ -3130,7 +2501,11 @@ VOID FreeDisplay(void)
 		ScreenMain = NULL;
 	}
 }
-//-------------------------------------
+
+/**************************************************************************
+ Allocate everything which is assoicated with the Atari Screen while
+ Emulating
+**************************************************************************/
 VOID SetupDisplay(void)
 {
 	UWORD ScreenWidth, ScreenHeight, ScrDepth;
@@ -3311,7 +2686,9 @@ VOID SetupDisplay(void)
 	}
 }
 
-//-------------------------------------
+/**************************************************************************
+ Iconify the emulator
+**************************************************************************/
 VOID Iconify(void)
 {
 	struct Window *iconifyWnd;
@@ -3335,7 +2712,5 @@ VOID Iconify(void)
 	}
 
 	SetupDisplay();
-	SetMenuStrip (WindowMain, MenuMain );//menu_Project);
+	SetMenuStrip (WindowMain, MenuMain );
 }
-
-//-------------------------------------

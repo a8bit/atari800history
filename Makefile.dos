@@ -88,7 +88,8 @@ OBJECTS =       atari.o \
 		compfile.o \
 		memory.o  \
 		pbi.o \
-		statesav.o
+		statesav.o \
+		diskled.o
 
 atari800.exe    :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800.exe
@@ -102,7 +103,7 @@ cpu.o           :       cpu.c $(INCLUDES)
 monitor.o       :       monitor.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
 
-sio.o           :       sio.c $(INCLUDES)
+sio.o           :       sio.c $(INCLUDES) diskled.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) sio.c
 
 devices.o       :       devices.c $(INCLUDES)
@@ -159,6 +160,9 @@ atari_curses.o  :       atari_curses.c $(INCLUDES)
 atari_amiga.o   :       atari_amiga.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_amiga.c
 
+atari_vga.o     :       atari_vga.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) atari_vga.c
+
 nas.o           :       nas.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) nas.c
 
@@ -167,13 +171,13 @@ vga_gfx.o		:	vga_gfx.c vga_gfx.h
 
 ataripcx.o	:	ataripcx.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
-	
+
 log.o	:	log.c log.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
-	
+
 compfile.o	:	compfile.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) compfile.c
-	
+
 joycfg.exe	:	joycfg.o pcjoy.h
 	$(LD) $(LDFLAGS) joycfg.o -o joycfg.exe
 
@@ -182,7 +186,10 @@ joycfg.o	:	joycfg.c pcjoy.h
 
 memory.o	:	memory.c memory.h memory-d.c memory-d.h emuos.h $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) memory.c
-		
+
+diskled.o	:	diskled.c diskled.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) diskled.c
+
 clean   :
 	del configure.exe
 	del config.h

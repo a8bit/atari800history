@@ -53,8 +53,10 @@ void SIO_Initialise(int *argc, char *argv[]);
 
 /* Some defines about the serial I/O timing. Currently fixed! */
 #define XMTDONE_INTERVAL 15
-#define SERIN_INTERVAL 15
-#define SEROUT_INTERVAL 15
-#define VBI_INTERVAL 165
-#define ACK_INTERVAL 50
+#define SERIN_INTERVAL 8
+#define SEROUT_INTERVAL 8
+#define ACK_INTERVAL 36
+#ifndef NO_SECTOR_DELAY
+#define SECTOR_DELAY 3200
+#endif
 #endif

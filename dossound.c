@@ -11,12 +11,6 @@ int speed_count = 0;
 static sound_enabled = TRUE;
 static int gain = 4;
 
-static int AUDCTL = 0x00;
-static int AUDF[4] =
-{0, 0, 0, 0};
-static int AUDC[4] =
-{0, 0, 0, 0};
-
 static int sample_pos;
 static unsigned char *buffer;
 static int frames_per_second = 60;

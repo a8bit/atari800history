@@ -119,6 +119,20 @@ void Voxware_Initialise(int *argc, char *argv[])
 	}
 }
 
+void Sound_Pause(void)
+{
+	if (sound_enabled) {
+		/* stop audio output */
+	}
+}
+
+void Sound_Continue(void)
+{
+	if (sound_enabled) {
+		/* start audio output */
+	}
+}
+
 void Voxware_Exit(void)
 {
 	if (sound_enabled)

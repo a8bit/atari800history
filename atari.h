@@ -41,11 +41,6 @@ typedef enum {
 	Atari5200
 } Machine;
 
-#define LED_NO_UNIT		0x08
-#define LED_READ		0x10
-#define LED_WRITE		0x20
-#define LED_OTHER		0x40
-
 #define TV_PAL 312
 #define TV_NTSC 262
 
@@ -60,7 +55,7 @@ extern int draw_display;		/* Draw actualy generated screen */
 #define ATARI_WIDTH  384
 #define ATARI_HEIGHT 240
 
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9h"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.9i"
 
 extern int xpos;
 extern int xpos_limit;

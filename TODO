@@ -1,5 +1,10 @@
 This is a list of things that need to be done
 ---------------------------------------------
+o update Makefiles with the new diskled 
+
+o add Paddle support to all architectures
+
+o add Sound_Pause() to all architectures
 
 o merge common parts of VGA, SVGALIB, X11 and AtariFalcon keyboard stuff
   into one source file named like atari_keyboard.c.

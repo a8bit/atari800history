@@ -9,6 +9,10 @@
 #define DONT_USE_RTCONFIGUPDATE
 
 #define POKEYSND_BIG_ENDIAN
+#define SIGNED_SAMPLES
+/*#define STEREO*/
+/*#define VERY_SLOW*/
+
 #define USE_NEW_BINLOAD
 
 #endif

@@ -1000,20 +1000,20 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 				*buffer++ = (uint8) iout;
 			}
 #ifdef STEREO
-			if (stereo_enabled ? iout2 : iout > SAMP_MAX) {	/* then check high limit */
+			if ((stereo_enabled ? iout2 : iout) > SAMP_MAX) {	/* then check high limit */
 				*buffer++ = (uint8) SAMP_MAX;	/* and limit if greater */
 			}
-			else if (stereo_enabled ? iout2 : iout < SAMP_MIN) {		/* else check low limit */
+			else if ((stereo_enabled ? iout2 : iout) < SAMP_MIN) {		/* else check low limit */
 				*buffer++ = (uint8) SAMP_MIN;	/* and limit if less */
 			}
 			else {				/* otherwise use raw value */
-				*buffer++ = (uint8) stereo_enabled ? iout2 : iout;
+				*buffer++ = (uint8) (stereo_enabled ? iout2 : iout);
 			}
 #endif /* STEREO */
 #else /* CLIP */
 			*buffer++ = (uint8) iout;	/* clipping not selected, use value */
 #ifdef STEREO
-			*buffer++ = (uint8) stereo_enabled ? iout2 : iout;
+			*buffer++ = (uint8) (stereo_enabled ? iout2 : iout);
 #endif /* STEREO */
 #endif /* CLIP */
 

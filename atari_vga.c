@@ -42,6 +42,12 @@
 #define KEYBOARD_EXCLUSIVE
 */
 
+#define MOUSE_OFF 0
+#define MOUSE_PAD 1
+#define MOUSE_PEN 2
+static int mouse_mode=MOUSE_OFF;
+#define MOUSE_SHL 3
+
 static int consol;
 static int trig0;
 static int stick0;
@@ -70,7 +76,7 @@ extern UBYTE break_step;  /* used to prevent switching to gfx mode while doing m
 
 static UBYTE LEDstatus=0; /*status of disk LED*/
 
-static int video_mode=0;       /*video mode (0-3)*/
+static int video_mode=1;       /*video mode (0-3)*/
 static int use_vesa=1;         /*use vesa mode?*/
 static int use_vret=0;           /*control vertical retrace?*/
 #ifdef AT_USE_ALLEGRO
@@ -239,7 +245,17 @@ void read_LPTjoy(int port, int joyport)
         }
 }
 
-
+void update_leds(void)
+{
+	outportb(0x60,0xed);
+	asm("	   jmp 0f
+		0: jmp 1f
+		1:
+	");
+	outportb(0x60,	(PC_keyboard ? 0 : 2)
+			|(LEDstatus ? 4 : 0)
+			|(joy_keyboard ? 1 : 0));
+}
 
 /* -------------------------------------------------------------------------- */
 /* KEYBOARD HANDLER                                                           */
@@ -322,15 +338,7 @@ void key_handler(void)
                         if (!key_leave)
                         {
                           joy_keyboard=!joy_keyboard;
-                          outportb(0x60,0xed);     /*change the scroll lock LED*/
-                          asm("   jmp 0f
-                               0: jmp 1f
-                               1:
-                               ");
-                          if (joy_keyboard)
-                            outportb(0x60,0x3);
-                          else
-                            outportb(0x60,0x2);
+                          update_leds();
 #ifdef KEYBOARD_EXCLUSIVE
                           if (!joy_keyboard)
                           {
@@ -428,17 +436,7 @@ void key_init(void)
         int i;
         for (i=0;i<256;i++) keypush[i]=0; /*none key is pressed*/
         extended_key_follows=FALSE;
-        /*set Scroll lock LED */
-        outportb(0x60,0xed);
-        asm("   jmp 0f
-             0: jmp 1f
-             1:
-             ");
-        if (joy_keyboard)
-          outportb(0x60,0x3);
-        else
-          outportb(0x60,0x2);
-
+	update_leds();
         raw_key_r=0;raw_key=0;
         new_key_handler.pm_offset = (int) key_handler;
         new_key_handler.pm_selector = _go32_my_cs();
@@ -604,15 +602,6 @@ void Atari_DisplayScreen(UBYTE * ascreen)
       if (vga_started) /*draw screen only in graphics mode*/
       {
 
-        if (LEDstatus)  /*draw disk LED*/
-        {
-          int i,pos;
-          if (video_mode==0) pos=first_col+first_lno*ATARI_WIDTH;
-                        else pos=first_col;
-          for (i=0;i<12;i++) {ascreen[pos]=0xba;ascreen[pos+ATARI_WIDTH]=0xba;pos++;}
-          LEDstatus--;
-        }
-
       if(use_vret) v_ret(); /*vertical retrace control */
 #if AT_USE_ALLEGRO
         /*draw screen using Allegro*/
@@ -701,16 +690,14 @@ void Atari_DisplayScreen(UBYTE * ascreen)
 #endif
 }
 
-
-
 /* -------------------------------------------------------------------------- */
-#ifdef SET_LED
+#if defined(SET_LED) && defined(NO_LED_ON_SCREEN)
 void Atari_Set_LED(int how)
 {
-  LEDstatus=8*how;
+	LEDstatus=how;
+	update_leds();
 }
 #endif
-
 
 
 
@@ -759,6 +746,24 @@ void Atari_Initialise(int *argc, char *argv[])
                 {
                   use_vret=TRUE;
                 }
+                else if (strcmp(argv[i],"-mouse") == 0)
+                {
+                  i++;
+                  if (strcmp(argv[i],"off") == 0)
+			mouse_mode=MOUSE_OFF;
+                  if (strcmp(argv[i],"pad") == 0)
+			mouse_mode=MOUSE_PAD;
+                  if (strcmp(argv[i],"pen") == 0)
+			mouse_mode=MOUSE_PEN;
+                }
+		else if (strcmp(argv[i],"-keyboard") == 0)
+		{
+			i++;
+			if (strcmp(argv[i],"0") == 0)
+				PC_keyboard = TRUE;
+			else
+				PC_keyboard = FALSE;
+		}
                 else {
                         if (strcmp(argv[i], "-help") == 0) {
                                 printf("\t-interlace    Generate screen with interlace\n");
@@ -772,6 +777,11 @@ void Atari_Initialise(int *argc, char *argv[])
                                 printf("\t\t3 - 320x240, interlaced with darker lines (slower!)\n");
                                 printf("\t-novesa       Do not use vesa2 videomodes\n");
                                 printf("\t-vretrace     Use vertical retrace control\n");
+                                printf("\t-mouse pad    Use mouse as paddles / touch pad\n");
+                                printf("\t-mouse pen    Use mouse as light pen\n");
+                                printf("\t-mouse off    Do not use mouse\n");
+				printf("\t-keyboard 0   PC keyboard layout\n");
+				printf("\t-keyboard 1   Atari keyboard layout\n");
                                 printf("\nPress Return/Enter to continue...");
                                 getchar();
                                 printf("\r                                 \n");
@@ -899,6 +909,31 @@ void Atari_Initialise(int *argc, char *argv[])
         consol = 7;
 
         SetupVgaEnvironment();
+
+	/* initialize mouse */
+	if (mouse_mode!=MOUSE_OFF) {
+		union REGS rg;
+		rg.x.ax=0;
+		int86(0x33,&rg,&rg);
+		if (rg.x.ax==0xffff) {
+			rg.x.ax=7;
+			rg.x.cx=0;
+			rg.x.dx=mouse_mode==MOUSE_PAD?228<<MOUSE_SHL:167<<MOUSE_SHL;
+			int86(0x33,&rg,&rg);
+			rg.x.ax=8;
+			rg.x.cx=0;
+			rg.x.dx=mouse_mode==MOUSE_PAD?228<<MOUSE_SHL:119<<MOUSE_SHL;
+			int86(0x33,&rg,&rg);
+			rg.x.ax=4;
+			rg.x.cx=mouse_mode==MOUSE_PAD?114<<MOUSE_SHL:84<<MOUSE_SHL;
+			rg.x.dx=mouse_mode==MOUSE_PAD?114<<MOUSE_SHL:60<<MOUSE_SHL;
+			int86(0x33,&rg,&rg);
+		}
+		else {
+			printf("Can't find mouse!\n");
+			mouse_mode=MOUSE_OFF;
+		}
+	}
 }
 
 /* -------------------------------------------------------------------------- */
@@ -958,6 +993,32 @@ int Atari_Configure(char* option,char* parameters)
     if (help!=9) return 0;  /*not enough parameters*/
     return 1;
   }
+  else if (strcmp(option,"MOUSE")==0)
+  {
+    if (strcmp(parameters,"OFF")==0) {
+      mouse_mode=MOUSE_OFF;
+      return 1;
+    }
+    if (strcmp(parameters,"PAD")==0) {
+      mouse_mode=MOUSE_PAD;
+      return 1;
+    }
+    if (strcmp(parameters,"PEN")==0) {
+      mouse_mode=MOUSE_PEN;
+      return 1;
+    }
+  }
+  else if (strcmp(option,"KEYBOARD")==0)
+  {
+    if (strcmp(parameters,"0")==0) {
+      PC_keyboard=TRUE;
+      return 1;
+    }
+    if (strcmp(parameters,"1")==0) {
+      PC_keyboard=FALSE;
+      return 1;
+    }
+  }
   return 0;  /* unknown option */
 }
 
@@ -974,7 +1035,8 @@ int Atari_Exit(int run_monitor)
 
         key_delete();                           /* enable keyboard in monitor */
 
-        if (run_monitor)
+        if (run_monitor) {
+		Sound_Pause();
                 if (monitor()) {
 #ifdef MONITOR_BREAK
                         if (!break_step)       /*do not enter videomode when stepping through the code*/
@@ -982,9 +1044,10 @@ int Atari_Exit(int run_monitor)
 #else
                         SetupVgaEnvironment();
 #endif
-
+			Sound_Continue();
                         return 1;                       /* return to emulation */
                 }
+	}
 
 #ifndef USE_DOSSOUND
         Sound_Exit();
@@ -1178,10 +1241,12 @@ int Atari_Keyboard(void)
                 if (control) {
                         PC_keyboard = TRUE;     /* PC keyboard mode (default) */
                         keycode = AKEY_NONE;
+			update_leds();
                 }
                 else if (SHIFT_KEY) {
                         PC_keyboard = FALSE;    /* Atari keyboard mode */
                         keycode = AKEY_NONE;
+			update_leds();
                 }
                 else
                         keycode = AKEY_UI;
@@ -1528,8 +1593,24 @@ int Atari_Keyboard(void)
 
 int Atari_PORT(int num)
 {
-        if (num == 0)
-                return (stick1 << 4) | stick0;
+        if (num == 0) {
+		int val=(stick1 << 4) | stick0;
+		if (mouse_mode!=MOUSE_OFF) {
+			union REGS rg;
+			rg.x.ax=3;
+			int86(0x33,&rg,&rg);
+			if (mouse_mode==MOUSE_PAD) {
+				if (rg.x.bx&1)
+					val&=~4;
+				if (rg.x.bx&2)
+					val&=~8;
+			}
+			else
+				if (rg.x.bx&1)
+					val&=~1;
+		}
+		return val;
+	}
         else
                 return (stick3 << 4) | stick2;
 }
@@ -1559,7 +1640,12 @@ int Atari_POT(int num)
                 if (num >= 0 && num < 2)
                         return POT[num];
         }
-
+	if (mouse_mode==MOUSE_PAD && num<2) {
+		union REGS rg;
+		rg.x.ax=3;
+		int86(0x33,&rg,&rg);
+		return num==1?228-(rg.x.dx>>MOUSE_SHL):228-(rg.x.cx>>MOUSE_SHL);
+	}
         return 228;
 }
 
@@ -1568,6 +1654,20 @@ int Atari_POT(int num)
 int Atari_CONSOL(void)
 {
         return consol;
+}
+
+/* -------------------------------------------------------------------------- */
+
+int Atari_PEN(int vertical)
+{
+	if (mouse_mode==MOUSE_PEN) {
+		union REGS rg;
+		rg.x.ax=3;
+		int86(0x33,&rg,&rg);
+		return vertical?4+(rg.x.dx>>MOUSE_SHL):44+(rg.x.cx>>MOUSE_SHL);
+	}
+	else
+		return vertical?0xff:0;
 }
 
 /* -------------------------------------------------------------------------- */

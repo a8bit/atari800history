@@ -225,7 +225,7 @@ UWORD assembler(UWORD addr);
     {"P0PL"  ,0xd00c}, {"SIZEM", 0xd00c}, {"P1PL"  ,0xd00d}, {"GRAFP0",0xd00d}, 
     {"P2PL"  ,0xd00e}, {"GRAFP1",0xd00e}, {"P3PL"  ,0xd00f}, {"GRAFP2",0xd00f},
     {"TRIG0" ,0xd010}, {"GRAFP3",0xd010}, {"TRIG1" ,0xd011}, {"GRAFM", 0xd011}, 
-    {"TRIG2" ,0xd012}, {"COLPM0",0x0012}, {"TRIG3" ,0xd013}, {"COLPM1",0xd013},
+    {"TRIG2" ,0xd012}, {"COLPM0",0xd012}, {"TRIG3" ,0xd013}, {"COLPM1",0xd013},
     {"PAL"   ,0xd014}, {"COLPM2",0xd014}, {"COLPM3",0xd015}, {"COLPF0",0xd016},
     {"COLPF1",0xd017},
     {"COLPF2",0xd018}, {"COLPF3",0xd019}, {"COLBK", 0xd01a}, {"PRIOR", 0xd01b},
@@ -509,6 +509,10 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 					s[i] = '\0';
 					break;
 				}
+		}
+		if (s[0] == '!') {
+			system(s + 1);
+			continue;
 		}
 		t = get_token(s);
 		if (t == NULL) {
@@ -1082,8 +1086,8 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 #ifdef PROFILE
 			printf("PROFILE                        - Display profiling statistics\n");
 #endif
-			printf("COLDSTART                      - Perform system coldstart\n");
-			printf("WARMSTART                      - Perform system warmstart\n");
+			printf("COLDSTART, WARMSTART           - Perform system coldstart/warmstart\n");
+			printf("!command                       - Execute shell command\n");
 			printf("QUIT                           - Quit emulator\n");
 			printf("HELP or ?                      - This text\n");
 		}

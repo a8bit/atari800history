@@ -25,18 +25,12 @@
 #include <file.h>
 #else
 #include <fcntl.h>
-#ifndef AMIGA
 #include <unistd.h>
-#endif
 #endif
 #endif
 
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
-extern int DELAYED_XMTDONE_IRQ;
-
-#define FALSE   0
-#define TRUE    1
 
 #include "atari.h"
 #include "config.h"
@@ -46,13 +40,10 @@ extern int DELAYED_XMTDONE_IRQ;
 #include "pokeysnd.h"
 #include "platform.h"
 #include "log.h"
+#include "diskled.h"
 
 void CopyFromMem(int to, UBYTE *, int size);
 void CopyToMem(UBYTE *, ATPtr from, int size);
-
-#ifdef WIN32
-extern void Atari_Set_Disk_LED( int unit, int state );
-#endif
 
 /*
  * it seems, there are two different ATR formats with different handling for
@@ -349,8 +340,8 @@ int ReadSector(int unit, int sector, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
 			if (sector > 0 && sector <= sectorcount[unit]) {
-#ifdef WIN32
-				Atari_Set_Disk_LED( unit, LED_READ );
+#ifdef SET_LED
+				Atari_Set_LED(unit + LED_READ);
 #endif
 				size = SeekSector(unit, sector);
 				read(disk[unit], buffer, size);
@@ -373,8 +364,8 @@ int WriteSector(int unit, int sector, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
 			if (drive_status[unit] == ReadWrite) {
-#ifdef WIN32
-					Atari_Set_Disk_LED( unit, LED_WRITE );
+#ifdef SET_LED
+				Atari_Set_LED(unit + LED_WRITE);
 #endif
 				if (sector > 0 && sector <= sectorcount[unit]) {
 					size = SeekSector(unit, sector);
@@ -624,9 +615,8 @@ void SIO(void)
 	int length = DPeek(0x308);
 	int realsize = 0;
 	int cmd = Peek(0x302);
-
-#ifdef SET_LED
-	Atari_Set_LED(1);
+#ifndef NO_SECTOR_DELAY
+	static int delay_counter = 1;	/* no delay on first read */
 #endif
 
 /*
@@ -662,6 +652,18 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x52:				/* Read */
+#ifndef NO_SECTOR_DELAY
+			if (sector == 2) {
+				if ((xpos = xpos_limit) == LINE_C)
+					delay_counter--;
+				if (delay_counter) {
+					regPC = 0xe459;	/* stay in SIO */
+					return;
+				}
+				else
+					delay_counter = SECTOR_DELAY;
+			}
+#endif
 			SizeOfSector(unit, sector, &realsize, NULL);
 			if (realsize == length) {
 				result = ReadSector(unit, sector, DataBuffer);
@@ -782,7 +784,7 @@ void Command_Frame(void)
 			DataIndex = 0;
 			ExpectedBytes = 14;
 			TransferStatus = SIO_ReadFrame;
-			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			break;
 		case 0x4f:
 			ExpectedBytes = 13;
@@ -795,6 +797,9 @@ void Command_Frame(void)
 			ExpectedBytes = realsize + 1;
 			DataIndex = 0;
 			TransferStatus = SIO_WriteFrame;
+#ifdef SET_LED
+			Atari_Set_LED(unit + LED_WRITE);
+#endif
 			break;
 		case 0x52:				/* Read */
 			SizeOfSector((UBYTE)unit, sector, &realsize, NULL);
@@ -803,7 +808,14 @@ void Command_Frame(void)
 			DataIndex = 0;
 			ExpectedBytes = 2 + realsize;
 			TransferStatus = SIO_ReadFrame;
-			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			DELAYED_SERIN_IRQ = SERIN_INTERVAL;
+#ifndef NO_SECTOR_DELAY
+			if (sector == 2)
+				DELAYED_SERIN_IRQ += SECTOR_DELAY;
+#endif
+#ifdef SET_LED
+			Atari_Set_LED(unit + LED_READ);
+#endif
 			break;
 		case 0x53:				/* Status */
 			DataBuffer[0] = DriveStatus(unit, DataBuffer + 1);
@@ -811,7 +823,7 @@ void Command_Frame(void)
 			DataIndex = 0;
 			ExpectedBytes = 6;
 			TransferStatus = SIO_ReadFrame;
-			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			break;
 		case 0x21:				/* Single Density Format */
 			DataBuffer[0] = FormatSingle(unit, DataBuffer + 1);
@@ -819,7 +831,7 @@ void Command_Frame(void)
 			DataIndex = 0;
 			ExpectedBytes = 2 + 128;
 			TransferStatus = SIO_FormatFrame;
-			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			break;
 		case 0x22:				/* Duel Density Format */
 			DataBuffer[0] = FormatEnhanced(unit, DataBuffer + 1);
@@ -827,7 +839,7 @@ void Command_Frame(void)
 			DataIndex = 0;
 			ExpectedBytes = 2 + 128;
 			TransferStatus = SIO_FormatFrame;
-			DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+			DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			break;
 		case 0x66:				/* US Doubler Format - I think! */
 			result = 'A';		/* Not yet supported... to be done later... */
@@ -836,8 +848,8 @@ void Command_Frame(void)
 			Aprint("Command frame: %02x %02x %02x %02x %02x",
 				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
 				   CommandFrame[3], CommandFrame[4]);
-			break;
 			result = 0;
+			break;
 		}
 
 	if (result == 0)
@@ -856,9 +868,6 @@ void SwitchCommandFrame(int onoff)
 		DataIndex = 0;
 		ExpectedBytes = 5;
 		TransferStatus = SIO_CommandFrame;
-#ifdef SET_LED
-		Atari_Set_LED(1);
-#endif
 		/* printf("Command frame expecting.\n"); */
 	}
 	else {
@@ -913,7 +922,7 @@ void SIO_PutByte(int byte)
 				if (((CommandFrame[0] >= 0x31) && (CommandFrame[0] <= 0x38))) {
 					TransferStatus = SIO_StatusRead;
 					/* printf("Command frame done.\n"); */
-					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+					DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 				}
 				else
 					TransferStatus = SIO_NoFrame;
@@ -936,7 +945,7 @@ void SIO_PutByte(int byte)
 						DataBuffer[1] = result;
 						DataIndex = 0;
 						ExpectedBytes = 2;
-						DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+						DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 						TransferStatus = SIO_FinalStatus;
 						/* printf("Sector written, result= %x.\n",result); */
 					}
@@ -947,7 +956,7 @@ void SIO_PutByte(int byte)
 					DataBuffer[0] = 'E';
 					DataIndex = 0;
 					ExpectedBytes = 1;
-					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+					DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 					TransferStatus = SIO_FinalStatus;
 				}
 			}
@@ -959,7 +968,7 @@ void SIO_PutByte(int byte)
 /*	default:
 		Aprint("Unexpected data output :%x", byte);
 */	}
-	DELAYED_SEROUT_IRQ += SEROUT_INTERVAL;
+	DELAYED_SEROUT_IRQ = SEROUT_INTERVAL;
 
 }
 
@@ -977,7 +986,7 @@ int SIO_GetByte(void)
 		break;
 	case SIO_FormatFrame:
 		TransferStatus = SIO_ReadFrame;
-		DELAYED_SERIN_IRQ += SERIN_INTERVAL << 3;
+		DELAYED_SERIN_IRQ = SERIN_INTERVAL << 3;
 	case SIO_ReadFrame:
 		if (DataIndex < ExpectedBytes) {
 			byte = DataBuffer[DataIndex++];
@@ -989,7 +998,7 @@ int SIO_GetByte(void)
 				/* printf("Transfer complete.\n"); */
 			}
 			else {
-				DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+				DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			}
 		}
 		else {
@@ -1009,9 +1018,9 @@ int SIO_GetByte(void)
 			}
 			else {
 				if (DataIndex == 0)
-					DELAYED_SERIN_IRQ += SERIN_INTERVAL + ACK_INTERVAL;
+					DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 				else
-					DELAYED_SERIN_IRQ += SERIN_INTERVAL;
+					DELAYED_SERIN_IRQ = SERIN_INTERVAL;
 			}
 		}
 		else {

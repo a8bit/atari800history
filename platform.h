@@ -20,6 +20,7 @@ int Atari_PORT(int num);
 int Atari_TRIG(int num);
 int Atari_POT(int num);
 int Atari_CONSOL(void);
+int Atari_PEN(int vertical);
 #ifdef SET_LED
 void Atari_Set_LED(int how);
 #endif

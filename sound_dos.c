@@ -58,6 +58,18 @@ void Sound_Initialise(int *argc, char *argv[])
 	}
 }
 
+void Sound_Pause(void)
+{
+	if (sound_enabled)
+		Stop_audio_output();
+}
+
+void Sound_Continue(void)
+{
+	if (sound_enabled)
+		Start_audio_output(DMAmode, Pokey_process);
+}
+
 void Sound_Exit(void)
 {
 	if (sound_enabled)

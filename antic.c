@@ -3,11 +3,10 @@
 /*              David Firth                         */
 /* Correct timing, internal memory and other fixes: */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 19th March 2000                    */
+/* Last changes: 2nd April 2000                     */
 /* ------------------------------------------------ */
 
 #include <stdio.h>
-#include <stdlib.h>		/* for rand() */
 #include <string.h>
 
 #define LCHOP 3			/* do not build lefmost 0..3 characters in wide mode */
@@ -27,9 +26,9 @@
 #include "gtia.h"
 #include "antic.h"
 #include "pokey.h"
-#include "sio.h"
 #include "log.h"
 #include "statesav.h"
+#include "platform.h"
 
 /* ANTIC Registers --------------------------------------------------------- */
 
@@ -139,13 +138,13 @@ executing it. That's why VSCOF_C > LINE_C is correct.
 How WSYNC is now implemented:
 
 * On writing WSYNC:
-  - if xpos is less than WSYNC_C and xpos_limit is greater than WSYNC_C,
+  - if xpos <= WSYNC_C && xpos_limit >= WSYNC_C,
     we only change xpos to WSYNC_C - that's all
   - otherwise we set wsync_halt and change xpos to xpos_limit causing GO()
     to return
 
 * At the beginning of GO() (CPU emulation), when wsync_halt is set:
-  - if xpos_limit<WSYNC_C we return
+  - if xpos_limit < WSYNC_C we return
   - else we set xpos to WSYNC_C, reset wsync_halt and emulate some cycles
 
 We don't emulate NMIST_C, NMI_C and SCR_C if it is unnecessary.
@@ -209,6 +208,16 @@ UBYTE wsync_halt = FALSE;
 
 int ypos;						/* Line number - lines 8..247 are on screen */
 
+/* Timing in first line of modes 2-5
+In these modes ANTIC takes more bytes than cycles. Despite this, it would be
+possible that SCR_C + cycles_taken > WSYNC_C. To avoid this we must take some
+cycles before SCR_C. before_cycles contains number of them, while extra_cycles
+contains difference between bytes taken and cycles taken plus before_cycles. */
+
+#define BEFORE_CYCLES (SCR_C - 32)
+/* It's number of cycles taken before SCR_C for not scrolled, narrow playfield.
+   It wasn't tested, but should be ok. ;) */
+
 /* Internal ANTIC registers ------------------------------------------------ */
 
 static UBYTE IR;				/* Instruction Register */
@@ -234,8 +243,9 @@ static int chars_displayed[6];
 static int x_min[6];
 static int ch_offset[6];
 static int load_cycles[6];
-static int extra_cycles[6];
 static int font_cycles[6];
+static int before_cycles[6];
+static int extra_cycles[6];
 
 /* border parameters for current display width */
 static int left_border_chars;
@@ -1029,9 +1039,8 @@ void do_border(int left_border_chars, int right_border_chars)
 
 /* ANTIC modes ------------------------------------------------------------- */
 
-void draw_antic_2(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_pm_scanline_ptr)
+void draw_antic_2(int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
-	UWORD t_chbase = chbase_40 + ((j & 0x07) ^ flip_mask);
 #ifdef UNALIGNED_LONG_OK
 	ULONG COL_6_LONG = cl_word[6] | (cl_word[6] << 16);
 #endif
@@ -1040,8 +1049,6 @@ void draw_antic_2(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_
 	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] =
 		lookup1[0x10] = lookup1[0x08] = lookup1[0x04] =
 		lookup1[0x02] = lookup1[0x01] = (colour_lookup[6] & 0xf0) | (colour_lookup[5] & 0x0f);
-	blank_lookup[0x60] = 0xff;
-	blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (j & 0xe) == 8 ? 0 : 0xff;
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = *ANTIC_memptr++;
 		UBYTE chdata;
@@ -1105,15 +1112,12 @@ void draw_antic_2(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_
 	}
 }
 
-void draw_antic_2_artif(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_pm_scanline_ptr)
+void draw_antic_2_artif(int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
-	UWORD t_chbase = chbase_40 + ((j & 0x07) ^ flip_mask);
 	int i;
 	ULONG screendata_tally;
 	UBYTE screendata = *ANTIC_memptr++;
 	UBYTE chdata;
-	blank_lookup[0x60] = 0xff;
-	blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (j & 0xe) == 8 ? 0 : 0xff;
 	chdata = (screendata & invert_mask) ? 0xff : 0;
 	if (blank_lookup[screendata & blank_mask])
 		chdata ^= dGetByte(t_chbase + ((UWORD) (screendata & 0x7f) << 3));
@@ -1158,16 +1162,13 @@ void draw_antic_2_artif(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULON
 	}
 }
 
-void draw_antic_2_gtia9_11(int j, int nchars, UBYTE *ANTIC_memptr, char *t_ptr, ULONG * t_pm_scanline_ptr)
+void draw_antic_2_gtia9_11(int nchars, UBYTE *ANTIC_memptr, char *t_ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
-	UWORD t_chbase = chbase_40 + ((j & 0x07) ^ flip_mask);
 	int i;
 	ULONG *ptr = (ULONG *) (t_ptr);
 	ULONG temp_count = 0;
 	ULONG base_colour = cl_word[8] | (cl_word[8] << 16);
 	ULONG increment;
-	blank_lookup[0x60] = 0xff;
-	blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (j & 0xe) == 8 ? 0 : 0xff;
 	if (PRIOR & 0x80)
 		increment = 0x10101010;
 	else
@@ -1198,82 +1199,6 @@ void draw_antic_2_gtia9_11(int j, int nchars, UBYTE *ANTIC_memptr, char *t_ptr, 
 				}
 				w_ptr++;
 			}
-		}
-		t_pm_scanline_ptr++;
-	}
-}
-
-void draw_antic_3(int j, int nchars, UBYTE *ANTIC_memptr, UBYTE *ptr, ULONG * t_pm_scanline_ptr)
-{
-	UWORD t_chbase = chbase_40 + ((j & 0x07) ^ flip_mask);
-#ifdef UNALIGNED_LONG_OK
-	ULONG COL_6_LONG = cl_word[6] | (cl_word[6] << 16);
-#endif
-	int i;
-	lookup1[0x00] = colour_lookup[6];
-	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] =
-		lookup1[0x10] = lookup1[0x08] = lookup1[0x04] =
-		lookup1[0x02] = lookup1[0x01] = (colour_lookup[6] & 0xf0) | (colour_lookup[5] & 0x0f);
-	blank_lookup[0x60] = (j & 0xe) == 0 ? 0 : 0xff;
-	blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (j & 0xe) == 8 ? 0 : 0xff;
-	for (i = 0; i < nchars; i++) {
-		UBYTE screendata = *ANTIC_memptr++;
-		UBYTE chdata;
-
-		chdata = (screendata & invert_mask) ? 0xff : 0;
-		if (blank_lookup[screendata & blank_mask])
-			chdata ^= dGetByte(t_chbase + ((UWORD) (screendata & 0x7f) << 3));
-		if (!(*t_pm_scanline_ptr)) {
-			if (chdata) {
-				*ptr++ = lookup1[chdata & 0x80];
-				*ptr++ = lookup1[chdata & 0x40];
-				*ptr++ = lookup1[chdata & 0x20];
-				*ptr++ = lookup1[chdata & 0x10];
-				*ptr++ = lookup1[chdata & 0x08];
-				*ptr++ = lookup1[chdata & 0x04];
-				*ptr++ = lookup1[chdata & 0x02];
-				*ptr++ = lookup1[chdata & 0x01];
-			}
-			else {
-#ifdef UNALIGNED_LONG_OK
-				ULONG *l_ptr = (ULONG *) ptr;
-
-				*l_ptr++ = COL_6_LONG;
-				*l_ptr++ = COL_6_LONG;
-
-				ptr = (UBYTE *) l_ptr;
-#else
-				UWORD *w_ptr = (UWORD *) ptr;
-
-				*w_ptr++ = cl_word[6];
-				*w_ptr++ = cl_word[6];
-				*w_ptr++ = cl_word[6];
-				*w_ptr++ = cl_word[6];
-
-				ptr = (UBYTE *) w_ptr;
-#endif
-			}
-		}
-		else {
-			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
-			UBYTE pm_pixel;
-			UBYTE colreg;
-			int k;
-			for (k = 1; k <= 4; k++) {
-				pm_pixel = *c_pm_scanline_ptr++;
-				colreg = 6;
-				DO_PMG
-				if (chdata & 0x80)
-					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
-				else
-					*ptr++ = (UBYTE) cl_word[colreg];
-				if (chdata & 0x40)
-					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
-				else
-					*ptr++ = (UBYTE) cl_word[colreg];
-				chdata <<= 2;
-			}
-
 		}
 		t_pm_scanline_ptr++;
 	}
@@ -1911,11 +1836,15 @@ void ANTIC_RunDisplayList(void)
 		pmg_dma();
 
 		if (DMACTL & need_dl) {
-			/* PMG flickering :-) (Raster) */
-			if (player_flickering)
-				GRAFP0 = GRAFP1 = GRAFP2 = GRAFP3 = rand();
+			/* PMG flickering :-) */
 			if (missile_flickering)
-				GRAFM = rand();
+				GRAFM = dGetByte(regPC);
+			if (player_flickering) {
+				GRAFP0 = dGetByte(regPC+4);
+				GRAFP1 = dGetByte(regPC+5);
+				GRAFP2 = dGetByte(regPC+6);
+				GRAFP3 = dGetByte(regPC+7);
+			}
 
 			dctr = 0;
 			need_dl = 0;
@@ -1984,6 +1913,9 @@ void ANTIC_RunDisplayList(void)
 			}
 		}
 
+		if (need_load && anticmode >=2 && anticmode <= 5 && (DMACTL & 3))
+			xpos += before_cycles[md];
+
 		if (!draw_display) {
 			xpos += DMAR;
 			if (anticmode < 2 || (DMACTL & 3) == 0)
@@ -1991,7 +1923,7 @@ void ANTIC_RunDisplayList(void)
 			if (need_load) {
 				need_load = FALSE;
 				xpos += load_cycles[md];
-				if (anticmode < 8)	/* extra cycles in font modes */
+				if (anticmode <= 5)	/* extra cycles in font modes */
 					xpos -= extra_cycles[md];
 			}
 			if (anticmode < 8)
@@ -2013,7 +1945,7 @@ void ANTIC_RunDisplayList(void)
 			need_load = FALSE;
 			ANTIC_load();
 			xpos += load_cycles[md];
-			if (anticmode < 8)	/* extra cycles in font modes */
+			if (anticmode <= 5)	/* extra cycles in font modes */
 				xpos -= extra_cycles[md];
 		}
 
@@ -2023,17 +1955,16 @@ void ANTIC_RunDisplayList(void)
 							scrn_ptr + x_min[md], \
 							(ULONG *) (&pm_scanline[x_min[md] >> 1])
 		case 2:
-			xpos += font_cycles[md];
-			if (PRIOR & 0x40)
-				draw_antic_2_gtia9_11(dctr, CHARS_MEM_PTR_PM);
-			else if (global_artif_mode != 0)
-				draw_antic_2_artif(dctr, CHARS_MEM_PTR_PM);
-			else
-		        draw_antic_2(dctr, CHARS_MEM_PTR_PM);
-			break;
 		case 3:
 			xpos += font_cycles[md];
-			draw_antic_3(dctr, CHARS_MEM_PTR_PM);
+			blank_lookup[0x60] = (anticmode == 2 || dctr & 0xe) ? 0xff : 0;
+			blank_lookup[0x00] = blank_lookup[0x20] = blank_lookup[0x40] = (dctr & 0xe) == 8 ? 0 : 0xff;
+			if (PRIOR & 0x40)
+				draw_antic_2_gtia9_11(CHARS_MEM_PTR_PM, chbase_40 + ((dctr & 0x07) ^ flip_mask) );
+			else if (global_artif_mode != 0)
+				draw_antic_2_artif(CHARS_MEM_PTR_PM, chbase_40 + ((dctr & 0x07) ^ flip_mask) );
+			else
+			        draw_antic_2(CHARS_MEM_PTR_PM, chbase_40 + ((dctr & 0x07) ^ flip_mask) );
 			break;
 		case 4:
 			xpos += font_cycles[md];
@@ -2115,7 +2046,9 @@ UBYTE ANTIC_GetByte(UWORD addr)
 	case _VCOUNT:
 		return ypos >> 1;
 	case _PENH:
-		return 0x00;
+		return Atari_PEN(0);
+	case _PENV:
+		return Atari_PEN(1);
 	case _NMIST:
 		return NMIST;
 	default:
@@ -2190,10 +2123,10 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 			font_cycles[NORMAL0] = load_cycles[NORMAL0] = 32;
 			font_cycles[NORMAL1] = load_cycles[NORMAL1] = 16;
 			load_cycles[NORMAL2] = 8;
-			extra_cycles[NORMAL0] = 7;
-			extra_cycles[NORMAL1] = 0;
-			extra_cycles[SCROLL0] = 8;
-			extra_cycles[SCROLL1] = 0;
+			before_cycles[NORMAL0] = BEFORE_CYCLES;
+			before_cycles[SCROLL0] = BEFORE_CYCLES + 8;
+			extra_cycles[NORMAL0] = 7 + BEFORE_CYCLES;
+			extra_cycles[SCROLL0] = 8 + BEFORE_CYCLES + 8;
 			left_border_chars = 8 - LCHOP;
 			right_border_chars = 8 - RCHOP;
 			right_border_start = ATARI_WIDTH - 64 /* - 1 */ ;	/* RS! */
@@ -2218,10 +2151,10 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 			font_cycles[NORMAL0] = load_cycles[NORMAL0] = 40;
 			font_cycles[NORMAL1] = load_cycles[NORMAL1] = 20;
 			load_cycles[NORMAL2] = 10;
-			extra_cycles[NORMAL0] = 8;
-			extra_cycles[NORMAL1] = 0;
-			extra_cycles[SCROLL0] = 7;
-			extra_cycles[SCROLL1] = 0;
+			before_cycles[NORMAL0] = BEFORE_CYCLES + 8;
+			before_cycles[SCROLL0] = BEFORE_CYCLES + 16;
+			extra_cycles[NORMAL0] = 8 + BEFORE_CYCLES + 8;
+			extra_cycles[SCROLL0] = 7 + BEFORE_CYCLES + 16;
 			left_border_chars = 4 - LCHOP;
 			right_border_chars = 4 - RCHOP;
 			right_border_start = ATARI_WIDTH - 32 /* - 1 */ ;	/* RS! */
@@ -2246,10 +2179,10 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 			font_cycles[NORMAL0] = load_cycles[NORMAL0] = 47;
 			font_cycles[NORMAL1] = load_cycles[NORMAL1] = 24;
 			load_cycles[NORMAL2] = 12;
-			extra_cycles[NORMAL0] = 7;
-			extra_cycles[NORMAL1] = 0;
-			extra_cycles[SCROLL0] = 7;
-			extra_cycles[SCROLL1] = 0;
+			before_cycles[NORMAL0] = BEFORE_CYCLES + 16;
+			before_cycles[SCROLL0] = BEFORE_CYCLES + 16;
+			extra_cycles[NORMAL0] = 7 + BEFORE_CYCLES + 16;
+			extra_cycles[SCROLL0] = 7 + BEFORE_CYCLES + 16;
 			left_border_chars = 3 - LCHOP;
 			right_border_chars = ((1 - LCHOP) < 0) ? (0) : (1 - LCHOP);
 			right_border_start = ATARI_WIDTH - 8 /* - 1 */ ;	/* RS! */
@@ -2375,7 +2308,7 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 		chbase_20 = (byte << 8) & 0xfe00;
 		break;
 	case _WSYNC:
-		if (xpos < WSYNC_C && xpos_limit > WSYNC_C)
+		if (xpos <= WSYNC_C && xpos_limit >= WSYNC_C)
 			xpos = WSYNC_C;
 		else {
 			wsync_halt = TRUE;
@@ -2451,8 +2384,9 @@ void AnticStateSave( void )
 	SaveINT( &x_min[0], 6 );
 	SaveINT( &ch_offset[0], 6 );
 	SaveINT( &load_cycles[0], 6 );
-	SaveINT( &extra_cycles[0], 6 );
 	SaveINT( &font_cycles[0], 6 );
+	SaveINT( &before_cycles[0], 6 );
+	SaveINT( &extra_cycles[0], 6 );
 
 	if( new_pm_lookup == NULL )
 		temp = 0;
@@ -2525,8 +2459,9 @@ void AnticStateRead( void )
 	ReadINT( &x_min[0], 6 );
 	ReadINT( &ch_offset[0], 6 );
 	ReadINT( &load_cycles[0], 6 );
-	ReadINT( &extra_cycles[0], 6 );
 	ReadINT( &font_cycles[0], 6 );
+	ReadINT( &before_cycles[0], 6 );
+	ReadINT( &extra_cycles[0], 6 );
 
 	ReadUBYTE( &temp, 1 );
 

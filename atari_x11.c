@@ -268,10 +268,12 @@ int GetKeyCode(XEvent * event)
 		return AKEY_NONE;
 		break;
 	case KeyPress:
+		SHIFT_KEY = 0;
 		switch (keysym) {
 		case XK_Shift_L:
 		case XK_Shift_R:
 			SHIFT = AKEY_SHFT;
+			SHIFT_KEY = 1;
 			break;
 		case XK_Control_L:
 		case XK_Control_R:

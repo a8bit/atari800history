@@ -51,8 +51,8 @@ int DELAYED_XMTDONE_IRQ;
 UBYTE AUDF[8];    /* AUDFx (D200, D202, D204, D206) */
 UBYTE AUDC[8];    /* AUDCx (D201, D203, D205, D207) */
 UBYTE AUDCTL;     /* AUDCTL (D208) */   
-unsigned int /* ULONG */ DivNIRQ[4], DivNMax[4];
-unsigned int /* ULONG */ TimeBase = DIV_64;
+int DivNIRQ[4], DivNMax[4];
+int TimeBase = DIV_64;
 
 #ifdef STEREO
 int pokey_select;
@@ -231,7 +231,9 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 #ifdef DEBUG1
 		printf("WR: IRQEN = %x, PC = %x\n", IRQEN, PC);
 #endif
-		IRQST |= (~byte);
+		IRQST |= ~byte & 0xf7;	/* Reset disabled IRQs except XMTDONE */
+		if ((~IRQST & IRQEN) == 0)
+			IRQ = 0;
 		break;
 	case _POTGO:
 		break;
@@ -255,13 +257,16 @@ void POKEY_PutByte(UWORD addr, UBYTE byte)
 			/* if ((AUDF[CHAN3] == 0x28) && (AUDF[CHAN4] == 0x00) && (AUDCTL & 0x28)==0x28) */
 			if (POKEY_siocheck()) {
 				SIO_PutByte(byte);
-			}
+				IRQST |= 0x08;
+				DELAYED_XMTDONE_IRQ = XMTDONE_INTERVAL;
 #ifdef SERIO_SOUND
-			Update_serio_sound(1,byte);
+				Update_serio_sound(1,byte);
 #endif
+			}
 		}
 		break;
 	case _STIMER:
+		DivNIRQ[CHAN1] = DivNIRQ[CHAN2] = DivNIRQ[CHAN4] = 0;
 #ifdef DEBUG1
 		printf("WR: STIMER = %x\n", byte);
 #endif
@@ -315,12 +320,11 @@ void POKEY_Scanline(void)
 
 	if (DELAYED_SERIN_IRQ > 0) {
 		if (--DELAYED_SERIN_IRQ == 0) {
-			IRQST &= 0xdf;
 			if (IRQEN & 0x20) {
 #ifdef DEBUG2
 				printf("SERIO: SERIN Interrupt triggered\n");
 #endif
-				/* IRQST &= 0xdf; */
+				IRQST &= 0xdf;
 				GenerateIRQ();
 			}
 #ifdef DEBUG2
@@ -333,12 +337,11 @@ void POKEY_Scanline(void)
 
 	if (DELAYED_SEROUT_IRQ > 0) {
 		if (--DELAYED_SEROUT_IRQ == 0) {
-			IRQST &= 0xef;
 			if (IRQEN & 0x10) {
 #ifdef DEBUG2
 				printf("SERIO: SEROUT Interrupt triggered\n");
 #endif
-				/* IRQST &= 0xef; */
+				IRQST &= 0xef;
 				GenerateIRQ();
 			}
 #ifdef DEBUG2
@@ -347,50 +350,43 @@ void POKEY_Scanline(void)
 				printf("SERIO: SEROUT Interrupt missed\n");
 			}
 #endif
-			DELAYED_XMTDONE_IRQ += XMTDONE_INTERVAL;
 		}
 	}
 
 	if (DELAYED_XMTDONE_IRQ > 0)
-		DELAYED_XMTDONE_IRQ--;
-	else {
-		IRQST &= 0xf7;
-		if (IRQEN & 0x08) {
+		if (--DELAYED_XMTDONE_IRQ == 0) {
+			IRQST &= 0xf7;
+			if (IRQEN & 0x08) {
 #ifdef DEBUG2
-			printf("SERIO: XMTDONE Interrupt triggered\n");
+				printf("SERIO: XMTDONE Interrupt triggered\n");
 #endif
-			/* IRQST &= 0xf7; */
-			GenerateIRQ();
-		}
+				/* IRQST &= 0xf7; */
+				GenerateIRQ();
+			}
 #ifdef DEBUG2
-		else {
-			printf("SERIO: XMTDONE Interrupt missed\n");
-		}
+			else
+				printf("SERIO: XMTDONE Interrupt missed\n");
 #endif
-	}
+		}
 
-	if ((DivNIRQ[CHAN1] += LINE_C) > DivNMax[CHAN1] ) {
-		DivNIRQ[CHAN1] -= DivNMax[CHAN1];
+	if ((DivNIRQ[CHAN1] -= LINE_C) < 0 ) {
+		DivNIRQ[CHAN1] += DivNMax[CHAN1];
 		if (IRQEN & 0x01) {
 			IRQST &= 0xfe;
 			GenerateIRQ();
 		}
 	}
 
-	if ((DivNIRQ[CHAN2] += LINE_C) > DivNMax[CHAN2] ) {
-		DivNIRQ[CHAN2] -= DivNMax[CHAN2];
+	if ((DivNIRQ[CHAN2] -= LINE_C) < 0 ) {
+		DivNIRQ[CHAN2] += DivNMax[CHAN2];
 		if (IRQEN & 0x02) {
 			IRQST &= 0xfd;
 			GenerateIRQ();
 		}
 	}
 
-	if ((DivNIRQ[CHAN3] += LINE_C) > DivNMax[CHAN3] ) {
-		DivNIRQ[CHAN3] -= DivNMax[CHAN3];
-	}
-
-	if ((DivNIRQ[CHAN4] += LINE_C) > DivNMax[CHAN4] ) {
-		DivNIRQ[CHAN4] -= DivNMax[CHAN4];
+	if ((DivNIRQ[CHAN4] -= LINE_C) < 0 ) {
+		DivNIRQ[CHAN4] += DivNMax[CHAN4];
 		if (IRQEN & 0x04) {
 			IRQST &= 0xfb;
 			GenerateIRQ();
@@ -420,7 +416,6 @@ void POKEY_Scanline(void)
 
 void Update_Counter(int chan_mask)
 {
-	ULONG new_val = 0;
 
 /************************************************************/
 /* As defined in the manual, the exact Div_n_cnt values are */
@@ -435,61 +430,39 @@ void Update_Counter(int chan_mask)
 	if (chan_mask & (1 << CHAN1)) {
 		/* process channel 1 frequency */
 		if (AUDCTL & CH1_179)
-			new_val = AUDF[CHAN1] + 4;
+			DivNMax[CHAN1] = AUDF[CHAN1] + 4;
 		else
-			new_val = (AUDF[CHAN1] + 1) * TimeBase;
-
-		if (new_val != DivNMax[CHAN1]) {
-			DivNMax[CHAN1] = new_val;
-			DivNIRQ[CHAN1] = 0;
-		}
+			DivNMax[CHAN1] = (AUDF[CHAN1] + 1) * TimeBase;
+		if (DivNMax[CHAN1] < LINE_C)
+			DivNMax[CHAN1] = LINE_C;
 	}
 
 	if (chan_mask & (1 << CHAN2)) {
 		/* process channel 2 frequency */
 		if (AUDCTL & CH1_CH2) {
 			if (AUDCTL & CH1_179)
-				new_val = AUDF[CHAN2] * 256 + AUDF[CHAN1] + 7;
+				DivNMax[CHAN2] = AUDF[CHAN2] * 256 + AUDF[CHAN1] + 7;
 			else
-				new_val = (AUDF[CHAN2] * 256 + AUDF[CHAN1] + 1) * TimeBase;
+				DivNMax[CHAN2] = (AUDF[CHAN2] * 256 + AUDF[CHAN1] + 1) * TimeBase;
 		}
 		else
-			new_val = (AUDF[CHAN2] + 1) * TimeBase;
-
-		if (new_val != DivNMax[CHAN2]) {
-			DivNMax[CHAN2] = new_val;
-			DivNIRQ[CHAN2] = 0;
-		}
-	}
-
-	if (chan_mask & (1 << CHAN3)) {
-		/* process channel 3 frequency */
-		if (AUDCTL & CH3_179)
-			new_val = AUDF[CHAN3] + 4;
-		else
-			new_val = (AUDF[CHAN3] + 1) * TimeBase;
-
-		if (new_val != DivNMax[CHAN3]) {
-			DivNMax[CHAN3] = new_val;
-			DivNIRQ[CHAN3] = 0;
-		}
+			DivNMax[CHAN2] = (AUDF[CHAN2] + 1) * TimeBase;
+		if (DivNMax[CHAN2] < LINE_C)
+			DivNMax[CHAN2] = LINE_C;
 	}
 
 	if (chan_mask & (1 << CHAN4)) {
 		/* process channel 4 frequency */
 		if (AUDCTL & CH3_CH4) {
 			if (AUDCTL & CH3_179)
-				new_val = AUDF[CHAN4] * 256 + AUDF[CHAN3] + 7;
+				DivNMax[CHAN4] = AUDF[CHAN4] * 256 + AUDF[CHAN3] + 7;
 			else
-				new_val = (AUDF[CHAN4] * 256 + AUDF[CHAN3] + 1) * TimeBase;
+				DivNMax[CHAN4] = (AUDF[CHAN4] * 256 + AUDF[CHAN3] + 1) * TimeBase;
 		}
 		else
-			new_val = (AUDF[CHAN4] + 1) * TimeBase;
-
-		if (new_val != DivNMax[CHAN4]) {
-			DivNMax[CHAN4] = new_val;
-			DivNIRQ[CHAN4] = 0;
-		}
+			DivNMax[CHAN4] = (AUDF[CHAN4] + 1) * TimeBase;
+		if (DivNMax[CHAN4] < LINE_C)
+			DivNMax[CHAN4] = LINE_C;
 	}
 }
 
@@ -533,6 +506,6 @@ void POKEYStateRead( void )
 	ReadUBYTE( &AUDCTL, 1 );
 
 	ReadINT((int *)&DivNIRQ[0], 4);
-	ReadINT((int *) &DivNMax[0], 4);
-	ReadINT((int *) &TimeBase, 1 );
+	ReadINT((int *)&DivNMax[0], 4);
+	ReadINT((int *)&TimeBase, 1 );
 }

@@ -559,32 +559,11 @@ int Atari_Exit(int run_monitor)
 	return restart;
 }
 
-#ifdef SET_LED
-static UBYTE LEDstatus = 0; /*status of disk LED*/
-void Atari_Set_LED(int how)
-{
-  LEDstatus = 8 * how;
-}
-#endif
-
 void Atari_DisplayScreen(UBYTE * screen)
 {
   static int writepage = 0;
   UBYTE *vbuf = screen + first_lno * ATARI_WIDTH + 32;
  
-#ifdef SET_LED
-  if (LEDstatus)  /*draw disk LED*/
-  {
-    int i;
-    for (i = 0; i < 6; i++)
-    {
-      vbuf[i] = 0xba;
-      vbuf[i + ATARI_WIDTH] = 0xba;
-    }
-    LEDstatus--;
-  }
-#endif
-
   if( invisible || !draw_display )	goto after_screen_update; 
 #ifdef SVGA_SPEEDUP
   vga_copytoplanar256(vbuf+ATARI_WIDTH*(240/refresh_rate)*writepage, ATARI_WIDTH,
@@ -731,6 +710,10 @@ int Atari_CONSOL(void)
 	return consol;
 }
 
+int Atari_PEN(int vertical)
+{
+	return vertical ? 0xff : 0;
+}
 /*
 void LeaveVGAMode(void)
 {
