@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Clean ups and optimizations:                     */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 27th June 2000                     */
+/* Last changes: 27th July 2000                     */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -197,7 +197,7 @@ void GTIA_Initialise(int *argc, char *argv[])
 	}
 	memset(cl_lookup, COLOUR_BLACK, sizeof(cl_lookup));
 	for (i = 0; i < 32; i++)
-		GTIA_PutByte(i, 0);
+		GTIA_PutByte((UWORD) i, 0);
 }
 
 /* Prepare PMG scanline ---------------------------------------------------- */
@@ -674,8 +674,8 @@ void GTIA_PutByte(UWORD addr, UBYTE byte)
 					cl_lookup[C_PF1 | C_PM01] = (cl_lookup[C_PF1 | C_PM0] = cword | cl_lookup[C_PM0]) | (cl_lookup[C_PF1 | C_PM1] = cword | cl_lookup[C_PM1]);
 			}
 		}
-		((UBYTE *)hires_lookup_l)[0x80] = ((UBYTE *)hires_lookup_l)[0x41] =
-			hires_lookup_l[0x60] = cword & 0xf0f;
+		((UBYTE *)hires_lookup_l)[0x80] = ((UBYTE *)hires_lookup_l)[0x41] = (UBYTE)
+			(hires_lookup_l[0x60] = cword & 0xf0f);
 		break;
 	case _COLPF2:
 		COLPF2 = byte &= 0xfe;

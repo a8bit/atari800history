@@ -1,3 +1,39 @@
+Changes in 1.0.6  - 2000/10/09
+----------------
+
+o cpu_m68k.s updated <Gerhard>
+
+- the rest is Piotr's work:
+
+o BUGS updated
+
+o antic: fixed PMG collisions bug in horizontally scrolled lines
+  (bug was found by Krzysztof)
+
+o antic: PMG flickering depends on VDELAY setting
+
+o makefile.dos: in 1.0.4 BASIC and PDCURSES weren't compilable,
+  because of pokeysnd call, while pokeysnd wasn't linked - fixed
+
+o antic,gtia: few warnings killed
+
+o devices: -H1..-H4 options work correctly now
+
+o E_Device, K_Device and AtariEscape moved from atari.c to devices.c
+
+o E_Device and K_Device ESC codes work only in BASIC version now
+
+o sio: debug code removed
+
+o devices, rt-config: H: devices can be set to read-only mode:
+  use -hdreadonly option or HD_READ_ONLY config file item
+  (0 disables, 1 enables read-only mode). For safety, by default
+  it is on
+
+o BASIC version: EOF in stdin quits emulator. BASIC version can be used now
+  with redirected input (from a script file, for example).
+
+
 Changes in 1.0.5  - 2000/10/02
 ----------------
 

@@ -307,15 +307,10 @@ int SeekSector(int unit, int sector)
 
 	sprintf(sio_status, "%d: %d", unit + 1, sector);
 	SizeOfSector((UBYTE)unit, sector, &size, (ULONG*)&offset);
-	/* printf("Sector %x,Offset: %x\n",sector,offset); */
 	if (offset < 0 || offset > lseek(disk[unit], 0L, SEEK_END)) {
 #ifdef DEBUG
 		Aprint("SIO:SeekSector() - Wrong seek offset");
 #endif
-/*
-		Atari800_Exit(FALSE);
-		exit(1);
-*/
 	}
 	else
 		lseek(disk[unit], offset, SEEK_SET);
@@ -607,9 +602,6 @@ void SIO(void)
 	static int delay_counter = 1;	/* no delay on first read */
 #endif
 
-/*
-   printf("SIO: Unit %x,Sector %x,Data %x,Length %x,CMD %x\n",unit,sector,data,length,cmd);
- */
 	if (Peek(0x300) == 0x31)
 		switch (cmd) {
 		case 0x4e:				/* Read Status Block */
@@ -850,7 +842,6 @@ void SwitchCommandFrame(int onoff)
 		DataIndex = 0;
 		ExpectedBytes = 5;
 		TransferStatus = SIO_CommandFrame;
-		/* printf("Command frame expecting.\n"); */
 	}
 	else {
 		if (TransferStatus != SIO_StatusRead && TransferStatus != SIO_NoFrame &&
@@ -900,10 +891,8 @@ void SIO_PutByte(int byte)
 		if (CommandIndex < ExpectedBytes) {
 			CommandFrame[CommandIndex++] = byte;
 			if (CommandIndex >= ExpectedBytes) {
-				/* printf("%x\n",CommandFrame[0]); */
 				if (((CommandFrame[0] >= 0x31) && (CommandFrame[0] <= 0x38))) {
 					TransferStatus = SIO_StatusRead;
-					/* printf("Command frame done.\n"); */
 					DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 				}
 				else
@@ -929,7 +918,6 @@ void SIO_PutByte(int byte)
 						ExpectedBytes = 2;
 						DELAYED_SERIN_IRQ = SERIN_INTERVAL + ACK_INTERVAL;
 						TransferStatus = SIO_FinalStatus;
-						/* printf("Sector written, result= %x.\n",result); */
 					}
 					else
 						TransferStatus = SIO_NoFrame;
@@ -947,9 +935,7 @@ void SIO_PutByte(int byte)
 			Aprint("Invalid data frame!");
 		}
 		break;
-/*	default:
-		Aprint("Unexpected data output :%x", byte);
-*/	}
+	}
 	DELAYED_SEROUT_IRQ = SEROUT_INTERVAL;
 
 }
@@ -963,7 +949,6 @@ int SIO_GetByte(void)
 	switch (TransferStatus) {
 	case SIO_StatusRead:
 		byte = 'A';				/* Command acknoledged */
-		/* printf("Command status read\n"); */
 		Command_Frame();		/* Handle now the command */
 		break;
 	case SIO_FormatFrame:
@@ -975,7 +960,6 @@ int SIO_GetByte(void)
 			if (DataIndex >= ExpectedBytes) {
 				TransferStatus = SIO_NoFrame;
 				Set_LED_Off();
-				/* printf("Transfer complete.\n"); */
 			}
 			else {
 				DELAYED_SERIN_IRQ = SERIN_INTERVAL;
@@ -992,7 +976,6 @@ int SIO_GetByte(void)
 			if (DataIndex >= ExpectedBytes) {
 				TransferStatus = SIO_NoFrame;
 				Set_LED_Off();
-				/* printf("Write complete.\n"); */
 			}
 			else {
 				if (DataIndex == 0)
@@ -1008,10 +991,8 @@ int SIO_GetByte(void)
 		}
 		break;
 	default:
-		Aprint("Unexpected data reading!");
 		break;
 	}
-
 	return byte;
 }
 

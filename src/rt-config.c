@@ -39,6 +39,7 @@ char atari_h4_dir[MAX_FILENAME_LEN];
 char atari_exe_dir[MAX_FILENAME_LEN];
 char atari_state_dir[MAX_FILENAME_LEN];
 char print_command[256];
+int hd_read_only;
 int refresh_rate;
 int default_system;
 int default_tv_mode;
@@ -93,6 +94,7 @@ int RtConfigLoad(char *rtconfig_filename)
 #endif
 
 	strcpy(print_command, "lpr %s");
+	hd_read_only = 1;
 	refresh_rate = 1;
 	default_system = 3;
 	default_tv_mode = 1;
@@ -154,6 +156,8 @@ int RtConfigLoad(char *rtconfig_filename)
 					strcpy(atari_h3_dir, ptr);
 				else if (strcmp(string, "H4_DIR") == 0)
 					strcpy(atari_h4_dir, ptr);
+				else if (strcmp(string, "HD_READ_ONLY") == 0)
+					sscanf(ptr, "%d", &hd_read_only);
 				else if (strcmp(string, "EXE_DIR") == 0)
 					strcpy(atari_exe_dir, ptr);
 				else if (strcmp(string, "STATE_DIR") == 0)
@@ -253,6 +257,7 @@ void RtConfigSave(void)
 	fprintf(fp, "H2_DIR=%s\n", atari_h2_dir);
 	fprintf(fp, "H3_DIR=%s\n", atari_h3_dir);
 	fprintf(fp, "H4_DIR=%s\n", atari_h4_dir);
+	fprintf(fp, "HD_READ_ONLY=%d\n", hd_read_only);
 	fprintf(fp, "EXE_DIR=%s\n", atari_exe_dir);
 	fprintf(fp, "STATE_DIR=%s\n", atari_state_dir);
 	fprintf(fp, "PRINT_COMMAND=%s\n", print_command);
@@ -325,6 +330,10 @@ void RtConfigUpdate(void)
 	GetString("Enter path for H2: device [%s] ", atari_h2_dir);
 	GetString("Enter path for H3: device [%s] ", atari_h3_dir);
 	GetString("Enter path for H4: device [%s] ", atari_h4_dir);
+	do {
+		GetNumber("H: devices are read only [%d] ",
+				  &hd_read_only);
+	} while ((hd_read_only < 0) || (hd_read_only > 1));
 	GetString("Enter path for single exe files [%s] ", atari_exe_dir);
 	GetString("Enter path for state files [%s] ", atari_state_dir);
 	GetString("Enter print command [%s] ", print_command);

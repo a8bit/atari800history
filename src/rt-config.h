@@ -18,6 +18,7 @@ extern char atari_h4_dir[MAX_FILENAME_LEN];
 extern char atari_exe_dir[MAX_FILENAME_LEN];
 extern char atari_state_dir[MAX_FILENAME_LEN];
 extern char print_command[256];
+extern int hd_read_only;
 extern int refresh_rate;
 extern int default_system;
 extern int default_tv_mode;
@@ -25,7 +26,6 @@ extern int hold_option;
 extern int enable_c000_ram;
 extern int enable_rom_patches;
 extern int enable_sio_patch;
-extern int enable_xcolpf1;
 extern int disk_directories;
 
 int RtConfigLoad(char *rtconfig_filename);

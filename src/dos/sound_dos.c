@@ -72,20 +72,3 @@ void Sound_Exit(void)
 	if (sound_enabled)
 		sb_shutdown();
 }
-
-void Atari_AUDC(int channel, int byte)
-{
-	channel--;
-	Update_pokey_sound(0xd201 + channel + channel, byte, 0, 4);
-}
-
-void Atari_AUDF(int channel, int byte)
-{
-	channel--;
-	Update_pokey_sound(0xd200 + channel + channel, byte, 0, 4);
-}
-
-void Atari_AUDCTL(int byte)
-{
-	Update_pokey_sound(0xd208, byte, 0, 4);
-}

@@ -1710,12 +1710,8 @@ int Atari_CONSOL(void)
 
 int Atari_PEN(int vertical)
 {
-	if (mouse_mode == MOUSE_PEN) {
-		union REGS rg;
-		rg.x.ax = 3;
-		int86(0x33, &rg, &rg);
+	if (mouse_mode == MOUSE_PEN)
 		return vertical ? 4 + mouse_y : 44 + mouse_x;
-	}
 	else
 		return vertical ? 0xff : 0;
 }

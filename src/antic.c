@@ -3,7 +3,7 @@
 /*              David Firth                         */
 /* Correct timing, internal memory and other fixes: */
 /*              Piotr Fusik <pfusik@elka.pw.edu.pl> */
-/* Last changes: 27th June 2000                     */
+/* Last changes: 26th July 2000                     */
 /* ------------------------------------------------ */
 
 #include <string.h>
@@ -533,11 +533,13 @@ void init_pm_lookup(void)
 	}
 }
 
+static UBYTE hold_missiles_tab[16] = {
+	0x00,0x03,0x0c,0x0f,0x30,0x33,0x3c,0x3f,
+	0xc0,0xc3,0xcc,0xcf,0xf0,0xf3,0xfc,0xff};
+
 void pmg_dma(void)
 {
-	static UBYTE hold_missiles_tab[16] = {
-		0x00,0x03,0x0c,0x0f,0x30,0x33,0x3c,0x3f,
-		0xc0,0xc3,0xcc,0xcf,0xf0,0xf3,0xfc,0xff};
+	/* VDELAY bit set == GTIA ignores PMG DMA in even lines */
 	if (player_dma_enabled) {
 		if (player_gra_enabled) {
 			if (singleline) {
@@ -581,10 +583,9 @@ void pmg_dma(void)
 	}
 	if (missile_dma_enabled) {
 		if (missile_gra_enabled) {
-			UBYTE hold_missiles;
-			hold_missiles = ypos & 1 ? 0 : hold_missiles_tab[VDELAY & 0xf];
-			GRAFM = (dGetByte(singleline ? pmbase_s + ypos + 0x300 : pmbase_d + (ypos >> 1) + 0x180) & ~hold_missiles )
-					| (GRAFM & hold_missiles);
+			UBYTE data = dGetByte(singleline ? pmbase_s + ypos + 0x300 : pmbase_d + (ypos >> 1) + 0x180);
+			/* in odd lines load all missiles, in even only those, for which VDELAY bit is zero */
+			GRAFM = ypos & 1 ? data : ((GRAFM ^ data) & hold_missiles_tab[VDELAY & 0xf]) ^ data;
 		}
 		xpos++;
 	}
@@ -773,7 +774,7 @@ void do_border_gtia11(void)
 #else
 	cl_lookup[C_PF3] &= 0xf0f0;
 #endif
-	cl_lookup[C_BAK] = background;
+	cl_lookup[C_BAK] = (UWORD) background;
 	/* left border */
 	for (kk = left_border_chars; kk; kk--)
 		DO_BORDER
@@ -825,7 +826,7 @@ void draw_antic_0_gtia11(void)
 #else
 		cl_lookup[C_PF3] &= 0xf0f0;
 #endif
-		cl_lookup[C_BAK] = background;
+		cl_lookup[C_BAK] = (UWORD) background;
 		do
 			DO_BORDER
 		while (pm_scanline_ptr < &pm_scanline[(48 - RCHOP) * 4]);
@@ -950,7 +951,7 @@ void draw_antic_2_artif(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm
 
 	CHAR_LOOP_BEGIN
 		UBYTE screendata = *ANTIC_memptr++;
-		int chdata;
+		ULONG chdata;
 
 		chdata = (screendata & invert_mask) ? 0xff : 0;
 		if (blank_lookup[screendata & blank_mask])
@@ -1215,6 +1216,8 @@ void draw_antic_8(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanl
 		UBYTE screendata = *ANTIC_memptr++;
 		int kk = 4;
 		do {
+			if ((UBYTE *) t_pm_scanline_ptr >= pm_scanline + 4 * (48 - RCHOP))
+				break;
 			if (!(*t_pm_scanline_ptr)) {
 				ptr[3] = ptr[2] = ptr[1] = ptr[0] = lookup2[screendata & 0xc0];
 				ptr += 4;
@@ -1243,6 +1246,8 @@ void draw_antic_9(int nchars, UBYTE *ANTIC_memptr, UWORD *ptr, ULONG *t_pm_scanl
 		UBYTE screendata = *ANTIC_memptr++;
 		int kk = 4;
 		do {
+			if ((UBYTE *) t_pm_scanline_ptr >= pm_scanline + 4 * (48 - RCHOP))
+				break;
 			if (!(*t_pm_scanline_ptr)) {
 				ptr[1] = ptr[0] = lookup2[screendata & 0x80];
 				ptr[3] = ptr[2] = lookup2[screendata & 0x40];
@@ -1727,7 +1732,7 @@ UBYTE get_DL_byte(void)
 UWORD get_DL_word(void)
 {
 	UBYTE lsb = get_DL_byte();
-	if (player_flickering)
+	if (player_flickering && ((VDELAY & 0x80) == 0 || ypos & 1))
 		GRAFP3 = lsb;
 	return (get_DL_byte() << 8) | lsb;
 }
@@ -1795,12 +1800,17 @@ void ANTIC_RunDisplayList(void)
 				anticmode = IR & 0xf;
 				/* PMG flickering :-) */
 				if (missile_flickering)
-					GRAFM = IR;
+					GRAFM = ypos & 1 ? IR : ((GRAFM ^ IR) & hold_missiles_tab[VDELAY & 0xf]) ^ IR;
 				if (player_flickering) {
-					GRAFP0 = dGetByte((UWORD)(regPC - xpos + 8));
-					GRAFP1 = dGetByte((UWORD)(regPC - xpos + 9));
-					GRAFP2 = dGetByte((UWORD)(regPC - xpos + 10));
-					GRAFP3 = dGetByte((UWORD)(regPC - xpos + 11));
+					UBYTE hold = ypos & 1 ? 0 : VDELAY;
+					if ((hold & 0x10) == 0)
+						GRAFP0 = dGetByte((UWORD)(regPC - xpos + 8));
+					if ((hold & 0x20) == 0)
+						GRAFP1 = dGetByte((UWORD)(regPC - xpos + 9));
+					if ((hold & 0x40) == 0)
+						GRAFP2 = dGetByte((UWORD)(regPC - xpos + 10));
+					if ((hold & 0x80) == 0)
+						GRAFP3 = dGetByte((UWORD)(regPC - xpos + 11));
 				}
 			}
 			else
@@ -2236,8 +2246,8 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 			chars_read[SCROLL0] = 48;
 			chars_read[SCROLL1] = 24;
 			chars_read[SCROLL2] = 12;
-			chars_displayed[NORMAL0] = 44;
-			chars_displayed[NORMAL1] = 23;
+			chars_displayed[NORMAL0] = 42;
+			chars_displayed[NORMAL1] = 22;
 			chars_displayed[NORMAL2] = 12;
 			x_min[NORMAL0] = 12;
 			x_min[NORMAL1] = 8;
@@ -2280,9 +2290,9 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 			if ((DMACTL & 3) == 3) {	/* wide playfield */
 				ch_offset[SCROLL0]--;
 				if (byte == 4 || byte == 12)
-					chars_displayed[SCROLL1] = 22;
+					chars_displayed[SCROLL1] = 21;
 				else
-					chars_displayed[SCROLL1] = 23;
+					chars_displayed[SCROLL1] = 22;
 				if (byte <= 4) {
 					x_min[SCROLL1] = byte + 8;
 					ch_offset[SCROLL1] = 1;
@@ -2295,7 +2305,7 @@ void ANTIC_PutByte(UWORD addr, UBYTE byte)
 					x_min[SCROLL1] = byte - 8;
 					ch_offset[SCROLL1] = -1;
 				}
-				x_min[SCROLL2] = x_min[NORMAL2] + byte;
+				x_min[SCROLL2] = byte;
 				ch_offset[SCROLL2] = 0;
 			}
 			else {

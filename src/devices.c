@@ -37,15 +37,22 @@
 #endif
 #endif
 
-#define FALSE   0
-#define TRUE    1
-
 #include "atari.h"
 #include "cpu.h"
 #include "memory.h"
 #include "devices.h"
 #include "rt-config.h"
 #include "log.h"
+#include "binload.h"
+#include "sio.h"
+
+#ifdef CRASH_MENU
+extern int crash_code;
+extern UWORD crash_address;
+extern UWORD crash_afterCIM;
+extern void CrashMenu(UBYTE *screen, UBYTE cimcode, UWORD address);
+#endif
+
 
 #define	ICHIDZ	0x0020
 #define	ICDNOZ	0x0021
@@ -99,22 +106,21 @@ void Device_Initialise(int *argc, char *argv[])
 	int j;
 
 	for (i = j = 1; i < *argc; i++) {
-		if (strncmp(argv[i], "-H1", 2) == 0)
-			H[1] = argv[i] + 2;
-		else if (strncmp(argv[i], "-H2", 2) == 0)
-			H[2] = argv[i] + 2;
-		else if (strncmp(argv[i], "-H3", 2) == 0)
-			H[3] = argv[i] + 2;
-		else if (strncmp(argv[i], "-H4", 2) == 0)
-			H[4] = argv[i] + 2;
+		if (strcmp(argv[i], "-H1") == 0)
+			H[1] = argv[++i];
+		else if (strcmp(argv[i], "-H2") == 0)
+			H[2] = argv[++i];
+		else if (strcmp(argv[i], "-H3") == 0)
+			H[3] = argv[++i];
+		else if (strcmp(argv[i], "-H4") == 0)
+			H[4] = argv[++i];
 		else if (strcmp(argv[i], "-devbug") == 0)
 			devbug = TRUE;
+		else if (strcmp(argv[i], "-hdreadonly") == 0)
+			hd_read_only = (argv[++i][0] != '0');
 		else
 			argv[j++] = argv[i];
 	}
-
-	if (devbug)
-		Aprint("H%d: %s", i, H[i]);
 
 	*argc = j;
 }
@@ -219,16 +225,7 @@ void Device_HHOPEN(void)
 		fclose(fp[fid]);
 		fp[fid] = NULL;
 	}
-/*
-   flag[fid] = (memory[ICDNOZ] == 2) ? TRUE : FALSE;
- */
 	Device_GetFilename();
-/*
-   if (memory[ICDNOZ] == 0)
-   sprintf (fname, "./%s", filename);
-   else
-   sprintf (fname, "%s/%s", h_prefix, filename);
- */
 	devnum = dGetByte(ICDNOZ);
 	if (devnum > 9) {
 		Aprint("Attempt to access H%d: device", devnum);
@@ -348,6 +345,11 @@ void Device_HHOPEN(void)
 		}
 		break;
 	case 8:
+		if (hd_read_only) {
+			regY = 135;	/* device is read only */
+			SetN;
+			break;
+		}
 		fp[fid] = fopen(fname, "wb");
 		if (fp[fid]) {
 			regY = 1;
@@ -610,4 +612,211 @@ void Device_PHINIT(void)
 	phfd = -1;
 	regY = 1;
 	ClrN;
+}
+
+/* K: and E: handlers for BASIC version, using getchar() and putchar() */
+
+#ifdef BASIC
+/*
+   ================================
+   N = 0 : I/O Successful and Y = 1
+   N = 1 : I/O Error and Y = error#
+   ================================
+ */
+
+void K_Device(UBYTE esc_code)
+{
+	char ch;
+
+	switch (esc_code) {
+	case ESC_K_OPEN:
+	case ESC_K_CLOSE:
+		regY = 1;
+		ClrN;
+		break;
+	case ESC_K_WRITE:
+	case ESC_K_STATUS:
+	case ESC_K_SPECIAL:
+		regY = 146;
+		SetN;
+		break;
+	case ESC_K_READ:
+		if (feof(stdin)) {
+			Atari800_Exit(FALSE);
+			exit(0);
+		}
+		ch = getchar();
+		switch (ch) {
+		case '\n':
+			ch = (char)0x9b;
+			break;
+		default:
+			break;
+		}
+		regA = ch;
+		regY = 1;
+		ClrN;
+		break;
+	}
+}
+
+void E_Device(UBYTE esc_code)
+{
+	UBYTE ch;
+
+	switch (esc_code) {
+	case ESC_E_OPEN:
+		Aprint( "Editor device open" );
+		regY = 1;
+		ClrN;
+		break;
+	case ESC_E_READ:
+		if (feof(stdin)) {
+			Atari800_Exit(FALSE);
+			exit(0);
+		}
+		ch = getchar();
+		switch (ch) {
+		case '\n':
+			ch = 0x9b;
+			break;
+		default:
+			break;
+		}
+		regA = ch;
+		regY = 1;
+		ClrN;
+		break;
+	case ESC_E_WRITE:
+		ch = regA;
+		switch (ch) {
+		case 0x7d:
+			putchar('*');
+			break;
+		case 0x9b:
+			putchar('\n');
+			break;
+		default:
+			if ((ch >= 0x20) && (ch <= 0x7e))	/* for DJGPP */
+				putchar(ch & 0x7f);
+			break;
+		}
+		regY = 1;
+		ClrN;
+		break;
+	}
+}
+
+#endif /* BASIC */
+
+#define CDTMV1 0x0218
+
+void AtariEscape(UBYTE esc_code)
+{
+	switch (esc_code) {
+#ifdef MONITOR_BREAK
+	case ESC_BREAK:
+		if (!Atari800_Exit(TRUE))
+			exit(0);
+		return;
+#endif
+	case ESC_SIOV:
+		/* jump to SIO emulation only if it's really our ESC code */
+		if (enable_sio_patch && (regPC == (0xe459+2))) {
+			SIO();
+			return;
+		}
+		break;
+#ifdef BASIC
+	case ESC_K_OPEN:
+	case ESC_K_CLOSE:
+	case ESC_K_READ:
+	case ESC_K_WRITE:
+	case ESC_K_STATUS:
+	case ESC_K_SPECIAL:
+		K_Device(esc_code);
+		return;
+		break;
+	case ESC_E_OPEN:
+	case ESC_E_READ:
+	case ESC_E_WRITE:
+		E_Device(esc_code);
+		return;
+		break;
+#endif
+	case ESC_PHOPEN:
+		Device_PHOPEN();
+		return;
+		break;
+	case ESC_PHCLOS:
+		Device_PHCLOS();
+		return;
+		break;
+	case ESC_PHREAD:
+		Device_PHREAD();
+		return;
+		break;
+	case ESC_PHWRIT:
+		Device_PHWRIT();
+		return;
+		break;
+	case ESC_PHSTAT:
+		Device_PHSTAT();
+		return;
+		break;
+	case ESC_PHSPEC:
+		Device_PHSPEC();
+		return;
+		break;
+	case ESC_PHINIT:
+		Device_PHINIT();
+		return;
+		break;
+	case ESC_HHOPEN:
+		Device_HHOPEN();
+		return;
+		break;
+	case ESC_HHCLOS:
+		Device_HHCLOS();
+		return;
+		break;
+	case ESC_HHREAD:
+		Device_HHREAD();
+		return;
+		break;
+	case ESC_HHWRIT:
+		Device_HHWRIT();
+		return;
+		break;
+	case ESC_HHSTAT:
+		Device_HHSTAT();
+		return;
+		break;
+	case ESC_HHSPEC:
+		Device_HHSPEC();
+		return;
+		break;
+	case ESC_HHINIT:
+		Device_HHINIT();
+		return;
+		break;
+	case ESC_BINLOADER_CONT:
+		BIN_loader_cont();
+		return;
+		break;
+	}
+	/* for all codes that fall through the cases */
+
+	
+#ifdef CRASH_MENU
+	regPC -= 2;
+	crash_address = regPC;
+	crash_afterCIM = regPC+2;
+	crash_code = dGetByte(crash_address);
+	ui((UBYTE*)atari_screen);
+#else
+	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
+	if(!Atari800_Exit(TRUE))
+		exit(0);
+#endif
 }

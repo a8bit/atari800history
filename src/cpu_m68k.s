@@ -30,6 +30,8 @@ P65C02 ; we emulate this version of processor (6502 has a bug in jump code,
   xdef _regS
   xdef _regX
   xdef _regY
+  xdef _remember_PC
+  xdef _remember_JMP
   xref _memory
   xref _attrib
   ifd PROFILE
@@ -43,6 +45,14 @@ P65C02 ; we emulate this version of processor (6502 has a bug in jump code,
   xdef _CPUPUT
   xdef _CPU_INIT
   xdef _cycles ;temporarily needed outside :)
+
+remember_PC
+_remember_PC
+  ds.w 16		;REMEMBER_PC_STEPS
+
+remember_JMP
+_remember_JMP
+  ds.w 16		;REMEMBER_JMP_STEPS
 
 regA
   ds.b 1
@@ -1049,20 +1059,19 @@ _GO: ;cycles (d0)
 ;   2. The timing of the IRQs are not that critical.
 ;*/
 
-  movem.l d2-d7/a2-a5,-(a7)
-  move.l 44(a7),d0 ; how many cycles ( d8=40 from movem )
-  tst.l _wsync_halt
-  beq.s NO_WS_HALT
-  cmp.l #WSYNC_C,d0
-  bpl.s NO_WS_BREAK
-  movem.l (a7)+,d2-d7/a2-a5
+  move.l 4(a7),d0
+  tst.l  _wsync_halt
+  beq.s  NO_WS_HALT
+  cmp.l  #WSYNC_C,d0
+  bpl.s  NO_WS_BREAK
   rts
 NO_WS_BREAK:
-  move.l #WSYNC_C,CD
-  move.l CD,_xpos
+  move.l #WSYNC_C,d1
+  move.l d1,_xpos
   clr.l  _wsync_halt
-NO_WS_HALT:
+NO_WS_HALT:  
   move.l d0,_xpos_limit ;  needed for WSYNC store inside ANTIC
+  movem.l d2-d7/a2-a5,-(a7)
   move.l _xpos,CD
   lea _memory,memory_pointer
   UPDATE_LOCAL_REGS
@@ -2995,7 +3004,7 @@ NEXTCHANGE_N:
   ext.w  NFLAG
 NEXTCHANGE_WITHOUT:
   cmp.l _xpos_limit,CD
-  ble.s END_OF_CYCLE
+  bge.s END_OF_CYCLE
 ****************************************
   ifd MONITOR_BREAK  ;following block of code allows you to enter
   move ccr,-(sp)     ;a break address in monitor

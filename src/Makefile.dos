@@ -36,7 +36,7 @@ pdcurses :
 	@echo Finished.
 
 vga :
-	@make atari800.exe CPPFLAGS="-DVGA" OBJ="atari_vga.o sound_dos.o pokeysnd.o dos_sb.o vga_gfx.o vga_asm.o"
+	@make atari800.exe CPPFLAGS="-DVGA" OBJ="atari_vga.o sound_dos.o dos_sb.o vga_gfx.o vga_asm.o"
 	@echo Finished.
 
 #
@@ -85,6 +85,7 @@ OBJECTS =	atari.o \
 		ui.o \
 		binload.o \
 		list.o \
+		pokeysnd.o \
 		ataripcx.o \
 		log.o \
 		compfile.o \
