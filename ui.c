@@ -7,34 +7,36 @@
 #include "winatari.h"
 #else
 #include <dirent.h>
+#include <sys/stat.h>
 #endif
 #include "rt-config.h"
 #include "atari.h"
+#include "platform.h"
+#include "prompts.h"
 #include "cpu.h"
 #include "gtia.h"
 #include "sio.h"
 #include "list.h"
+#include "ui.h"
+#include "log.h"
 
 #define FALSE 0
 #define TRUE 1
 
 int ui_is_active = FALSE;
-static int current_disk_directory = 0;
-static char charset[8192];
-extern UBYTE atarixl_os[16384];
-extern unsigned char ascii_to_screen[128];
 
-extern int mach_xlxe;
-extern int Ram256;
+static int current_disk_directory = 0;
+static char curr_dir[MAX_FILENAME_LEN] = "";
+static char charset[8192];
 
 #ifdef WIN32
-extern int		iKbBuffer[KEYBOARD_BUFFER_SIZE];
-extern int		nKbBufferChars;
-extern ULONG	unAtariState;
-extern void SafeShowScreen( void );
-extern HWND		MainhWnd;
+extern int iKbBuffer[KEYBOARD_BUFFER_SIZE];
+extern int nKbBufferChars;
+extern ULONG unAtariState;
+extern void SafeShowScreen(void);
+extern HWND MainhWnd;
 unsigned long hThread = 0L;
-#endif
+#endif	/* WIN32 */
 
 unsigned char key_to_ascii[256] =
 {
@@ -83,25 +85,23 @@ int GetKeyPress(UBYTE * screen)
 {
 	int keycode;
 
-	while(Atari_Keyboard() != AKEY_NONE);	/* disable autorepeat */
+	while (Atari_Keyboard() != AKEY_NONE);	/* disable autorepeat */
 
 	do {
 #ifndef BASIC
 		Atari_DisplayScreen(screen);
 #endif
 #ifdef WIN32
-		while( !nKbBufferChars )
-		{
+		while (!nKbBufferChars) {
 			SafeShowScreen();
-			SleepEx( 100, TRUE );
+			SleepEx(100, TRUE);
 		}
-		if( !(unAtariState & ATARI_RUNNING ) || !hThread )
-		{
+		if (!(unAtariState & ATARI_RUNNING) || !hThread) {
 			hThread = 0L;
-/*			ExitThread( 0 ); */
+/*          ExitThread( 0 ); */
 			_endthread();
 		}
-#endif	/* WIN32 */
+#endif							/* WIN32 */
 		keycode = Atari_Keyboard();
 	} while (keycode == AKEY_NONE);
 
@@ -238,14 +238,34 @@ void TitleScreen(UBYTE * screen, char *title)
 	CenterPrint(screen, 0x9a, 0x94, title, 1);
 }
 
+void ShortenItem(char *source, char *destination, int iMaxXsize)
+{
+	if (strlen(source) > iMaxXsize) {
+
+		int iFirstLen = (iMaxXsize - 3) / 2;
+		int iLastStart = strlen(source) - (iMaxXsize - 3 - iFirstLen);
+		strncpy(destination, source, iFirstLen);
+		destination[iFirstLen] = '\0';
+		strcat(destination, "...");
+		strcat(destination, source + iLastStart);
+
+	}
+	else
+		strcpy(destination, source);
+}
+
 void SelectItem(UBYTE * screen,
 				int fg, int bg,
 				int index, char *items[],
 				int nrows, int ncolumns,
-				int xoffset, int yoffset)
+				int xoffset, int yoffset,
+				int active)
 {
 	int x;
 	int y;
+	int iMaxXsize = ((40 - xoffset) / ncolumns) - 1;
+	char szOrig[MAX_FILENAME_LEN];
+	char szString[41];
 
 	x = index / nrows;
 	y = index - (x * nrows);
@@ -255,7 +275,40 @@ void SelectItem(UBYTE * screen,
 	x += xoffset;
 	y += yoffset;
 
-	Print(screen, fg, bg, items[index], x, y);
+	strcpy(szOrig, items[index]);
+
+	if (strlen(szOrig) > 3) {
+		int iKnownExt = FALSE;
+
+		if (!strcasecmp(szOrig + strlen(szOrig) - 3, "ATR"))
+			iKnownExt = TRUE;
+
+		if (!strcasecmp(szOrig + strlen(szOrig) - 3, "XFD"))
+			iKnownExt = TRUE;
+
+		if (iKnownExt) {
+			szOrig[strlen(szOrig) - 4] = '\0';
+		}
+	}
+
+	ShortenItem(szOrig, szString, iMaxXsize);
+
+	Print(screen, fg, bg, szString, x, y);
+
+	if (active) {
+		char empty[41];
+		int ln;
+
+		memset(empty, ' ', 38);
+		empty[38] = '\0';
+		Print(screen, bg, fg, empty, 1, 22);
+
+		ShortenItem(szOrig, szString, 38);
+		ln = strlen(szString);
+
+		if (ln > iMaxXsize)
+			CenterPrint(screen, fg, bg, szString, 22);	/*the selected item was shortened */
+	}
 }
 
 int Select(UBYTE * screen,
@@ -269,10 +322,10 @@ int Select(UBYTE * screen,
 	int index = 0;
 
 	for (index = 0; index < nitems; index++)
-		SelectItem(screen, 0x9a, 0x94, index, items, nrows, ncolumns, xoffset, yoffset);
+		SelectItem(screen, 0x9a, 0x94, index, items, nrows, ncolumns, xoffset, yoffset, FALSE);
 
 	index = default_item;
-	SelectItem(screen, 0x94, 0x9a, index, items, nrows, ncolumns, xoffset, yoffset);
+	SelectItem(screen, 0x94, 0x9a, index, items, nrows, ncolumns, xoffset, yoffset, TRUE);
 
 	for (;;) {
 		int row;
@@ -332,10 +385,10 @@ int Select(UBYTE * screen,
 
 		new_index = (column * nrows) + row;
 		if ((new_index >= 0) && (new_index < nitems)) {
-			SelectItem(screen, 0x9a, 0x94, index, items, nrows, ncolumns, xoffset, yoffset);
+			SelectItem(screen, 0x9a, 0x94, index, items, nrows, ncolumns, xoffset, yoffset, FALSE);
 
 			index = new_index;
-			SelectItem(screen, 0x94, 0x9a, index, items, nrows, ncolumns, xoffset, yoffset);
+			SelectItem(screen, 0x94, 0x9a, index, items, nrows, ncolumns, xoffset, yoffset, TRUE);
 		}
 	}
 }
@@ -344,7 +397,7 @@ void SelectSystem(UBYTE * screen)
 {
 	int system;
 	int ascii;
-	int status;
+	int status = 0;
 
 	char *menu[7] =
 	{
@@ -403,6 +456,17 @@ void SelectSystem(UBYTE * screen)
 
 int FilenameSort(char *filename1, char *filename2)
 {
+	if (*filename1 == '[' && *filename2 != '[')
+		return -1;
+	if (*filename1 != '[' && *filename2 == '[')
+		return 1;
+	if (*filename1 == '[' && *filename2 == '[') {
+		if (filename1[1] == '.')
+			return -1;
+		else if (filename2[1] == '.')
+			return 1;
+	}
+
 	return strcmp(filename1, filename2);
 }
 
@@ -410,39 +474,58 @@ List *GetDirectory(char *directory)
 {
 #ifdef WIN32
 	List *list = NULL;
-	char	filesearch[MAX_PATH];
+	char filesearch[MAX_PATH];
 	WIN32_FIND_DATA FindFileData;
-	HANDLE	hSearch;
-	
-	strcpy( filesearch, directory );
-	strcat( filesearch, "\\*.*" );
+	HANDLE hSearch;
 
-	hSearch = FindFirstFile( filesearch, &FindFileData );
-	
-	if( hSearch )
-	{
+	strcpy(filesearch, directory);
+	strcat(filesearch, "\\*.*");
+
+	hSearch = FindFirstFile(filesearch, &FindFileData);
+
+	if (hSearch) {
 		list = ListCreate();
 		if (!list) {
-			MessageBox( NULL, "Out of memory", "Atari800Win", MB_OK );
+			MessageBox(NULL, "Out of memory", "Atari800Win", MB_OK);
 			return NULL;
 		}
-		ListAddTail( list, FindFileData.cFileName);
+		ListAddTail(list, FindFileData.cFileName);
 
-		while( FindNextFile( hSearch, &FindFileData ) ) {
-			char *filename = _strdup( FindFileData.cFileName );
-			if( !filename )
-				MessageBox( NULL, "Out of memory", "Atari800Win", MB_OK );
+		while (FindNextFile(hSearch, &FindFileData)) {
+			char *filename = _strdup(FindFileData.cFileName);
+			if (!filename)
+				MessageBox(NULL, "Out of memory", "Atari800Win", MB_OK);
 			else
-				ListAddTail( list, filename);
+				ListAddTail(list, filename);
 		}
 
-		FindClose( hSearch );
+		FindClose(hSearch);
 
 		ListSort(list, FilenameSort);
 	}
 #else
 	DIR *dp = NULL;
 	List *list = NULL;
+	struct stat st;
+	char fullfilename[MAX_FILENAME_LEN];
+	char *filepart;
+#ifdef VGA
+	char letter[3] = "C:";
+	char letter2[5] = "[C:]";
+#ifdef __DJGPP__
+	unsigned short s_backup = _djstat_flags;
+	_djstat_flags = _STAT_INODE | _STAT_EXEC_EXT | _STAT_EXEC_MAGIC | _STAT_DIRSIZE |
+		_STAT_ROOT_TIME | _STAT_WRITEBIT;
+	/*we do not need any of those 'hard-to-get' informations */
+#endif	/* DJGPP */
+#endif	/* VGA */
+	strcpy(fullfilename, directory);
+	filepart = fullfilename + strlen(fullfilename);
+#ifdef BACK_SLASH
+	*filepart++ = '\\';
+#else
+	*filepart++ = '/';
+#endif
 
 	dp = opendir(directory);
 	if (dp) {
@@ -450,16 +533,31 @@ List *GetDirectory(char *directory)
 
 		list = ListCreate();
 		if (!list) {
-			printf("ListCreate(): Failed\n");
+			Aprint("ListCreate(): Failed\n");
 			return NULL;
 		}
 		while ((entry = readdir(dp))) {
 			char *filename;
 
-			if (strcmp(entry->d_name,".")==0)
+			if (strcmp(entry->d_name, ".") == 0)
 				continue;
 
-			filename = (char *)strdup(entry->d_name);
+			strcpy(filepart, entry->d_name);	/*create full filename */
+			stat(fullfilename, &st);
+			if (st.st_mode & S_IFDIR) {		/*directories add as  [dir] */
+				int len;
+
+				len = strlen(entry->d_name);
+				if ( (filename = (char *) malloc(len + 3)) ) {
+					strcpy(filename + 1, entry->d_name);
+					filename[0] = '[';
+					filename[len + 1] = ']';
+					filename[len + 2] = '\0';
+				}
+			}
+			else
+				filename = (char *) strdup(entry->d_name);
+
 			if (!filename) {
 				perror("strdup");
 				return NULL;
@@ -469,8 +567,25 @@ List *GetDirectory(char *directory)
 
 		closedir(dp);
 
-		ListSort(list, (void *)FilenameSort);
+		ListSort(list, (void *) FilenameSort);
 	}
+#ifdef VGA
+	/*in DOS, add all existing disk letters */
+	ListAddTail(list, strdup("[A:]"));	/*do not check A: - it's slow */
+	letter[0] = 'C';
+	while (letter[0] <= 'Z') {
+		stat(letter, &st);
+		if (st.st_mode & S_IXUSR) {
+			letter2[1] = letter[0];
+			ListAddTail(list, strdup(letter2));
+		}
+		(letter[0])++;
+	}
+#endif
+#ifdef __DJGPP__
+	_djstat_flags = s_backup;	/*return the original state */
+#endif
+
 #endif
 	return list;
 }
@@ -482,6 +597,14 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 	int next_dir;
 
 	do {
+#ifdef __DJGPP__
+		char helpdir[MAX_FILENAME_LEN];
+		_fixpath(directory, helpdir);
+		strcpy(directory, helpdir);
+#else
+		if (strcmp(directory, ".") == 0)
+			getcwd(directory, MAX_FILENAME_LEN);
+#endif
 		next_dir = FALSE;
 		list = GetDirectory(directory);
 		if (list) {
@@ -492,7 +615,7 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 			int offset = 0;
 			int nfiles = 0;
 
-#define NROWS 19
+#define NROWS 18
 #define NCOLUMNS 2
 #define MAX_FILES (NROWS * NCOLUMNS)
 
@@ -518,7 +641,11 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 				}
 
 				ClearScreen(screen);
+#if 1
 				TitleScreen(screen, "Select File");
+#else
+				TitleScreen(screen, directory);
+#endif
 				Box(screen, 0x9a, 0x94, 0, 3, 39, 23);
 
 				if (item < 0)
@@ -537,25 +664,93 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 					item = item % nitems;
 				}
 				else if (item == -2) {	/* Next directory */
-					current_disk_directory = (current_disk_directory + 1) % disk_directories;
-					directory = atari_disk_dirs[current_disk_directory];
+					DIR *dr;
+					do {
+						current_disk_directory = (current_disk_directory + 1) % disk_directories;
+						strcpy(directory, atari_disk_dirs[current_disk_directory]);
+						dr = opendir(directory);
+					} while (dr == NULL);
+					closedir(dr);
+/*                  directory = atari_disk_dirs[current_disk_directory]; */
 					next_dir = TRUE;
 					break;
 				}
 				else if (item != -1) {
-#ifndef BACK_SLASH
-					sprintf(full_filename, "%s/%s", directory, files[item]);
-#else							/* DOS, TOS fs */
-					sprintf(full_filename, "%s\\%s", directory, files[item]);
+					if (files[item][0] == '[') {	/*directory selected */
+						DIR *dr;
+						char help[MAX_FILENAME_LEN];	/*new directory */
+
+						if (strcmp(files[item], "[..]") == 0) {		/*go up */
+							char *pos, *pos2;
+
+							strcpy(help, directory);
+							pos = strrchr(help, '/');
+							if (!pos)
+								pos = strrchr(help, '\\');
+							if (pos) {
+								*pos = '\0';
+								/*if there is no slash in directory, add one at the end */
+								pos2 = strrchr(help, '/');
+								if (!pos2)
+									pos2 = strrchr(help, '\\');
+								if (!pos2) {
+#ifdef BACK_SLASH
+									*pos++ = '\\';
+#else
+									*pos++ = '/';
 #endif
-					flag = TRUE;
-					break;
+									*pos++ = '\0';
+								}
+							}
+
+						}
+#ifdef VGA
+						else if (files[item][2] == ':' && files[item][3] == ']') {	/*disk selected */
+							strcpy(help, files[item] + 1);
+							help[2] = '\\';
+							help[3] = '\0';
+						}
+#endif
+						else {	/*directory selected */
+							char lastchar = directory[strlen(directory) - 1];
+
+							*strchr(files[item], ']') = '\0';	/*cut ']' */
+							if (lastchar == '/' || lastchar == '\\')
+								sprintf(help, "%s%s", directory, files[item] + 1);	/*directory already ends with slash */
+							else
+#ifndef BACK_SLASH
+								sprintf(help, "%s/%s", directory, files[item] + 1);
+#else
+								sprintf(help, "%s\\%s", directory, files[item] + 1);
+#endif
+						}
+						dr = opendir(help);		/*check, if new directory is valid */
+						if (dr) {
+							strcpy(directory, help);
+							closedir(dr);
+							next_dir = TRUE;
+							break;
+						}
+					}
+					else {		/*normal filename selected */
+						char lastchar = directory[strlen(directory) - 1];
+						if (lastchar == '/' || lastchar == '\\')
+							sprintf(full_filename, "%s%s", directory, files[item]);		/*directory already ends with slash */
+						else
+#ifndef BACK_SLASH
+							sprintf(full_filename, "%s/%s", directory, files[item]);
+#else							/* DOS, TOS fs */
+							sprintf(full_filename, "%s\\%s", directory, files[item]);
+#endif
+						flag = TRUE;
+						break;
+					}
 				}
 				else
 					break;
 			}
 
-			ListFree(list, (void *)free);
+			ListFree(list, (void *) free);
 		}
 	} while (next_dir);
 	return flag;
@@ -568,7 +763,8 @@ void DiskManagement(UBYTE * screen)
 	int dsknum = 0;
 	int i;
 
-	for(i=0;i<8;++i) menu[i] = sio_filename[i];
+	for (i = 0; i < 8; ++i)
+		menu[i] = sio_filename[i];
 
 	while (!done) {
 		char filename[1024];
@@ -589,23 +785,25 @@ void DiskManagement(UBYTE * screen)
 
 		dsknum = Select(screen, dsknum, 8, menu, 8, 1, 4, 4, FALSE, &ascii);
 		if (dsknum > -1) {
- 			if (ascii == 0x9b) { /* User pressed "Enter" to select a disk image */
- 				char *pathname;
- 
- 				pathname=atari_disk_dirs[current_disk_directory];
- 				while (FileSelector(screen, pathname, filename)) {
- 					DIR *subdir;
- 
- 					subdir=opendir(filename);
- 					if (!subdir) { /* A file was selected */
- 						SIO_Dismount(dsknum + 1);
- 						SIO_Mount(dsknum + 1, filename);
- 						break;
- 					}
- 					else { /* A directory was selected */
- 						closedir(subdir);
- 						pathname=filename;
- 					}
+			if (ascii == 0x9b) {	/* User pressed "Enter" to select a disk image */
+				char *pathname;
+
+/*              pathname=atari_disk_dirs[current_disk_directory]; */
+				if (curr_dir[0] == '\0')
+					strcpy(curr_dir, atari_disk_dirs[current_disk_directory]);
+				while (FileSelector(screen, curr_dir, filename)) {
+					DIR *subdir;
+
+					subdir = opendir(filename);
+					if (!subdir) {	/* A file was selected */
+						SIO_Dismount(dsknum + 1);
+						SIO_Mount(dsknum + 1, filename);
+						break;
+					}
+					else {		/* A directory was selected */
+						closedir(subdir);
+						pathname = filename;
+					}
 				}
 			}
 			else {
@@ -649,6 +847,8 @@ void CartManagement(UBYTE * screen)
 	int done = FALSE;
 	int option = 2;
 
+	strcpy(curr_dir, atari_rom_dir);
+
 	while (!done) {
 		char filename[256];
 		int ascii;
@@ -660,7 +860,7 @@ void CartManagement(UBYTE * screen)
 		option = Select(screen, option, nitems, menu, nitems, 1, 1, 4, FALSE, &ascii);
 		switch (option) {
 		case 0:
-			if (FileSelector(screen, atari_rom_dir, filename)) {
+			if (FileSelector(screen, curr_dir, filename)) {
 				UBYTE image[32769];
 				int type = CART_UNKNOWN;
 				int nbytes;
@@ -757,7 +957,7 @@ void CartManagement(UBYTE * screen)
 			}
 			break;
 		case 1:
-			if (FileSelector(screen, atari_rom_dir, filename)) {
+			if (FileSelector(screen, curr_dir, filename)) {
 				int fd;
 
 				fd = open(filename, O_RDONLY, 0777);
@@ -790,7 +990,7 @@ void CartManagement(UBYTE * screen)
 			}
 			break;
 		case 2:
-			if (FileSelector(screen, atari_rom_dir, filename)) {
+			if (FileSelector(screen, curr_dir, filename)) {
 				if (!Insert_Cartridge(filename)) {
 					const int nitems = 4;
 					static char *menu[4] =
@@ -840,6 +1040,7 @@ void CartManagement(UBYTE * screen)
 			break;
 		}
 	}
+	curr_dir[0] = '\0';			/*force reload of DISK_DIR */
 }
 
 void AboutEmulator(UBYTE * screen)
@@ -931,7 +1132,7 @@ void ui(UBYTE * screen)
 			break;
 		case 6:
 #ifdef WIN32
-			PostMessage( MainhWnd, WM_CLOSE, 0, 0L );
+			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
 			hThread = 0L;
 			/* ExitThread(0); */
 			_endthread();
@@ -943,7 +1144,7 @@ void ui(UBYTE * screen)
 	}
 	/* Sound_Active(TRUE); */
 	ui_is_active = FALSE;
-	while(Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
+	while (Atari_Keyboard() != AKEY_NONE);	/* flush keypresses */
 #ifdef WIN32
 	unAtariState &= ~ATARI_UI_ACTIVE;
 	hThread = 0L;

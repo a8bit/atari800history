@@ -1,3 +1,106 @@
+Changes in 0.9.7
+-----------------
+
+o CPU.C has got several new macros for stack (PH, PHW, PL) and memory
+  access (dGetByte, dPutByte, dGetWord). This is intented for easier
+  implementation of future memory management. <Jason>
+
+o new command line switch "-nopatchall" and option in config file
+  "ENABLE_ROM_PATCH". If you disable ROM patches (either by setting the
+  ENABLE_ROM_PATCH to 0 or by using "-nopatchall") it will automatically
+  disable the SIO patch as well. But the main purpose of this is to get
+  a clean Atari800 ROM so Self-Test is happy when testing CRC and
+  some games that search for certain device in HATABS do work now.
+  <idea by Jindrich>
+
+o new undocumented GTIA priority ("transparent missiles") added. The 5th
+  player colour of missiles is transparent in mode 9 and 11.
+  Also it fixes a bug in the earlier implementation of gtia mode 11
+  There is also a major change in the way priorities are handled which
+  is designed to be faster somewhat, it seems to help a bit with demos
+  that cover the screen with players. It will probably not help too much
+  for other programs. <Perry>
+
+o #define BIG_ENDIAN -> POKEYSND_BIG_ENDIAN (why Linux-ix86 defines
+  BIG_ENDIAN???). <Perry>
+
+o NTSC patch to get Joust running under A5200. <Perry>
+
+o new: support of R-Time 8 cartridge. Try to type 'date' or 'time' under 
+  SpartaDOS. <Jason>
+
+o new: artifacting in ANTIC mode 2. <Perry>
+
+o PM DOS version: sound routines (DOSSOUND.C) do not need SEAL library
+  as it uses ALLEGRO lib now. ALLEGRO is capable of sound card auto detection.
+  New code uses just double buffering (previously tripple buffered) and the
+  value of gain was reduced to fix some problems with digital sound.
+  Edit ALLEGRO.CFG to change sample rate and thus sound quality.
+  <Perry>
+
+o CPU 6502 emulation core adapted to not use goto's all over the place.
+  Also the jump table was replaced by switch() statement, which should be
+  optimized into jump table by any modern compiler, anyway.
+  This has various results - under MSVC it speeded up the emulation,
+  while under GNU C on MC68040 it actually slowed the emulator down
+  (about 10%, which is too much). The new core is available in file
+  CPU_NOGOTO.C and is not used by default, however you may experiment
+  with it under your architecture. <Rich>
+
+o SIO DVSTAT byte 1 changed from 128 to 255 in order to get Strip Poker
+  running. <Rich>
+
+o WIN32 related additions and changes <Rich>
+
+o stricmp() -> strcasecmp() in ui.c
+
+o TVmode enum members PAL and NTSC had to be changed to TV_PAL and TV_NTSC
+  (PAL and NTSC were already defined in falcon.h header file)
+
+o ESCape code for SIO invoking (at 0xe459) has got an additional check to
+  ensure that SIO emulation layer is not called by mistake when CPU gets
+  some random data instead of instructions (it used to cause mysterious
+  locks up of emulator). All other system patches should be protected this
+  way, I think.
+
+o ADDLOG and BACKUP_MSG were replaced with one universal routine in log.c
+  called Aprint (syntax same as printf). All printf() should be replaced
+  with this Aprint() routine that buffers the messages on systems where
+  the emulator runs in a special graphics mode (DOS/Falcon/Win32) and does
+  not want to have screen filled with a mess instead of debug reports.
+
+o Falcon port cleaned up a lot: cflib removed, three different routines
+  for chunky-to-planar conversion in 320x240, 352x240 and 384x240 resolutions
+  were replaced with one universal routine that works in any resolution and
+  centers the screen view automatically. The default resolution for Falcon
+  is 336x240 now. It also is NOT a Falcon specific port anymore, as it now 
+  supports any Atari compatible hardware with MC68020 or higher and 8-bit
+  color graphics (320x240 is the minimum resolution for starting emulator).
+  It also supports LED emulation (floppy LED blinking during SIO activity).
+
+o source is compilable with -Wall, all previously uninitialised variables are
+  set to 0.
+
+o UI: long file names in Disk Selection dialog are shortened now. <Jindrich>
+
+o Colour Artifacting! Use '-artif <MODE>' command line switch to enable
+  the artifacting. Mode is number between 0 and 3. <Perry>
+
+o the WIN32 specific code for artifacting in antic was removed.
+
+o DOS specific files clean up and fixes (a lot). <Golda>
+
+o PIA: fixed support for four joysticks in Atari800, tested on some games.
+  Improved emulation of joystick ports on XL/XE. Some games obviously
+  switch the ports into output state(!) and then read it. One would say
+  there is nothing but $FF when the port is in output state and you read
+  from it, but the real life is different. Atari800 emulator now supports
+  this hardware trick correctly. <Golda>
+
+o UI: better directory tree browsing support in Select Disk, in MS-DOS you
+  can even select disk drives. <Golda>
+
+
 Changes in 0.9.6
 ----------------
 
@@ -119,7 +222,7 @@ o additional WIN32 code (Atari800 User Interface is used in
 o all Hardware_GetByte(address) routines return 0xff for unknown 
   address now.
 
-o fixed several files so Makefile.pm works now. <Perry>
+o fixed several files so Makefile.allegro works now. <Perry>
 
 o NMIEN is not readable now. <Thor>
 
@@ -204,10 +307,10 @@ o new POKEY v2.4 with sound channels filtering! Exclusively
 
 o merge of Perry's and (RASTER & Petr)'s source tree - great!
   Current source can be compiled for DOS by either Makefile.dos
-  or by Perry's Makefile.pm (with Pentium optimizations).
-  Perry's Makefile needs DOS game library Allegro. The only
-  functional difference between these two DOS versions is that
-  Makefile.pm enables keyclicks (due to different sound handling).
+  or by Perry's Makefile.allegro. Perry's Makefile needs DOS game
+  library Allegro. The only functional difference between these
+  two DOS versions is that Makefile.allegro enables keyclicks
+  (due to different sound handling).
 
 o major rewrite of DOS keyboard emulation - now allows two
   modes of operation: native (the labels on English PC keyboard

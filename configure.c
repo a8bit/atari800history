@@ -44,8 +44,6 @@ int main(void)
 	char *home;
 
 	char config_version[256];
-	char gash[256];
-
 	char linux_joystick = 'N';
 	char joymouse = 'N';
 	char voxware = 'N';
@@ -65,9 +63,6 @@ int main(void)
 
 	fp = fopen(config_filename, "r");
 	if (fp) {
-		char *ptr;
-		int len;
-
 		printf("\nReading: %s\n\n", config_filename);
 
 		fgets(config_version, 256, fp);

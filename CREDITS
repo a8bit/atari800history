@@ -94,10 +94,10 @@ Nathan Monson <nathan@polaristel.net>
 - Supplied correction for handling of 6502 V flag during ADC and SBC
   operations.
 
-Petr Stehlik <stehlik@cas3.zlin.vutbr.cz>
+Petr Stehlik <pstehlik@zln.cz>
 - Added support for Atari Falcon (port itself, sound, kbd, joy)
 - Added sound, keyboard and joystick support for DOS version
-- "Project coordinator" since v0.8.2
+- "Project coordinator" since v0.8.2 (http://users.zln.cz/~pstehlik)
 
 Karel Rous <Empty Head>
 - rewrote CPU.C to optimized MC68030 assembler
@@ -115,6 +115,8 @@ Perry McFarlane <ce596@freenet.toronto.on.ca>
 - Complete Antic rewrite (DIRECT_VIDEO approach, but better)
 - GTIA enhancements (based on Thomas' code, but using DIRECT_VIDEO)
 - Allegro library in DOS port
+- Colour Artifacting
+- 'digital sound' emulation in DOS port
 
 Thomas Richter <thor@math.tu-berlin.de>
 - GTIA collisions and third colour of players
@@ -129,6 +131,8 @@ Robert Golias <golias@informatics.muni.cz>
 - UI enhancements and DJGPP fixes
 - Monitor enhancements (esp. line assembler)
 - fullscreen in DOS port - 320x240 and 320x480 interlaced graphics
+- VESA2 support in DOS
+- keyboard and joystick handling, joystick emulated on keyboard
 
 Robert W. Brewer <rbrewer@Op.Net>
 - Voxware sound driver updated for POKEY v2.4
@@ -140,3 +144,6 @@ Michael Beck <beck@dresearch.de>
 
 Preston Crow
 - UI enhancement (folders in disk management)
+
+Jason Duerstock <jason@sdi.cluephone.com>
+- R-Time 8 cartridge support (real date and time from host machine)

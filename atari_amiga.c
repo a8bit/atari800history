@@ -1058,8 +1058,6 @@ void Atari_DisplayScreen(UBYTE * screen)
    word4 = *bitplane4;
  */
 
-	consol = 7;
-
 	if (ChipSet == AGA_ChipSet) {
 		ULONG *bitplane0;
 
@@ -2278,8 +2276,6 @@ int Atari_CONSOL(void)
 {
 	return consol;
 }
-
-
 
 /*
  * ==================

@@ -1,12 +1,11 @@
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -pipe -c -O2 -m68020-40 -fomit-frame-pointer -Wall -DGNU_C
-#CFLAGS		= -c -O2 -m68020-40 -fno-strength-reduce -fomit-frame-pointer -Wall -DGNU_C
+CFLAGS		= -c -O2 -m68020-40 -fno-strength-reduce -fomit-frame-pointer -Wall -DGNU_C
 #CFLAGS		= -c -g -m68020-40 -Wall -DGNU_C
 LD		= gcc
 LDFLAGS		=
 #LDFLAGS		= -g
-LDLIBS		= -lcflib -lgem -L./
+LDLIBS		= -lgem
 
 default :
 	@echo To build the Atari 800 Emulator, type:
@@ -15,10 +14,10 @@ default :
 	@echo where version is one of
 	@echo "  basic          just plain screen"
 	@echo "  ncurses        ncurses fullscreen emulation"
-	@echo "  videl          VIDEL resolution"
-	@echo "  vidsnd         VIDEL + SOUND"
-	@echo "  asm            VIDEL + CPU in assembler"
-	@echo "  super          VIDEL + SOUND + CPU in assembler"
+	@echo "  gem            direct screen output"
+	@echo "  asm            gem + CPU in assembler"
+	@echo "  snd            gem + SOUND"
+	@echo "  super          gem + SOUND + CPU in assembler"
 	@echo . 
 	@echo To reconfigure options, type: make config
 	@echo To clean directory, type: make clean
@@ -31,20 +30,20 @@ ncurses :
 	@make atari800 CPPFLAGS="-DBACK_SLASH -DCURSES -DANSI_NCURSES" LDLIBS="-lncurses -lm" OBJ="cpu.o atari_curses.o"
 	@echo Finished.
 
-videl :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o"
+gem :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG" OBJ="cpu.o atari_falcon.o c2p_uni.o videl.o ikbd.o"
 	@echo Finished.
 
-vidsnd :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DBACKUP_MSG -DUSE_CLOCK -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o sound_dma.o"
+snd :
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p_uni.o videl.o ikbd.o sound_dma.o"
 	@echo Finished.
 
 asm :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG" OBJ="cpu_asm.o atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o"
 	@echo Finished.
 
 super :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p.o c2p_320.o c2p_352.o videl.o ikbd.o cpu_m68k.o sound_dma.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o sound_dma.o"
 	@echo Finished.
 
 #
@@ -91,7 +90,8 @@ OBJECTS =       atari.o \
                 list.o \
                 pokeysnd.o \
 		sound_falcon.o \
-		ataripcx.o
+		ataripcx.o \
+		log.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -145,17 +145,9 @@ prompts.o       :       prompts.c prompts.h
 sound_falcon.o		:       sound_falcon.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) sound_falcon.c
 
-c2p.o	:	c2p.s c2pmac.s
-	xgen -L1 c2p.o c2p.s
-	gst2gcc gcc c2p.o
-
-c2p_320.o	:	c2p_320.s c2pmac.s
-	xgen -L1 c2p_320.o c2p_320.s
-	gst2gcc gcc c2p_320.o
-
-c2p_352.o	:	c2p_352.s c2pmac.s
-	xgen -L1 c2p_352.o c2p_352.s
-	gst2gcc gcc c2p_352.o
+c2p_uni.o	:	c2p_uni.s c2pmac.s
+	xgen -L1 c2p_uni.o c2p_uni.s
+	gst2gcc gcc c2p_uni.o
 
 videl.o	:	videl.s
 	xgen -L1 videl.o videl.s
@@ -174,7 +166,7 @@ cpu_m68k.o	:	cpu_m68k.s
 	gst2gcc gcc cpu_m68k.o
 
 pokeysnd.o	:       pokeysnd.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -DSIGNED_SAMPLES -DBIG_ENDIAN pokeysnd.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DSIGNED_SAMPLES -DPOKEYSND_BIG_ENDIAN pokeysnd.c
 
 atari_x11.o     :       atari_x11.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari_x11.c
@@ -193,6 +185,9 @@ nas.o           :       nas.c $(INCLUDES)
 
 ataripcx.o	:	ataripcx.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
+		
+log.o	:	log.c log.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
 		
 clean   :
 	rm -f configure

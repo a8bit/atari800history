@@ -1,14 +1,15 @@
 #include <stdio.h>
-#include <unistd.h>		/* for rand() */
 #include <string.h>
 
-#define LCHOP 3	/* do not build lefmost 0..3 characters in wide mode */
-#define RCHOP 3	/* do not build rightmost 0..3 characters in wide mode */
+#define LCHOP 3					/* do not build lefmost 0..3 characters in wide mode */
+#define RCHOP 3					/* do not build rightmost 0..3 characters in wide mode */
 
 #ifdef WIN32
 #include <windows.h>
-#include "../winatari.h"
+#include "winatari.h"
 #else
+#include <stdlib.h>				/* for atoi() */
+#include <unistd.h>				/* for rand() */
 #ifndef AMIGA
 #include "config.h"
 #endif
@@ -21,6 +22,7 @@
 #include "antic.h"
 #include "pokey.h"
 #include "sio.h"
+#include "log.h"
 
 #define FALSE 0
 #define TRUE 1
@@ -28,6 +30,9 @@
 
 static char *rcsid = "$Id: antic.c,v 1.18 1997/03/22 21:48:27 david Exp $";
 
+#ifdef POKEY_UPDATE
+extern void pokey_update(void);
+#endif
 UBYTE CHACTL;
 UBYTE CHBASE;
 UBYTE DMACTL;
@@ -38,11 +43,8 @@ UBYTE PMBASE;
 UBYTE VSCROL;
 UWORD dlist;
 
-#ifdef WIN32
-extern unsigned long	unMiscStates;
-extern unsigned char	chAnticColor1;
-extern unsigned char	chAnticColor2;
-#endif
+int global_artif_mode;
+
 /*
  * These are defined for Word (2 Byte) memory accesses. I have not
  * defined Longword (4 Byte) values since the Sparc architecture
@@ -74,7 +76,7 @@ int ypos;
 #define CPUL	114				/* 114 CPU cycles for 1 screenline */
 #define DMAR	9				/* 9 cycles for DMA refresh */
 #define WSYNC	7				/* 7 cycles for wsync */
-#define VCOUNTDELAY 3 /*delay for VCOUNT change after wsync */
+#define VCOUNTDELAY 3			/*delay for VCOUNT change after wsync */
 #define BEGL	15				/* 15 cycles for begin of each screenline */
 
 /* Table of Antic "beglinecycles" from real atari */
@@ -100,9 +102,11 @@ static int realcyc[128] =
 };
 
 /* Table of nlines for Antic modes */
+/*
 static int an_nline[16] =
 {1, 1, 8, 10, 8, 16, 8, 16,
  8, 4, 4, 2, 1, 2, 1, 1};
+*/
 
 /* DLI on first screenline */
 #define DLI_FIRSTLINE	if (dlisc==0) { allc -= 8; NMIST |= 0x80; NMI(); } unc = GO(allc + unc);
@@ -151,7 +155,6 @@ static UWORD p2addr_d;			/* Address of Player2 - Double Line Resolution */
 static UWORD p3addr_d;			/* Address of Player3 - Double Line Resolution */
 static UBYTE IR;				/* made a global */
 
-static int foobar;
 static int hscrol_flag;
 static int chars_read[6];
 static int chars_displayed[6];
@@ -184,8 +187,12 @@ int pmg_dma(void);
 #define L_PM2 (3*5-4)
 #define L_PM3 (4*5-4)
 #define L_PM23 (5*5-4)
-#define L_PMNONE (6*5-4)
-int new_pm_lookup[16] =
+#define L_PMNONE (12*5-4)
+#define L_PM5PONLY (13*5-4) /*these should be the last two*/
+#define NUM_PLAYER_TYPES 14
+/*these defines also in gtia.c*/
+
+int old_new_pm_lookup[16] =
 {
 	L_PMNONE,					/* 0000 - None */
 	L_PM0,						/* 0001 - Player 0 */
@@ -208,6 +215,13 @@ int new_pm_lookup[16] =
 	L_PM1,						/* 1110 - Player 1 */
 	L_PM0,						/* 1111 - Player 0 */
 };
+
+signed char *new_pm_lookup;
+signed char pm_lookup_normal[256];
+signed char pm_lookup_multi[256];
+signed char pm_lookup_5p[256];
+signed char pm_lookup_multi_5p[256];
+
 static UBYTE playfield_lookup[256];		/* what size should this be to be fastest? */
 
 /*
@@ -226,9 +240,8 @@ static UBYTE playfield_lookup[256];		/* what size should this be to be fastest? 
 
 ULONG *atari_screen = NULL;
 UBYTE *scrn_ptr;
-UBYTE prior_table[35 * 16];
-UBYTE cur_prior[35];
-UBYTE p5_mask;
+UBYTE prior_table[5*NUM_PLAYER_TYPES * 16];
+UBYTE cur_prior[5*NUM_PLAYER_TYPES];
 #define R_BLACK 23
 #define R_COLPM0OR1 9
 #define R_COLPM2OR3 10
@@ -251,19 +264,26 @@ void initialize_prior_table()
 {
 	UBYTE player_colreg[] =
 	{0, 1, 9, 2, 3, 10, 0};
-	int i, j, k;
+	int i, j,jj, k,kk;
 	for (i = 0; i <= 15; i++) {	/* prior setting */
 
-		for (j = 0; j <= 6; j++) {	/* player */
+		for (jj = 0; jj <= (NUM_PLAYER_TYPES-1); jj++) {	/* player */
 
-			for (k = 0; k <= 4; k++) {	/* playfield */
-
-				int c;			/* colreg */
-
-				if (j == 6)
+			for (kk = 0; kk <= 4; kk++) {	/* playfield */
+                                int c = 0;		/* colreg */
+                                k=kk;
+				j=jj;
+				if (jj==13)
+				   c=3+4; /*5th player by itself*/
+                                else if (jj == 12)
 					c = k + 4;	/* no player */
-
-				else if (k == 4)
+                                else
+                                {
+                                if (jj >= 6 && jj<= 11){
+                                k=3; /*5th player with other players*/
+				j=jj-6; /*other player that is with it*/
+				}
+				if (k == 4)
 					c = player_colreg[j];
 				else {
 					if (k <= 1) {	/* playfields 0 and 1 */
@@ -363,18 +383,320 @@ void initialize_prior_table()
 						}
 					}
 				}
-				prior_table[i * 35 + j * 5 + k] = c;
+				}
+				prior_table[i*NUM_PLAYER_TYPES*5 + jj * 5 + kk] = c;
+
 			}
 		}
 	}
 }
+void init_pm_lookup(){
+int i;
+int pm;
+signed char t;
+for(i=0;i<=255;i++){
+pm=( (i&0x0f)|(i>>4) );
+t=old_new_pm_lookup[pm];
+pm_lookup_normal[i]=t;
+if(pm==3 || pm==7 || pm==11 ) t=L_PM01;
+if(pm==12) t=L_PM23;
+pm_lookup_multi[i]=t;
+pm=(i&0x0f);
+t=old_new_pm_lookup[pm];
+pm_lookup_5p[i]=t;
+if(pm==3 || pm==7 || pm==11 ) t=L_PM01;
+if(pm==12) t=L_PM23;
+pm_lookup_multi_5p[i]=t;
+if(i>15) //5th player adds 6*5
+if((i&0x0f)!=0){
+pm_lookup_5p[i]+=6*5;
+pm_lookup_multi_5p[i]+=6*5;
+}else {
+pm_lookup_5p[i]=L_PM5PONLY;
+pm_lookup_multi_5p[i]=L_PM5PONLY;
+}
+}
+}
+
+/* artifacting stuff */
+static ULONG art_lookup_normal[256];
+static ULONG art_lookup_reverse[256];
+static ULONG art_bkmask_normal[256];
+static ULONG art_lummask_normal[256];
+static ULONG art_bkmask_reverse[256];
+static ULONG art_lummask_reverse[256];
+
+UBYTE art_redgreen_table[] =
+{
+/* ART_BROWN */
+	13 * 16 + 6,
+/* ART_DARK_BROWN */
+	13 * 16 + 6,
+/* ART_BLUE */
+	4 * 16 + 6,
+/* ART_DARK_BLUE */
+	4 * 16 + 6,
+/* ART_BRIGHT_BROWN */
+	13 * 16 + 15,
+/* ART_RED */
+	4 * 16 + 15,
+/* ART_BRIGHT_BLUE */
+	4 * 16 + 10,
+/* ART_GREEN */
+	10 * 16 + 12,
+};
+UBYTE art_bluebrown_table[] =
+{
+/* ART_BROWN */
+	1 * 16 + 4,
+/* ART_DARK_BROWN */
+	1 * 16 + 4,
+/* ART_BLUE */
+	8 * 16 + 8,
+/* ART_DARK_BLUE */
+	8 * 16 + 8,
+/* ART_BRIGHT_BROWN */
+	1 * 16 + 15,
+/* ART_RED */
+	5 * 16 + 15,
+/* ART_BRIGHT_BLUE */
+	8 * 16 + 15,
+/* ART_GREEN */
+	11 * 16 + 11,
+};
+static void setup_art_colours();
+static ULONG art_normal_colpf1_save, art_normal_colpf2_save;
+static ULONG art_reverse_colpf1_save, art_reverse_colpf2_save;
+
+void art_initialise(int gtia_flag, int init_flag, UBYTE * art_colour_table)
+{
+#define ART_GTIA gtia_flag
+#define ART_BROWN art_colour_table[0]
+#define ART_DARK_BROWN art_colour_table[1]
+#define ART_BLUE art_colour_table[2]
+#define ART_DARK_BLUE art_colour_table[3]
+#define ART_BRIGHT_BROWN art_colour_table[4]
+#define ART_RED art_colour_table[5]
+#define ART_BRIGHT_BLUE art_colour_table[6]
+#define ART_GREEN art_colour_table[7]
+#define ART_BLACK 0
+#define ART_WHITE 0
+
+
+	int i;
+	int j;
+	int q;
+	int c;
+	int mask_state;
+	int art_black, art_white;
+	if (init_flag == 1) {
+		art_black = 0;
+		art_white = 0;
+		art_normal_colpf1_save = 0;
+		art_normal_colpf1_save = 0;
+		art_reverse_colpf2_save = 0;
+		art_reverse_colpf2_save = 0;
+	}
+	else {
+		art_black = COLPF2;
+		art_white = ((COLPF2 & 0xf0) | (COLPF1 & 0x0f));
+		art_normal_colpf1_save = ((ULONG) cl_word[5] | (((ULONG) cl_word[5]) << 16));
+		art_normal_colpf2_save = ((ULONG) cl_word[6] | (((ULONG) cl_word[6]) << 16));
+		art_reverse_colpf1_save = ((ULONG) cl_word[5] | (((ULONG) cl_word[5]) << 16));
+		art_reverse_colpf2_save = ((ULONG) cl_word[6] | (((ULONG) cl_word[6]) << 16));
+	}
+
+	for (i = 0; i <= 255; i++) {
+		art_lookup_normal[i] = 0;
+		art_lookup_reverse[255 - i] = 0;
+		art_bkmask_normal[i] = 0;
+		art_lummask_normal[i] = 0;
+		art_bkmask_reverse[255 - i] = 0;
+		art_lummask_reverse[255 - i] = 0;
+
+		for (j = 0; j <= 3; j++) {
+			mask_state = 0;
+			q = (i << j);
+			if (!(q & 0x20)) {	/*not on */
+				if ((q & 0xF8) == 0x50)
+					c = ((j + ART_GTIA) % 2 ? ART_BROWN : ART_BLUE);
+				else if ((q & 0xF8) == 0xD8)
+					c = ((j + ART_GTIA) % 2 ? ART_DARK_BROWN : ART_DARK_BLUE);
+				else {
+					c = ART_BLACK;
+					mask_state = 1;
+				}
+			}
+/*on */
+			else if (q & 0x40) {	/*left on */
+				if (q & 0x10) {	/*right on as well */
+					if ((q & 0xF8) == 0x70) {
+						c = ART_WHITE;	/* ((j+ART_GTIA)%2 ? ART_BRIGHT_RED : ART_BRIGHT_BLUE); */
+						mask_state = 2;
+					}
+/*^^^ middle three on only or */
+					else {
+						c = ART_WHITE;	/* more than middle three, so white */
+						mask_state = 2;
+					}
+				}				/*right not on */
+				else if (q & 0x80) {	/*far left on */
+					if (q & 0x08)
+						c = ((j + ART_GTIA) % 2 ? ART_BRIGHT_BLUE : ART_BRIGHT_BROWN);
+					else {
+						c = ART_WHITE;	/*adjust if far right on ***.*  */
+						mask_state = 2;
+					}
+				}
+				else
+					c = ((j + ART_GTIA) % 2 ? ART_RED : ART_GREEN);		/*left only on */
+			}
+			else if (q & 0x10) {	/*right on, left not on */
+				if (q & 0x08) {	/*far right on */
+					if (q & 0x80)
+						c = ((j + ART_GTIA) % 2 ? ART_BRIGHT_BLUE : ART_BRIGHT_BROWN);
+					else {
+						c = ART_WHITE;	/*adjust if far left on *.***  */
+						mask_state = 2;
+					}
+				}
+				else
+					c = ((j + ART_GTIA) % 2 ? ART_GREEN : ART_RED);		/*right only on */
+			}
+			else
+				c = ((j + ART_GTIA) % 2 ? ART_BLUE : ART_BROWN);	/*right and left both off */
+
+			art_lookup_normal[i] |= (c << (j * 8));
+			art_lookup_reverse[255 - i] |= (c << (j * 8));
+
+			if (mask_state == 1) {	/* black for normal white for reverse */
+				art_lookup_normal[i] |= (art_black << (j * 8));
+				art_lookup_reverse[255 - i] |= (art_white << (j * 8));
+				art_bkmask_normal[i] |= (0xff << (j * 8));
+				art_lummask_reverse[255 - i] |= (0x0f << (j * 8));
+				art_bkmask_reverse[255 - i] |= (0xf0 << (j * 8));
+			}
+			if (mask_state == 2) {	/*white for normal, black for reverse */
+				art_lookup_normal[i] |= (art_white << (j * 8));
+				art_lookup_reverse[255 - i] |= (art_black << (j * 8));
+				art_bkmask_reverse[255 - i] |= (0xff << (j * 8));
+				art_lummask_normal[i] |= (0x0f << (j * 8));
+				art_bkmask_normal[i] |= (0xf0 << (j * 8));
+			}
+		}
+	}
+	if (init_flag == 1) {
+		cl_word[5] = 00;
+		cl_word[6] = 0xffff;	/* something different */
+		COLPF1 = 0x00;
+		COLPF2 = 0xff;
+		setup_art_colours();
+	}
+}
+
+ULONG *art_curtable;
+ULONG *art_curlummask, *art_curbkmask;
+
+static void setup_art_colours()
+{
+	static ULONG *art_colpf1_save = &art_normal_colpf1_save,
+				*art_colpf2_save = &art_normal_colpf2_save;
+	UBYTE curlum;
+
+	curlum = (COLPF1 & 0x0e);
+	if (cl_word[6] != *art_colpf2_save || curlum != (0x0e & *art_colpf1_save)) {
+		if (curlum < (COLPF2 & 0x0e)) {
+			art_colpf1_save = &art_reverse_colpf1_save;
+			art_colpf2_save = &art_reverse_colpf2_save;
+			art_curtable = art_lookup_reverse;
+			art_curlummask = art_lummask_reverse;
+			art_curbkmask = art_bkmask_reverse;
+		}
+		else {
+			art_colpf1_save = &art_normal_colpf1_save;
+			art_colpf2_save = &art_normal_colpf2_save;
+			art_curtable = art_lookup_normal;
+			art_curlummask = art_lummask_normal;
+			art_curbkmask = art_bkmask_normal;
+		}
+		if (curlum != ((*art_colpf1_save) & 0x0e)) {
+			ULONG temp_new_colour = ((ULONG) cl_word[5] | (((ULONG) cl_word[5]) << 16));
+			ULONG new_colour = temp_new_colour ^ *art_colpf1_save;
+			int i;
+			*art_colpf1_save = temp_new_colour;
+			for (i = 0; i <= 255; i++) {
+				art_curtable[i] ^= art_curlummask[i] & new_colour;
+			}
+		}
+		if ((COLPF2) != ((*art_colpf2_save) & 0xff)) {
+			ULONG temp_new_colour = ((ULONG) cl_word[6] | (((ULONG) cl_word[6]) << 16));
+			ULONG new_colour = temp_new_colour ^ *art_colpf2_save;
+			int i;
+			*art_colpf2_save = temp_new_colour;
+			for (i = 0; i <= 255; i++) {
+				art_curtable[i] ^= art_curbkmask[i] & new_colour;
+			}
+		}
+
+	}
+}
+
+void art_main_init(int init_flag, int mode)
+{
+	global_artif_mode = mode;
+	switch (mode) {
+	case 0:
+		break;
+	case 1:
+		art_initialise(1, init_flag, art_bluebrown_table);
+		break;
+	case 2:
+		art_initialise(0, init_flag, art_bluebrown_table);
+		break;
+	case 3:
+		art_initialise(0, init_flag, art_redgreen_table);
+		break;
+	}
+}
+
 void ANTIC_Initialise(int *argc, char *argv[])
 {
+	int i, j;
+#ifdef WIN32
+	BOOL	bInit = FALSE;
+#else
+	art_main_init(0, 0);
+#endif
+	for (i = j = 1; i < *argc; i++) {
+		if (strcmp(argv[i], "-artif") == 0) {
+			int artif_mode;
+			i++;
+			artif_mode = atoi(argv[i]);
+#ifdef WIN32
+			bInit = TRUE;
+#endif
+			if (artif_mode < 0 || artif_mode > 3) {
+				Aprint("Invalid artifacting mode, using default.");
+				artif_mode = 0;
+			}
+			art_main_init(0, artif_mode);
+		}
+		else
+			argv[j++] = argv[i];
+	}
+	*argc = j;
+
+#ifdef WIN32
+	if( !bInit )
+		art_main_init( 0, global_artif_mode );
+#endif
+
 	playfield_lookup[0x00] = 8;
 	playfield_lookup[0x40] = 4;
 	playfield_lookup[0x80] = 5;
 	playfield_lookup[0xc0] = 6;
 	initialize_prior_table();
+	init_pm_lookup();
 	GTIA_PutByte(_PRIOR, 0xff);
 	GTIA_PutByte(_PRIOR, 0x00);
 
@@ -423,19 +745,16 @@ static ULONG lookup_gtia[16];
 static int vskipbefore = 0;
 static int vskipafter = 0;
 
-#define DO_PMG if(pm_pixel){\
-	       pf_colls[colreg]|=pm_pixel;\
-	       if (pm_pixel&p5_mask) colreg=7;\
-               else pm_pixel=pm_pixel|(pm_pixel>>4);\
-               colreg=cur_prior[new_pm_lookup[pm_pixel&0x0f]+colreg];\
-              }
+#define DO_PMG pf_colls[colreg]|=pm_pixel;\
+               colreg=cur_prior[new_pm_lookup[pm_pixel]+colreg];
+
 void do_border(void)
 {
 	int kk;
 	int temp_border_chars;
 	int pass;
 	UWORD *ptr = (UWORD *) & scrn_ptr[LCHOP * 8];
-	ULONG *t_pm_scanline_ptr = (ULONG *) (&pm_scanline[LCHOP*4]);
+	ULONG *t_pm_scanline_ptr = (ULONG *) (&pm_scanline[LCHOP * 4]);
 	ULONG COL_8_LONG;
 
 	COL_8_LONG = cl_word[8] | (cl_word[8] << 16);
@@ -503,14 +822,14 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 			chdata = (memory[chaddr] ^ invert) & blank;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
-				*ptr++ = (char)lookup1[chdata & 0x80];
-				*ptr++ = (char)lookup1[chdata & 0x40];
-				*ptr++ = (char)lookup1[chdata & 0x20];
-				*ptr++ = (char)lookup1[chdata & 0x10];
-				*ptr++ = (char)lookup1[chdata & 0x08];
-				*ptr++ = (char)lookup1[chdata & 0x04];
-				*ptr++ = (char)lookup1[chdata & 0x02];
-				*ptr++ = (char)lookup1[chdata & 0x01];
+				*ptr++ = (char) lookup1[chdata & 0x80];
+				*ptr++ = (char) lookup1[chdata & 0x40];
+				*ptr++ = (char) lookup1[chdata & 0x20];
+				*ptr++ = (char) lookup1[chdata & 0x10];
+				*ptr++ = (char) lookup1[chdata & 0x08];
+				*ptr++ = (char) lookup1[chdata & 0x04];
+				*ptr++ = (char) lookup1[chdata & 0x02];
+				*ptr++ = (char) lookup1[chdata & 0x01];
 			}
 			else {
 #ifdef UNALIGNED_LONG_OK
@@ -544,6 +863,92 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (chdata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
+					*ptr++ = (UBYTE) cl_word[colreg];
+				if (chdata & 0x40)
+					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
+				else
+					*ptr++ = (UBYTE) cl_word[colreg];
+				chdata <<= 2;
+			}
+
+		}
+		t_pm_scanline_ptr++;
+	}
+}
+void draw_antic_2_artif(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
+{
+	ULONG COL_6_LONG;
+	int i;
+	ULONG screendata_tally;
+        UBYTE screendata;
+        UWORD chaddr;
+	UBYTE invert;
+	UBYTE blank;
+	UBYTE chdata;
+        lookup1[0x00] = colour_lookup[6];
+	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] =
+		lookup1[0x10] = lookup1[0x08] = lookup1[0x04] =
+		lookup1[0x02] = lookup1[0x01] = (colour_lookup[6] & 0xf0) | (colour_lookup[5] & 0x0f);
+
+	COL_6_LONG = cl_word[6] | (cl_word[6] << 16);
+	screendata=memory[t_screenaddr];
+        t_screenaddr++;/* for ART*/
+	chaddr = t_chbase + ((UWORD) (screendata & 0x7f) << 3);
+	if (screendata & invert_mask)
+		invert = 0xff;
+	else
+		invert = 0x00;
+	if (screendata & blank_mask)
+		blank = 0x00;
+	else
+		blank = 0xff;
+	if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
+		chdata = invert & blank;
+	else
+		chdata = (memory[chaddr] ^ invert) & blank;
+	screendata_tally=chdata;
+        setup_art_colours();
+	for (i = 0; i < nchars; i++) {
+		UBYTE screendata = memory[t_screenaddr++];
+		UWORD chaddr;
+		UBYTE invert;
+		UBYTE blank;
+		UBYTE chdata;
+
+		chaddr = t_chbase + ((UWORD) (screendata & 0x7f) << 3);
+		if (screendata & invert_mask)
+			invert = 0xff;
+		else
+			invert = 0x00;
+		if (screendata & blank_mask)
+			blank = 0x00;
+		else
+			blank = 0xff;
+		if ((j & 0x0e) == 0x08 && (screendata & 0x60) != 0x60)
+			chdata = invert & blank;
+		else
+			chdata = (memory[chaddr] ^ invert) & blank;
+		screendata_tally<<=8;
+		screendata_tally|=chdata;
+		if (!(*t_pm_scanline_ptr)) {
+*((ULONG*)ptr)=art_curtable[((UBYTE)(screendata_tally>>10))];
+*((ULONG*)(ptr+4))=art_curtable[((UBYTE)(screendata_tally>>6))];
+ptr+=8;
+		}
+		else {
+			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
+			UBYTE pm_pixel;
+			UBYTE colreg;
+			int k;
+       			chdata=(UBYTE)(screendata_tally>>8);
+       			//screendata=memory[t_screenaddr-2];
+			for (k = 1; k <= 4; k++) {
+				pm_pixel = *c_pm_scanline_ptr++;
+				colreg = 6;
+				DO_PMG
+					if (chdata & 0x80)
+					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
+				else
 					*ptr++ = (UBYTE)cl_word[colreg];
 				if (chdata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
@@ -551,7 +956,6 @@ void draw_antic_2(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					*ptr++ = (UBYTE)cl_word[colreg];
 				chdata <<= 2;
 			}
-
 		}
 		t_pm_scanline_ptr++;
 	}
@@ -599,20 +1003,12 @@ void draw_antic_2_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, U
 		if ((*t_pm_scanline_ptr)) {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			UBYTE colreg;
 			int k;
 			UWORD *w_ptr = (UWORD *) (ptr - 2);
 			for (k = 1; k <= 4; k++) {
 				pm_pixel = *c_pm_scanline_ptr++;
-				colreg = 8;
 				if (pm_pixel) {
-					pf_colls[colreg] |= pm_pixel;
-					if (pm_pixel & p5_mask)
-						colreg = 7;
-					else
-						pm_pixel = pm_pixel | (pm_pixel >> 4);
-					colreg = cur_prior[new_pm_lookup[pm_pixel & 0x0f] + colreg];
-					*w_ptr = cl_word[colreg];
+					*w_ptr = cl_word[cur_prior[new_pm_lookup[pm_pixel]+8]];
 				}
 				w_ptr++;
 			}
@@ -653,14 +1049,14 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 			chdata = (memory[chaddr] ^ invert) & blank;
 		if (!(*t_pm_scanline_ptr)) {
 			if (chdata) {
-				*ptr++ = (char)lookup1[chdata & 0x80];
-				*ptr++ = (char)lookup1[chdata & 0x40];
-				*ptr++ = (char)lookup1[chdata & 0x20];
-				*ptr++ = (char)lookup1[chdata & 0x10];
-				*ptr++ = (char)lookup1[chdata & 0x08];
-				*ptr++ = (char)lookup1[chdata & 0x04];
-				*ptr++ = (char)lookup1[chdata & 0x02];
-				*ptr++ = (char)lookup1[chdata & 0x01];
+				*ptr++ = (char) lookup1[chdata & 0x80];
+				*ptr++ = (char) lookup1[chdata & 0x40];
+				*ptr++ = (char) lookup1[chdata & 0x20];
+				*ptr++ = (char) lookup1[chdata & 0x10];
+				*ptr++ = (char) lookup1[chdata & 0x08];
+				*ptr++ = (char) lookup1[chdata & 0x04];
+				*ptr++ = (char) lookup1[chdata & 0x02];
+				*ptr++ = (char) lookup1[chdata & 0x01];
 			}
 			else {
 #ifdef UNALIGNED_LONG_OK
@@ -694,11 +1090,11 @@ void draw_antic_3(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (chdata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE)cl_word[colreg];
+					*ptr++ = (UBYTE) cl_word[colreg];
 				if (chdata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE)cl_word[colreg];
+					*ptr++ = (UBYTE) cl_word[colreg];
 				chdata <<= 2;
 			}
 
@@ -788,7 +1184,7 @@ void draw_antic_6(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 		UBYTE screendata = memory[t_screenaddr++];
 		UWORD chaddr;
 		UBYTE chdata;
-		UWORD colour;
+		UWORD colour = 0;
 		int kk;
 		chaddr = t_chbase + ((UWORD) (screendata & 0x3f) << 3);
 		switch (screendata & 0xc0) {
@@ -1047,9 +1443,9 @@ void draw_antic_e(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_
 		t_pm_scanline_ptr++;
 	}
 }
+
 void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
-	char *ptr2;
 	ULONG COL_6_LONG;
 	int i;
 	lookup1[0x00] = colour_lookup[6];
@@ -1060,98 +1456,16 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 	for (i = 0; i < nchars; i++) {
 		UBYTE screendata = memory[t_screenaddr++];
 		if (!(*t_pm_scanline_ptr)) {
-			/* This is pretty bad - I'm just checking to see whether the odd or even pixel in a 
-			   pair has been set, and if only one of those, then I set both to a solid color.
-			   Actually I think only the odd or even pixel should be set to the color, but the
-			   effect looks better this way most of the time - maybe it should be configurable */
-#ifdef WIN32
 			if (screendata) {
-				if( unMiscStates & ATARI_ANTICF_ARTIFACT )
-				{
-					ptr2 = ptr;
-					*ptr++ = (char)lookup1[screendata & 0x80];
-					*ptr = (char)lookup1[screendata & 0x40];
-					if( !*ptr && *ptr2 )
-					{
-						*ptr = chAnticColor1;
-						*ptr2 = chAnticColor1;
-					}
-					else if( *ptr && !*ptr2 )
-					{
-						*ptr = chAnticColor2;
-						*ptr2 = chAnticColor2;
-					}
-					ptr++;
-					ptr2 = ptr;
-
-					*ptr++ = (char)lookup1[screendata & 0x20];
-					*ptr = (char)lookup1[screendata & 0x10];
-					if( !*ptr && *ptr2 )
-					{
-						*ptr = chAnticColor1;
-						*ptr2 = chAnticColor1;
-					}
-					else if( *ptr && !*ptr2 )
-					{
-						*ptr = chAnticColor2;
-						*ptr2 = chAnticColor2;
-					}
-					ptr++;
-					ptr2 = ptr;
-
-					*ptr++ = (char)lookup1[screendata & 0x08];
-					*ptr = (char)lookup1[screendata & 0x04];
-					if( !*ptr && *ptr2 )
-					{
-						*ptr = chAnticColor1;
-						*ptr2 = chAnticColor1;
-					}
-					else if( *ptr && !*ptr2 )
-					{
-						*ptr = chAnticColor2;
-						*ptr2 = chAnticColor2;
-					}
-					ptr++;
-					ptr2 = ptr;
-
-					*ptr++ = (char)lookup1[screendata & 0x02];
-					*ptr = (char)lookup1[screendata & 0x01];
-					if( !*ptr && *ptr2 )
-					{
-						*ptr = chAnticColor1;
-						*ptr2 = chAnticColor1;
-					}
-					else if( *ptr && !*ptr2 )
-					{
-						*ptr = chAnticColor2;
-						*ptr2 = chAnticColor2;
-					}
-					ptr++;
-				}
-				else
-				{
-					*ptr++ = (char)lookup1[screendata & 0x80];
-					*ptr++ = (char)lookup1[screendata & 0x40];
-					*ptr++ = (char)lookup1[screendata & 0x20];
-					*ptr++ = (char)lookup1[screendata & 0x10];
-					*ptr++ = (char)lookup1[screendata & 0x08];
-					*ptr++ = (char)lookup1[screendata & 0x04];
-					*ptr++ = (char)lookup1[screendata & 0x02];
-					*ptr++ = (char)lookup1[screendata & 0x01];
-				}
+				*ptr++ = (char)lookup1[screendata & 0x80];
+				*ptr++ = (char)lookup1[screendata & 0x40];
+				*ptr++ = (char)lookup1[screendata & 0x20];
+				*ptr++ = (char)lookup1[screendata & 0x10];
+				*ptr++ = (char)lookup1[screendata & 0x08];
+				*ptr++ = (char)lookup1[screendata & 0x04];
+				*ptr++ = (char)lookup1[screendata & 0x02];
+				*ptr++ = (char)lookup1[screendata & 0x01];
 			}
-#else
-			if (screendata) {
-				*ptr++ = lookup1[screendata & 0x80];
-				*ptr++ = lookup1[screendata & 0x40];
-				*ptr++ = lookup1[screendata & 0x20];
-				*ptr++ = lookup1[screendata & 0x10];
-				*ptr++ = lookup1[screendata & 0x08];
-				*ptr++ = lookup1[screendata & 0x04];
-				*ptr++ = lookup1[screendata & 0x02];
-				*ptr++ = lookup1[screendata & 0x01];
-			}
-#endif
 			else {
 #ifdef UNALIGNED_LONG_OK
 				ULONG *l_ptr = (ULONG *) ptr;
@@ -1184,33 +1498,74 @@ void draw_antic_f(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm
 					if (screendata & 0x80)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE)cl_word[colreg];
+					*ptr++ = (UBYTE) cl_word[colreg];
 				if (screendata & 0x40)
 					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
 				else
-					*ptr++ = (UBYTE)cl_word[colreg];
+					*ptr++ = (UBYTE) cl_word[colreg];
 				screendata <<= 2;
 			}
 		}
 		t_pm_scanline_ptr++;
 	}
 }
-void draw_antic_f_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
+void draw_antic_f_artif(int j, int nchars, UWORD t_screenaddr, char *ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
+{
+	ULONG COL_6_LONG;
+	int i;
+	ULONG screendata_tally;
+	lookup1[0x00] = colour_lookup[6];
+	lookup1[0x80] = lookup1[0x40] = lookup1[0x20] =
+		lookup1[0x10] = lookup1[0x08] = lookup1[0x04] =
+		lookup1[0x02] = lookup1[0x01] = (colour_lookup[6] & 0xf0) | (colour_lookup[5] & 0x0f);
+	COL_6_LONG = cl_word[6] | (cl_word[6] << 16);
+	t_screenaddr++;				/* for ART */
+	screendata_tally = memory[t_screenaddr - 1];
+	setup_art_colours();
+	for (i = 0; i < nchars; i++) {
+		UBYTE screendata = memory[t_screenaddr++];
+		screendata_tally <<= 8;
+		screendata_tally |= screendata;
+		if (!(*t_pm_scanline_ptr)) {
+			*((ULONG *) ptr) = art_curtable[((UBYTE) (screendata_tally >> 10))];
+			*((ULONG *) (ptr + 4)) = art_curtable[((UBYTE) (screendata_tally >> 6))];
+			ptr += 8;
+		}
+		else {
+			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
+			UBYTE pm_pixel;
+			UBYTE colreg;
+			int k;
+			screendata = memory[t_screenaddr - 2];
+			for (k = 1; k <= 4; k++) {
+				pm_pixel = *c_pm_scanline_ptr++;
+				colreg = 6;
+				DO_PMG
+					if (screendata & 0x80)
+					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
+				else
+					*ptr++ = (UBYTE) cl_word[colreg];
+				if (screendata & 0x40)
+					*ptr++ = (cl_word[colreg] & 0xf0) | (COLPF1 & 0x0f);
+				else
+					*ptr++ = (UBYTE) cl_word[colreg];
+				screendata <<= 2;
+			}
+		}
+		t_pm_scanline_ptr++;
+	}
+}
+void draw_antic_f_gtia9(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
 {
 	int i;
 	ULONG *ptr = (ULONG *) (t_ptr);
 	ULONG temp_count = 0;
 	ULONG base_colour = colour_lookup[8];
-	ULONG increment;
 	base_colour = base_colour | (base_colour << 8);
 	base_colour = base_colour | (base_colour << 16);
-	if ((PRIOR & 0xC0) == 0x40)
-		increment = 0x01010101;
-	else
-		increment = 0x10101010;
 	for (i = 0; i <= 15; i++) {
 		lookup_gtia[i] = base_colour | temp_count;
-		temp_count += increment;
+		temp_count += 0x01010101;
 	}
 
 	for (i = 0; i < nchars; i++) {
@@ -1220,21 +1575,59 @@ void draw_antic_f_gtia9_11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, U
 		if ((*t_pm_scanline_ptr)) {
 			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
 			UBYTE pm_pixel;
-			UBYTE colreg;
 			int k;
+			signed char pm_reg;
 			UWORD *w_ptr = (UWORD *) (ptr - 2);
 			for (k = 1; k <= 4; k++) {
-				pm_pixel = *c_pm_scanline_ptr++;
-				colreg = 8;
-				if (pm_pixel) {
-					pf_colls[colreg] |= pm_pixel;
-					if (pm_pixel & p5_mask)
-						colreg = 7;
-					else
-						pm_pixel = pm_pixel | (pm_pixel >> 4);
-					colreg = cur_prior[new_pm_lookup[pm_pixel & 0x0f] + colreg];
-					*w_ptr = cl_word[colreg];
-				}
+				pm_reg=new_pm_lookup[*c_pm_scanline_ptr++];
+				if (pm_reg<L_PMNONE) {
+				//it is not blank or P5ONLY
+			             *w_ptr = cl_word[cur_prior[pm_reg+8]];
+                                }else if(pm_reg==L_PM5PONLY){
+                                        *w_ptr=(*w_ptr&0x0f0f) | cl_word[7];
+                                        }
+                                        //otherwise it was L_PMNONE so do nothing
+				w_ptr++;
+			}
+		}
+		t_pm_scanline_ptr++;
+	}
+}
+/* note:border for mode 11 should be fixed as bkground colour is COLBK&0xf0*/
+void draw_antic_f_gtia11(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULONG * t_pm_scanline_ptr, UWORD t_chbase)
+{
+	int i;
+	ULONG *ptr = (ULONG *) (t_ptr);
+	ULONG temp_count = 0;
+	ULONG base_colour = colour_lookup[8];
+	base_colour = base_colour | (base_colour << 8);
+	base_colour = base_colour | (base_colour << 16);
+	lookup_gtia[0]=base_colour&0xf0f0f0f0;
+	/*gtia mode 11 background is always lum 0*/
+
+	for (i = 1; i <= 15; i++) {
+		lookup_gtia[i] = base_colour | temp_count;
+		temp_count += 0x10101010;
+	}
+
+	for (i = 0; i < nchars; i++) {
+		UBYTE screendata = memory[t_screenaddr++];
+		*ptr++ = lookup_gtia[screendata >> 4];
+		*ptr++ = lookup_gtia[screendata & 0x0f];
+		if ((*t_pm_scanline_ptr)) {
+			UBYTE *c_pm_scanline_ptr = (char *) t_pm_scanline_ptr;
+			UBYTE pm_pixel;
+			int k;
+			signed char pm_reg;
+			UWORD *w_ptr = (UWORD *) (ptr - 2);
+			for (k = 1; k <= 4; k++) {
+				pm_reg=new_pm_lookup[*c_pm_scanline_ptr++];
+				if (pm_reg<L_PMNONE) {
+                                     *w_ptr = cl_word[cur_prior[pm_reg+8]];
+                                }else if(pm_reg==L_PM5PONLY){
+                                        if ((*w_ptr)&0xf0f0)  *w_ptr= (((*w_ptr)&0xf0f0) | cl_word[7]);
+                                        else  *w_ptr =(cl_word[7]&0xf0f0);
+                                        }
 				w_ptr++;
 			}
 		}
@@ -1263,14 +1656,8 @@ void draw_antic_f_gtia10(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULO
 	}
 	else {
 		UBYTE pm_pixel = *((char *) t_pm_scanline_ptr);
-		UBYTE colreg = 8;
 		pm_pixel |= 0x01;
-		if (pm_pixel & p5_mask)
-			colreg = 7;
-		else
-			pm_pixel = pm_pixel | (pm_pixel >> 4);
-		colreg = cur_prior[new_pm_lookup[pm_pixel & 0x0f] + colreg];
-		*((UWORD *) t_ptr) = cl_word[colreg];
+		*((UWORD *) t_ptr) = cl_word[cur_prior[new_pm_lookup[pm_pixel] + 8]];
 	}
 /* should prolly fix the border code instead..right border is still not right. */
 	/* needs to be moved over 1 colour clock */
@@ -1289,17 +1676,10 @@ void draw_antic_f_gtia10(int j, int nchars, UWORD t_screenaddr, char *t_ptr, ULO
 			for (k = 0; k <= 3; k++) {
 				pm_pixel = *c_pm_scanline_ptr++;
 				colreg = gtia_10_lookup[t_screendata];
-				if (pm_pixel) {
-					pf_colls[colreg] |= pm_pixel;
+				pf_colls[colreg] |= pm_pixel;
 					pm_pixel |= gtia_10_pm[t_screendata];
-					if (pm_pixel & p5_mask)
-						colreg = 7;
-					else
-						pm_pixel = pm_pixel | (pm_pixel >> 4);
-					colreg = cur_prior[new_pm_lookup[pm_pixel & 0x0f] + colreg];
-					*w_ptr = cl_word[colreg];
-				}
-				*w_ptr++;
+					*w_ptr = cl_word[cur_prior[new_pm_lookup[pm_pixel] + colreg]];
+				w_ptr++;
 				if (k & 0x01)
 					t_screendata = screendata & 0x0f;
 			}
@@ -1325,7 +1705,7 @@ void do_antic()
 		int temp_left_border_chars;
 		ULONG *t_pm_scanline_ptr;
 		char *ptr;
-		UWORD t_chbase;
+		UWORD t_chbase = 0;
 		extern void new_pm_scanline(void);
 		int temp_xmin = x_min[md];
 
@@ -1372,8 +1752,6 @@ void do_antic()
 		case 7:
 			t_chbase = chbase_20 + ((j >> 1) ^ flip_mask);
 			break;
-			/* default: */
-			break;
 		}
 
 		t_pm_scanline_ptr = (ULONG *) (&pm_scanline[temp_xmin >> 1]);
@@ -1388,8 +1766,10 @@ void do_antic()
 		case 2:
 			if ((PRIOR & 0x40) == 0x40)
 				draw_antic_2_gtia9_11(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
+			else if (global_artif_mode!=0)
+				draw_antic_2_artif(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			else
-				draw_antic_2(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
+			        draw_antic_2(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			break;
 		case 3:
 			draw_antic_3(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
@@ -1420,10 +1800,14 @@ void do_antic()
 			draw_antic_e(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			break;
 		case 0x0f:
-			if ((PRIOR & 0x40) == 0x40)
-				draw_antic_f_gtia9_11(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
+			if ((PRIOR & 0xC0) == 0x40)
+				draw_antic_f_gtia9(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			else if ((PRIOR & 0xC0) == 0x80)
 				draw_antic_f_gtia10(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
+			else if ((PRIOR & 0xC0) == 0xC0)
+				draw_antic_f_gtia11(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
+			else if (global_artif_mode != 0)
+				draw_antic_f_artif(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			else
 				draw_antic_f(j, chars_displayed[md], t_screenaddr, ptr, t_pm_scanline_ptr, t_chbase);
 			break;
@@ -1441,8 +1825,8 @@ void do_antic()
 /* ^^^^ adjust for subsequent lines; */
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
-                ypos++;
-                unc = GO(WSYNC-VCOUNTDELAY + unc);
+		ypos++;
+		unc = GO(WSYNC - VCOUNTDELAY + unc);
 /* ^^^^ part 4. */
 
 /*if (wsync_halt)
@@ -1523,7 +1907,7 @@ int pmg_dma(void)
 
 void ANTIC_RunDisplayList(void)
 {
-/*	UWORD dlist;  made a global */
+/*  UWORD dlist;  made a global */
 	int JVB;
 	int vscrol_flag;
 	int nlines;
@@ -1537,7 +1921,7 @@ void ANTIC_RunDisplayList(void)
 	 * when VCOUNT=4. This portion processes when VCOUNT=0, 1, 2 and 3
 	 */
 
-	ypos=0;
+	ypos = 0;
 	while (ypos < 8) {
 #ifdef POKEY_UPDATE
 		pokey_update();
@@ -1545,8 +1929,8 @@ void ANTIC_RunDisplayList(void)
 		unc = GO(CPUL - DMAR - WSYNC + unc);
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
-                ypos++;
-                unc = GO(WSYNC-VCOUNTDELAY + unc);
+		ypos++;
+		unc = GO(WSYNC - VCOUNTDELAY + unc);
 		/* GO (114); */
 	}
 	NMIST = 0x00;				/* Reset VBLANK */
@@ -1556,7 +1940,7 @@ void ANTIC_RunDisplayList(void)
 	ypos = 8;
 	vscrol_flag = FALSE;
 
-	/*dlist = (DLISTH << 8) | DLISTL;*/
+	/*dlist = (DLISTH << 8) | DLISTL; */
 	JVB = FALSE;
 
 	while ((DMACTL & 0x20) && !JVB && (ypos < (ATARI_HEIGHT + 8))) {
@@ -1585,13 +1969,13 @@ void ANTIC_RunDisplayList(void)
 				if (vscrol_flag) {
 					vskipafter = VSCROL;
 				}
-				vscrol_flag=FALSE;
+				vscrol_flag = FALSE;
 				/* apparently blank lines are
-				affected by a VSCROL on to off transition
-				and are shortened from the bottom.
-				they always turn vscrol_flag off however */
+				   affected by a VSCROL on to off transition
+				   and are shortened from the bottom.
+				   they always turn vscrol_flag off however */
 				/* should the blank line in case 0x01 (jump)
-				also be so affected? */
+				   also be so affected? */
 				normal_lastline = ((IR >> 4) & 0x07);
 				dldmac = 1;
 				/* IR=0; leave dli bit alone. */
@@ -1600,7 +1984,7 @@ void ANTIC_RunDisplayList(void)
 			}
 			break;
 		case 0x01:
-			vscrol_flag=FALSE;
+			vscrol_flag = FALSE;
 			dlist = (memory[dlist + 1] << 8) | memory[dlist];
 			if (IR & 0x40) {
 				nlines = 0;
@@ -1767,12 +2151,12 @@ void ANTIC_RunDisplayList(void)
 		vskipbefore = 0;
 		vskipafter = 99;
 	}
-        IR = 0;
+	IR = 0;
 	normal_lastline = 0;
 	for (i = (ATARI_HEIGHT + 8 - ypos); i > 0; i--) {
 		firstlinecycles = nextlinecycles = DMAR;
- 		anticmode = (IR & 0x0f);
- 		anticm8 = (anticmode << 3);
+		anticmode = (IR & 0x0f);
+		anticm8 = (anticmode << 3);
 		do_antic();
 	}
 	nlines = 0;
@@ -1782,16 +2166,16 @@ void ANTIC_RunDisplayList(void)
 		NMI();
 	}
 
-	ypos=248;
-	while (ypos < (tv_mode == PAL ? 312 : 262)) {
+	ypos = 248;
+	while (ypos < (tv_mode == TV_PAL ? 312 : 262)) {
 #ifdef POKEY_UPDATE
 		pokey_update();
 #endif
-                unc = GO(CPUL - WSYNC + unc - DMAR);
+		unc = GO(CPUL - WSYNC + unc - DMAR);
 		wsync_halt = 0;
 		unc = GO(VCOUNTDELAY + unc);
-                ypos++;
-                unc = GO(WSYNC-VCOUNTDELAY + unc);
+		ypos++;
+		unc = GO(WSYNC - VCOUNTDELAY + unc);
 	}
 }
 
@@ -1801,26 +2185,26 @@ UBYTE ANTIC_GetByte(UWORD addr)
 
 	addr &= 0xff0f;
 	switch (addr) {
-	/*case _CHBASE:
-		byte = CHBASE;
-		break;
-	case _CHACTL:
-		byte = CHACTL;
-		break;
-	neither of these reabable either
-	*/
-	/*case _DLISTL:
-		byte = (dlist&0xff);
-		break;
-	case _DLISTH:
-		byte = (dlist>>8);
-		break;
-	neither of these are readable
-	*/
-	/*case _DMACTL:
-		byte = DMACTL;
-		break;
-	DMACTL is not readable*/
+		/*case _CHBASE:
+		   byte = CHBASE;
+		   break;
+		   case _CHACTL:
+		   byte = CHACTL;
+		   break;
+		   neither of these reabable either
+		 */
+		/*case _DLISTL:
+		   byte = (dlist&0xff);
+		   break;
+		   case _DLISTH:
+		   byte = (dlist>>8);
+		   break;
+		   neither of these are readable
+		 */
+		/*case _DMACTL:
+		   byte = DMACTL;
+		   break;
+		   DMACTL is not readable */
 	case _PENH:
 	case _PENV:
 		byte = 0x00;
@@ -1829,21 +2213,21 @@ UBYTE ANTIC_GetByte(UWORD addr)
 		byte = ypos >> 1;
 		break;
 /*
-	I have been told NMIEN was not readable on real Atari800
-	case _NMIEN:
-		byte = NMIEN;
-		break;
-*/
+   I have been told NMIEN was not readable on real Atari800
+   case _NMIEN:
+   byte = NMIEN;
+   break;
+ */
 	case _NMIST:
 		byte = NMIST;
 		break;
-/*	case _WSYNC:  */
+/*  case _WSYNC:  */
 /*       wsync_halt++; */
-/*		byte = 0xff;*/			/* tested on real Atari !RS! */
-/*		break;
-I eliminate this case as well since it is now redundant as 0xff is the
-default return value for unreadable registers !PM!
-*/
+		/*      byte = 0xff; *//* tested on real Atari !RS! */
+/*      break;
+   I eliminate this case as well since it is now redundant as 0xff is the
+   default return value for unreadable registers !PM!
+ */
 	}
 
 	return byte;
@@ -1927,10 +2311,10 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 		}
 		break;
 	case _DLISTL:
-		dlist=(dlist&0xff00)|byte;
+		dlist = (dlist & 0xff00) | byte;
 		break;
 	case _DLISTH:
-		dlist=(dlist&0x00ff)|(byte<<8);
+		dlist = (dlist & 0x00ff) | (byte << 8);
 		break;
 	case _DMACTL:
 		DMACTL = byte;
@@ -2045,7 +2429,7 @@ int ANTIC_PutByte(UWORD addr, UBYTE byte)
 			break;
 		}
 
-		missile_dma_enabled = (DMACTL & 0x0C); /* no player dma without missile */
+		missile_dma_enabled = (DMACTL & 0x0C);	/* no player dma without missile */
 		player_dma_enabled = (DMACTL & 0x08);
 		singleline = (DMACTL & 0x10);
 		player_flickering = ((player_dma_enabled | player_gra_enabled) == 0x02);

@@ -1,10 +1,10 @@
-        CC		= gcc
+CC		= gcc
 CPPFLAGS	= $(OTHER)
 #CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
 #CFLAGS2         = -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C
-#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DUSE_DOSSOUND -DDELAYED_VGAINIT -DPOKEY_UPDATE -DSIGNED_SAMPLES -DCLIP -DPERRY_MODIFIED_POLY
-CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DUSE_DOSSOUND -DDELAYED_VGAINIT -DPOKEY_UPDATE -DSIGNED_SAMPLES -DCLIP
-#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DDELAYED_VGAINIT
+#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER -DUSE_DOSSOUND -DPOKEY_UPDATE -DCLIP -DPERRY_MODIFIED_POLY
+CFLAGS		= -c -g -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DUSE_DOSSOUND -DPOKEY_UPDATE -DCLIP -DSET_LED -DBUFFERED_LOG
+#CFLAGS		= -c -g -mpentium -fomit-frame-pointer -ffast-math -O3 -DGNU_C -DAT_USE_ALLEGRO -DAT_USE_ALLEGRO_JOY -DAT_USE_ALLEGRO_COUNTER
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
@@ -31,7 +31,7 @@ pdcurses :
 	@echo Finished.
 
 vga :
-	@make atari800.exe CPPFLAGS="-DVGA" LDLIBS="-lm -lalleg" OBJ="atari_vga.o"
+	@make atari800.exe CPPFLAGS="-DVGA" LDLIBS="-lm -lalleg" OBJ="atari_vga.o vga_gfx.o"
 	@echo Finished.
 
 #
@@ -81,10 +81,11 @@ OBJECTS =       atari.o \
                 list.o \
 		dossound.o \
 		pokeysnd.o	\
-		ataripcx.o
+		ataripcx.o \
+		log.o
 
 atari800.exe        :       $(OBJECTS) $(OBJ) joycfg.exe
-	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(DJDIR)/lib/audiodjf.a $(LDLIBS) -o atari800.exe
+	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800.exe
 
 atari.o         :       atari.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) atari.c
@@ -152,11 +153,17 @@ nas.o           :       nas.c $(INCLUDES)
 ataripcx.o	:	ataripcx.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
 		
+log.o	:	log.c log.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
+	
 joycfg.exe	:	joycfg.o pcjoy.h
 	$(LD) $(LDFLAGS) joycfg.o -o joycfg.exe
 	
 joycfg.o	:	joycfg.c pcjoy.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) joycfg.c	
+	
+vga_gfx.o	:	vga_gfx.h vga_gfx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) vga_gfx.c
 
 clean   :
 	del configure.exe

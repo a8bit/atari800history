@@ -17,14 +17,13 @@
 #include <dos.h>
 #include "cpu.h"
 #include "colours.h"
-
+#include "ui.h"		/* for ui_is_active */
 #include "pcjoy.h"
 
 #ifdef AT_USE_ALLEGRO
 #include <allegro.h>
-#else
-#include "vesa2.h"
 #endif
+#include "vga_gfx.h"
 
 /* -------------------------------------------------------------------------- */
 
@@ -37,17 +36,18 @@
 */
 
 static int consol;
-static int trig0=1;
-static int stick0=STICK_CENTRE;
-static int trig1=1;
-static int stick1=STICK_CENTRE;
-static int trig2=1;
-static int stick2=STICK_CENTRE;
-static int trig3=1;
-static int stick3=STICK_CENTRE;
+static int trig0;
+static int stick0;
+static int trig1;
+static int stick1;
+static int trig2;
+static int stick2;
+static int trig3;
+static int stick3;
 
-static int astick=STICK_CENTRE;
-static int atrig=0;
+/*stick & trig values for analog joystick*/
+static int astick;
+static int atrig;
 
 static int joyswap = FALSE;
 
@@ -61,24 +61,25 @@ static int scr_ptr_inc = ATARI_WIDTH;
 extern UBYTE break_step;  /* used to prevent switching to gfx mode while doing monitor 'step' command*/
 #endif
 
-static UBYTE LEDstatus=0;
+static UBYTE LEDstatus=0; /*status of disk LED*/
 
-static int video_mode=0;
-static int use_vesa=1;
+static int video_mode=0;       /*video mode (0-3)*/
+static int use_vesa=1;         /*use vesa mode?*/
 #ifdef AT_USE_ALLEGRO
-  static BITMAP *scr_bitmap;
-  static UBYTE *dark_memory;
-  static void *scr_data=NULL;
+  static BITMAP *scr_bitmap;   /*allegro BITMAP*/
+  static UBYTE *dark_memory;   /*buffer with darker lines*/
+  static void *scr_data=NULL;  /*pointer to bitmap allocated by allegro (must be restored before freeing BITMAP*/
 #else
-  static UWORD vesa_mode;
-  static ULONG vesa_memptr;
-  static ULONG vesa_memsize;
-  static ULONG vesa_linelenght;
-  static ULONG vesa_linear;
-  static int vesa_selector;
+  static UWORD vesa_mode; /*number of vesa2 videomode*/
+  static ULONG vesa_memptr; /*physical address of VESA2 Linear Frame Buffer*/
+  static ULONG vesa_memsize; /*size of LFB*/
+  static ULONG vesa_linelenght; /*size of line (in bytes)*/
+  static ULONG vesa_linear;  /*linear address of mapped LFB*/
+  static int vesa_selector;  /*selector for accessing LFB*/
 #endif
 
 static int vga_started = 0;		/*AAA needed for DOS to see text */
+
 UBYTE POT[2];
 extern int SHIFT;
 extern int ATKEYPRESSED;
@@ -91,21 +92,22 @@ static int PC_keyboard = TRUE;
 
 static int joy_keyboard = FALSE; /* pass joystick scancodes to atari_keyboard? */
 
+
+/*joystick type for each atari joystick*/
 static int joytypes[4]={joy_keyset0,joy_keyset1,joy_off,joy_off};
+/*if joytypes[i]==LPT_joy, lptport[i] contains port address of according LPT*/
 static int lptport[4]={0,0,0,0};
+/*scancodes for joysticks emulated on keyboard*/
 static int keysets[4][9]={ {82,79,80,81,75,77,71,72,73}, /*standard kb-joy on numlock */
                            {15,44,45,46,30,32,16,17,18}, /*QWE,AD,ZXC block + TAB as fire */
                            {255,255,255,255,255,255,255,255,255}, /*none*/
                            {255,255,255,255,255,255,255,255,255}};/*none*/
-static int keyset_used[4]={1,1,1,1};        /*to speed up joystick testing*/
+/*is given keyset used?*/
+static int keyset_used[4]={1,1,1,1};        /*for speeding up joystick testing*/
 static int keypush[256];   /* 1 if according key is pressed */
 static int keyforget[256]; /* 1 if we will ignore this scancode */
 
 static int joycfg=0;       /* 1 if joystick configuration found in atari800.cfg */
-
-#ifdef BACKUP_MSG
-extern char backup_msg_buf[300];
-#endif
 
 static int joy_in = FALSE;
 
@@ -113,6 +115,12 @@ static int joy_in = FALSE;
 static int js0_centre_x;
 static int js0_centre_y;
 
+
+/* -------------------------------------------------------------------------- */
+/* JOYSTICK HANDLING                                                          */
+/* -------------------------------------------------------------------------- */
+
+/*read analog joystick 0*/
 int joystick0(int *x, int *y)
 {
 	int jx, jy, jb;
@@ -148,7 +156,7 @@ int joystick0(int *x, int *y)
 
 	return jb & 0x03;
 }
-
+/*read analog joystick and set astick & atrig values*/
 void read_joystick(int centre_x, int centre_y)
 {
 	const int threshold = 50;
@@ -169,6 +177,7 @@ void read_joystick(int centre_x, int centre_y)
 }
 #endif							/* AT_USE_ALLEGRO_JOY */
 
+/*find port for given LPT joystick*/
 int test_LPTjoy(int portno,int *port)
 {
 	int addr;
@@ -222,282 +231,10 @@ void read_LPTjoy(int port, int joyport)
         }
 }
 
+
+
 /* -------------------------------------------------------------------------- */
-#ifdef AT_USE_ALLEGRO
-void Map_bitmap(BITMAP *bitmap,void *memory,int width,int height)
-{
-  int i;
-  
-  bitmap->dat=memory;
-  bitmap->line[0]=memory;
-  for (i=1;i<height;i++)
-    bitmap->line[i]=bitmap->line[i-1]+width;
-}
-void Map_i_bitmap(BITMAP *bitmap,void *memory,void *memory2,int width,int height)
-{
-  int i;
-  
-  bitmap->dat=memory;
-  bitmap->line[0]=memory;
-  bitmap->line[1]=memory2;
-  for (i=2;i<height;i+=2)
-  {
-    bitmap->line[i]=bitmap->line[i-2]+width;
-    bitmap->line[i+1]=bitmap->line[i-1]+width;
-  }
-}
-void make_darker(void *target,void *source,int bytes)
-{
-  __asm__ ("
-          movl %0,%%edi
-          movl %1,%%esi
-          movl %2,%%ecx
-          subl $4,%%edi
-          shr $2,%%ecx
-0:
-          movl (%%esi),%%eax
-          movl %%eax,%%ebx
-          andl  $0xf0f0f0f0,%%eax
-          shrl $1,%%ebx
-          addl $4,%%esi
-          addl $4,%%edi
-          andl $0x07070707,%%ebx
-          orl %%ebx,%%eax
-          decl %%ecx
-          movl %%eax,(%%edi)
-          jne 0b
-    "
-    :
-    : "g" (target), "g" (source), "g" (bytes)
-    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
-  );
-}
-#else
-/* Procedure for initializing X-mode. Possible modes:
- *		0	320x175			6	360x175
- *		1	320x200			7	360x200
- *		2	320x240			8	360x240
- *		3	320x350			9	360x350
- *		4	320x400			a	360x400
- *		5	320x480			b	360x480
- *
- * This procedure is based on Guru mode by Per Ole Klemetsrud
- */
-UWORD x_regtab[]={0x0e11,0x0014,0xe317,0x6b00,0x5901,
-                  0x5a02,0x8e03,0x5e04,0x8a05,0x2d13};
-UWORD x_vert480[]={0x4009,0x3e07,0x0b06,0xea10,0x8c11,
-                   0xe715,0x0416,0xdf12,0xdf12};
-UWORD x_vert350[]={0x4009,0x1f07,0xbf06,0x8310,0x8511,
-                   0x6315,0xba16,0x5d12,0x5d12};
-UBYTE x_clocktab[]={0xa3,0x0,0xe3,0xa3,0x0,0xe3,0xa7,0x67,
-                    0xe7,0xa7,0x67,0xe7};
-UWORD *x_verttab[]={x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480,
-                   x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert480};
-
-UBYTE x_open(UWORD mode)
-{
-    __dpmi_regs rg;
-
-    if (mode>0xb) return 0;
-    rg.x.ax = 0x1a00;
-    __dpmi_int(0x10,&rg);
-    if (rg.h.al != 0x1a) return 0;
-    
-    rg.x.ax=0x0013;
-    __dpmi_int(0x10,&rg);
-    
-     __asm__ __volatile__("
-     pushw %%es
-
-     movzwl %0,%%ebx
-     movw %1,%%es
-     movw $0x03c4,%%dx
-     movb _x_clocktab(%%ebx),%%cl
-     orb %%cl,%%cl
-     je x_Skip_Reset
-
-     movw $0x100,%%ax
-     outw %%ax,%%dx
-
-     movw $0x3c2,%%dx
-     movb %%cl,%%al
-     outb %%al,%%dx
-
-     movw $0x3c4,%%dx
-     movw $0x300,%%ax
-     outw %%ax,%%dx
-x_Skip_Reset:
-     movw $0x604,%%ax
-     outw %%ax,%%dx
-     
-     cld
-     movl $0xa0000,%%di
-     xorl %%eax,%%eax
-     mov $0x8000,%%cx
-     rep
-     stosw
-
-     movw $0x3d4,%%dx
-     xorl %%esi,%%esi
-     movl %%esi,%%ecx
-     movw $3,%%cx
-     cmpb $5,%%bl
-     jbe x_CRT1
-     movw $10,%%cx
-x_CRT1:
-     movw _x_regtab(,%%esi,2),%%ax
-     outw %%ax,%%dx
-     incl %%esi
-     decw %%cx
-     jne x_CRT1
-
-     movl _x_verttab(,%%ebx,4),%%esi
-     cmpl $0,%%esi
-     je x_noerr
-     cmpl $1,%%esi
-     je x_Set400
-
-     movw $8,%%cx
-x_CRT2:
-     movw (%%esi),%%ax
-     outw %%ax,%%dx
-     incl %%esi
-     incl %%esi
-     decl %%ecx
-     jne x_CRT2
-     jmp x_noerr
-
-x_Set400:
-     mov $0x4009,%%ax
-     out %%ax,%%dx
-x_noerr:
-     xorb %%al,%%al
-x_exit:
-     popw %%es
-     "
-     :
-     : "g" (mode), "c" (_dos_ds)
-     : "%esi", "%eax", "%ebx", "%ecx", "%edx"
-     );
-}
-/* Procedure for copying atari screen to x-mode videomemory */
-void x_blit(void *mem,UBYTE lines,ULONG change,ULONG videoline)
-{ 
-  asm volatile("
-     movl %0,%%esi
-     pushw %%es
-     movw %1,%%es
-     subl $4,%3	
-
-     movw $0x102,%%bx
-     movw $0x3c4,%%dx
-     cld
-     
-     movb %2,%%ch 
-     movl $0xa0000,%%edi
-.ALIGN 4
-__xb_lloop:
-     movb $0x11,%%bh
-__xb_mloop:
-     movw %%bx,%%ax
-     outw %%ax,%%dx 	
-     movb $20,%%cl
-.ALIGN 4     
-__xb_loop:
-     movb (%%esi),%%al
-     movb 4(%%esi),%%ah
-     shrd $16,%%eax,%%eax
-     movb 8(%%esi),%%al
-     movb 12(%%esi),%%ah
-     shrd $16,%%eax,%%eax
-     addl $16,%%esi
-     stosl		
-
-     dec %%cl
-     jne __xb_loop
-
-     subl $319,%%esi
-     subl $80,%%edi
-     shlb $1,%%bh
-     cmpb $0x10,%%bh
-     jne __xb_mloop
-
-     addl %3,%%esi 
-     addl %4,%%edi
-     dec %%ch
-     jne __xb_lloop
-
-     popw %%es
-    "
-    :
-    : "b" (mem), "a"(_dos_ds), "g" (lines), "m" (change), "m" (videoline)
-    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
-  );
-}
-
-void x_blit_i2(void *mem,UBYTE lines,ULONG change,ULONG videoline)
-{ 
-  asm volatile("
-     movl %0,%%esi
-     pushw %%es
-     movw %1,%%es
-     subl $4,%3	
-
-     movw $0x102,%%bx
-     movw $0x3c4,%%dx
-     cld
-     
-     movb %2,%%ch 
-     movl $0xa0000,%%edi
-.ALIGN 4
-__x2_lloop:
-     movb $0x11,%%bh
-__x2_mloop:
-     movw %%bx,%%ax
-     movw $0x3c4,%%dx
-     outw %%ax,%%dx 	
-     movb $20,%%cl
-.ALIGN 4     
-__x2_loop:
-     movb (%%esi),%%al
-     movb 4(%%esi),%%ah
-     shrd $16,%%eax,%%eax
-     movb 8(%%esi),%%al
-     movb 12(%%esi),%%ah
-     shrd $16,%%eax,%%eax
-     addl $16,%%esi
-     movl %%eax,%%edx
-     stosl
-     shr $1,%%edx 
-     and $0xf0f0f0f0,%%eax
-     and $0x07070707,%%edx
-     or %%edx,%%eax
-     .BYTE 0x26
-     movl %%eax,76(%%edi)
-
-     dec %%cl
-     jne __x2_loop
-
-     subl $319,%%esi
-     subl $80,%%edi
-     shlb $1,%%bh
-     cmpb $0x10,%%bh
-     jne __x2_mloop
-
-     addl %3,%%esi 
-     addl %4,%%edi
-     dec %%ch
-     jne __x2_lloop
-
-     popw %%es
-    "
-    :
-    : "b" (mem), "a"(_dos_ds), "g" (lines), "m" (change), "m" (videoline)
-    : "%eax", "%ebx", "%ecx", "%edx", "%esi", "%edi"
-  );
-}
-#endif
-
+/* KEYBOARD HANDLER                                                           */
 /* -------------------------------------------------------------------------- */
 
 unsigned int last_raw_key; /*last key seen by Atari_Keyboard() */
@@ -510,7 +247,6 @@ extern int SHIFT_KEY, KEYPRESSED;
 static int control = FALSE;
 static int extended_key_follows = FALSE;
 volatile static int key_leave=0;
-extern int ui_is_active;
 static int ki,kstick,ktrig,k_test; /*variables for key_handler*/
 
 void key_handler(void)
@@ -538,7 +274,7 @@ void key_handler(void)
           switch (raw_key_r)
           {
             case 0xe1:
-              extended_key_follows=2;
+              extended_key_follows=2; /*start of pause sequence*/
               raw_key_r=0;
               break;
             case 0xe0:
@@ -556,8 +292,14 @@ void key_handler(void)
 #else
         k_test=keyforget[raw_key_r];
 #endif
+        /*forget scancodes used by keysticks*/
         if (joy_keyboard && !ui_is_active && keyforget[raw_key_r]) raw_key_r=0;
+
 	switch (raw_key_r) {
+		case 0xaa:  /*ignore 0xe0 0xaa sent by gray arrows*/
+			raw_key_r=0;
+			key_leave=0;
+			break;
                 case 0x2a:
                         SHIFT_LEFT = !key_leave;
 		        break;
@@ -572,7 +314,7 @@ void key_handler(void)
                         if (!key_leave)
                         {
                           joy_keyboard=!joy_keyboard;
-                          outportb(0x60,0xed);
+                          outportb(0x60,0xed);     /*change the scroll lock LED*/
                           asm("   jmp 0f
                                0: jmp 1f
                                1:
@@ -666,7 +408,8 @@ void key_handler(void)
 
 	SHIFT_KEY = SHIFT_LEFT | SHIFT_RIGHT;
         raw_key_r=(key_leave?0x200:0)|raw_key_r;
-        if (raw_key==last_raw_key) {raw_key=raw_key_r;raw_key_r=0;}
+        if (raw_key_r==0x200) raw_key_r=0;
+        if (raw_key==last_raw_key && raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
     }
     outportb(0x20, 0x20);
     asm("popa; sti");
@@ -710,6 +453,12 @@ void key_delete(void)
         outportb(0x60,((kflags>>4)&0x7));
 }
 
+
+
+/* -------------------------------------------------------------------------- */
+/* VGA HANDLING                                                               */
+/* -------------------------------------------------------------------------- */
+
 void SetupVgaEnvironment()
 {
 	int a, r, g, b, i;
@@ -748,52 +497,43 @@ void SetupVgaEnvironment()
 #else
         if (use_vesa)
         {
+          /*try to open VESA mode*/
           use_vesa=VESA_open(vesa_mode,vesa_memptr,vesa_memsize,&vesa_linear,&vesa_selector);
         }
         if (!use_vesa) /*if '-novesa' specified or VESA_open failed */
           switch(video_mode)
           {
             case 0:
-  	    rg.x.ax = 0x0013;
-  	    int86(0x10, &rg, &rg);
+  	      rg.x.ax = 0x0013;
+  	      int86(0x10, &rg, &rg); /*vga 320x200*/
               break;
             case 1:
-              x_open(2);
+              x_open(2);             /*xmode 320x240*/
               break;
             case 2:
             case 3:
-              x_open(5);
+              x_open(5);             /*xmode 320x480*/
               break;
           }
 #endif
 	vga_started = 1;
+
 	/* setting all palette at once is faster....*/
 	for (a = 0, i = 0; a < 256; a++) {
 	  ctab[i++]=(colortable[a] >> 18) & 0x3f;
 	  ctab[i++]=(colortable[a] >> 10) & 0x3f;
 	  ctab[i++]=(colortable[a] >> 2) & 0x3f;
 	}
+        /*copy ctab to djgpp transfer buffer in DOS memory*/
 	dosmemput(ctab,768,__tb&0xfffff);
 	d_rg.x.ax=0x1012;
 	d_rg.x.bx=0;
 	d_rg.x.cx=256;
 	d_rg.x.dx=__tb&0xf; /*offset of transfer buffer*/
 	d_rg.x.es=(__tb >> 4) & 0xffff;  /*segment of transfer buffer*/
-	__dpmi_int(0x10,&d_rg);
-/*	
-	for (a = 0; a < 256; a++) {
-		r = (colortable[a] >> 18) & 0x3f;
-		g = (colortable[a] >> 10) & 0x3f;
-		b = (colortable[a] >> 2) & 0x3f;
-		rg.x.ax = 0x1010;
-		rg.x.bx = a;
-		rg.h.dh = r;
-		rg.h.ch = g;
-		rg.h.cl = b;
-		int86(0x10, &rg, &rg);
-	}
-*/
-	key_init();
+	__dpmi_int(0x10,&d_rg);  /*VGA set palette block*/
+
+	key_init(); /*initialize keyboard handler*/
 }
 
 void ShutdownVgaEnvironment()
@@ -810,6 +550,7 @@ void ShutdownVgaEnvironment()
 		  int86(0x10, &rg, &rg);
                 }
 #else
+                /*when closing Allegro video mode, we must free the allocated BITMAP structure*/
 		switch(video_mode)
 		{
 		  case 1:
@@ -829,6 +570,145 @@ void ShutdownVgaEnvironment()
 	}
    vga_started=FALSE;
 }
+
+void Atari_DisplayScreen(UBYTE * ascreen)
+{
+	static int lace = 0;
+	unsigned long vga_ptr;
+
+	UBYTE *scr_ptr;
+	int ypos;
+	int x;
+#ifdef AT_USE_ALLEGRO_COUNTER
+	static char speedmessage[200];
+	extern int speed_count;
+#endif
+	vga_ptr = 0xa0000;
+	scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
+
+	if (ypos_inc == 2) {
+		if (lace) {
+			vga_ptr += 320;
+			scr_ptr += ATARI_WIDTH;
+		}
+		lace = 1 - lace;
+	}
+	
+      if (vga_started) /*draw screen only in graphics mode*/
+      {
+
+        if (LEDstatus)  /*draw disk LED*/
+        {
+          int i,pos;
+          if (video_mode==0) pos=first_col+first_lno*ATARI_WIDTH;
+                        else pos=first_col;
+          for (i=0;i<12;i++) {ascreen[pos]=0xba;ascreen[pos+ATARI_WIDTH]=0xba;pos++;}
+          LEDstatus--;
+        }
+
+#if AT_USE_ALLEGRO
+        /*draw screen using Allegro*/
+        switch(video_mode)
+        {
+          case 0:
+	    for (ypos = 0; ypos < 200; ypos += ypos_inc) {
+		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+
+		vga_ptr += vga_ptr_inc;
+		scr_ptr += scr_ptr_inc;
+	    }
+            break;
+          case 1:
+            if (screen!=scr_bitmap->dat)
+              Map_bitmap(scr_bitmap,ascreen,ATARI_WIDTH,ATARI_HEIGHT);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,240);
+            break;
+          case 2:
+            if (screen!=scr_bitmap->dat)
+            Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
+            break;
+          case 3:
+            if (screen!=scr_bitmap->dat)
+              Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
+            make_darker(dark_memory,ascreen,ATARI_WIDTH*ATARI_HEIGHT);
+            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
+            break;
+        }
+#else
+        if (use_vesa)
+            /*draw screen using VESA2*/
+            switch(video_mode)
+            {
+              case 0:
+                VESA_blit(ascreen+first_col + first_lno*ATARI_WIDTH,
+                          320,200,ATARI_WIDTH,vesa_linelenght,vesa_selector);
+                break;
+              case 1:
+                VESA_blit(ascreen+first_col,
+                          320,240,ATARI_WIDTH,vesa_linelenght,vesa_selector);
+                break;
+              case 2:
+                VESA_blit(ascreen+first_col,
+                          320,240,ATARI_WIDTH,vesa_linelenght*2,vesa_selector);
+                break;
+              case 3:
+                VESA_i_blit(ascreen+first_col,
+                          320,240,ATARI_WIDTH,vesa_linelenght,vesa_selector);
+                break;
+            }
+        else
+            /*draw screen using vga or x-mode*/
+            switch(video_mode)
+            {
+              case 0:
+    	        for (ypos = 0; ypos < 200; ypos += ypos_inc) {
+    		    _dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+    
+    		    vga_ptr += vga_ptr_inc;
+    		    scr_ptr += scr_ptr_inc;
+                }
+                break;
+              case 1:
+                x_blit(ascreen+first_col,240,ATARI_WIDTH,80);
+                break;
+              case 2:
+                x_blit(ascreen+first_col,240,ATARI_WIDTH,160);
+                break;
+              case 3:
+                x_blit_i2(ascreen+first_col,240,ATARI_WIDTH,160);
+                break;
+            }
+#endif
+
+
+#ifdef AT_USE_ALLEGRO_COUNTER
+	sprintf(speedmessage, "%d", speed_count);
+	textout((BITMAP *) screen, font, speedmessage, 1, 1, 10);
+	speed_count = 0;
+#endif
+      } /* if (vga_started) */
+#ifdef USE_DOSSOUND
+	dossound_UpdateSound();
+#endif
+}
+
+
+
+/* -------------------------------------------------------------------------- */
+#ifdef SET_LED
+void Atari_Set_LED(int how)
+{
+  LEDstatus=8*how;
+}
+#endif
+
+
+
+
+/* -------------------------------------------------------------------------- */
+/* CONFIG & INITIALISATION                                                    */
+/* -------------------------------------------------------------------------- */
 
 void Atari_Initialise(int *argc, char *argv[])
 {
@@ -919,6 +799,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		printf("\n\nSorry, I see no joystick. Use numeric pad\n");
 
 #ifndef AT_USE_ALLEGRO
+        /*find number of VESA2 video mode*/
         if (use_vesa)
         {
           switch(video_mode)
@@ -935,10 +816,6 @@ void Atari_Initialise(int *argc, char *argv[])
               break;
           }
         }
-#endif
-
-#ifndef DELAYED_VGAINIT
-	SetupVgaEnvironment();
 #endif
 
 	/* setup joystick */
@@ -973,6 +850,7 @@ void Atari_Initialise(int *argc, char *argv[])
         }
         /*end of compatibility part*/
 
+
         /*check, if joystick configuration is valid*/
         for (i=0;i<4;i++)
           switch (joytypes[i])
@@ -990,6 +868,7 @@ void Atari_Initialise(int *argc, char *argv[])
               if (!joy_in) joytypes[i]=joy_off;
               break;
           }
+
         /* do not forget any scancode */
         for (i=0;i<256;i++)
           keyforget[i]=0;
@@ -1004,7 +883,9 @@ void Atari_Initialise(int *argc, char *argv[])
             keyset_used[i]=0;
         }
 
-	consol = 0x07;				/* OPTION, SELECT, START - OFF */
+	consol = 7;
+
+	SetupVgaEnvironment();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1026,7 +907,7 @@ int Atari_Configure(char* option,char* parameters)
   {
     sscanf(parameters,"%d",&help);
     if (help!=0 && help!=1) return 0;
-    use_vesa=!help;
+    use_vesa=help;
     return 1;
   }
   else if (strncmp(option,"JOYSTICK_",9)==0)
@@ -1059,17 +940,20 @@ int Atari_Configure(char* option,char* parameters)
   }
   return 0;  /* unknown option */
 }
+
+
+
+/* -------------------------------------------------------------------------- */
+/* ATARI EXIT                                                                 */
 /* -------------------------------------------------------------------------- */
 
 int Atari_Exit(int run_monitor)
 {
 	/* restore to text mode */
-        ShutdownVgaEnvironment();
-#ifdef BACKUP_MSG
-	if (*backup_msg_buf) {		/* print the buffer */
-		puts(backup_msg_buf);
-		*backup_msg_buf = 0;
-	}
+	ShutdownVgaEnvironment();
+
+#ifdef BUFFERED_LOG
+	Aflushlog();
 #endif
 
 	key_delete();				/* enable keyboard in monitor */
@@ -1077,7 +961,7 @@ int Atari_Exit(int run_monitor)
 	if (run_monitor)
 		if (monitor()) {
 #ifdef MONITOR_BREAK
-                        if (!break_step)
+                        if (!break_step)       /*do not enter videomode when stepping through the code*/
                           SetupVgaEnvironment();
 #else
 			SetupVgaEnvironment();
@@ -1093,133 +977,11 @@ int Atari_Exit(int run_monitor)
 	return 0;
 }
 
+
+
+
 /* -------------------------------------------------------------------------- */
-#ifdef SET_LED
-void Atari_Set_LED(int how)
-{
-  LEDstatus=8*how;
-}
-#endif
-
-void Atari_DisplayScreen(UBYTE * ascreen)
- {
-	static int lace = 0;
-	unsigned long vga_ptr;
-
-	UBYTE *scr_ptr;
-	int ypos;
-	int x;
-#ifdef AT_USE_ALLEGRO_COUNTER
-	static char speedmessage[200];
-	extern int speed_count;
-#endif
-	vga_ptr = 0xa0000;
-	scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
-
-	if (ypos_inc == 2) {
-		if (lace) {
-			vga_ptr += 320;
-			scr_ptr += ATARI_WIDTH;
-		}
-		lace = 1 - lace;
-	}
-	
-      if (vga_started)
-      {
-        if (LEDstatus)
-        {
-          int i,pos;
-          if (video_mode==0) pos=first_col+first_lno*ATARI_WIDTH;
-                        else pos=first_col;
-          for (i=0;i<12;i++) {ascreen[pos]=0xba;ascreen[pos+ATARI_WIDTH]=0xba;pos++;}
-          LEDstatus--;
-        }
-#if AT_USE_ALLEGRO
-        switch(video_mode)
-        {
-          case 0:
-	     /*_farsetsel(_dos_ds);*/
-	    for (ypos = 0; ypos < 200; ypos += ypos_inc) {
-		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
-
-		vga_ptr += vga_ptr_inc;
-		scr_ptr += scr_ptr_inc;
-	    }
-            break;
-          case 1:
-            if (screen!=scr_bitmap->dat)
-              Map_bitmap(scr_bitmap,ascreen,ATARI_WIDTH,ATARI_HEIGHT);
-            blit(scr_bitmap,screen,first_col,0,0,0,320,240);
-            break;
-          case 2:
-            if (screen!=scr_bitmap->dat)
-            Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
-            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
-            break;
-          case 3:
-            if (screen!=scr_bitmap->dat)
-              Map_i_bitmap(scr_bitmap,ascreen,dark_memory,ATARI_WIDTH,ATARI_HEIGHT*2);
-            make_darker(dark_memory,ascreen,ATARI_WIDTH*ATARI_HEIGHT);
-            blit(scr_bitmap,screen,first_col,0,0,0,320,480);
-            break;
-        }
-#else
-        if (use_vesa)
-            switch(video_mode)
-            {
-              case 0:
-                VESA_blit(ascreen+first_col + first_lno*ATARI_WIDTH,
-                          320,200,ATARI_WIDTH,vesa_linelenght,vesa_selector);
-                break;
-              case 1:
-                VESA_blit(ascreen+first_col,
-                          320,240,ATARI_WIDTH,vesa_linelenght,vesa_selector);
-                break;
-              case 2:
-                VESA_blit(ascreen+first_col,
-                          320,240,ATARI_WIDTH,vesa_linelenght*2,vesa_selector);
-                break;
-              case 3:
-                VESA_i_blit(ascreen+first_col,
-                          320,240,ATARI_WIDTH,vesa_linelenght,vesa_selector);
-                break;
-            }
-        else
-            switch(video_mode)
-            {
-              case 0:
-    	     /*_farsetsel(_dos_ds);*/
-    	        for (ypos = 0; ypos < 200; ypos += ypos_inc) {
-    		    _dosmemputl(scr_ptr, 320 / 4, vga_ptr);
-    
-    		    vga_ptr += vga_ptr_inc;
-    		    scr_ptr += scr_ptr_inc;
-                }
-                break;
-              case 1:
-                x_blit(ascreen+first_col,240,ATARI_WIDTH,80);
-                break;
-              case 2:
-                x_blit(ascreen+first_col,240,ATARI_WIDTH,160);
-                break;
-              case 3:
-                x_blit_i2(ascreen+first_col,240,ATARI_WIDTH,160);
-                break;
-            }
-#endif
-
-#ifdef AT_USE_ALLEGRO_COUNTER
-	sprintf(speedmessage, "%d", speed_count);
-	textout((BITMAP *) screen, font, speedmessage, 1, 1, 10);
-	speed_count = 0;
-#endif
-      } /*if (vga_started) */
-#ifdef USE_DOSSOUND
-	dossound_UpdateSound();
-#endif
-	/* consol = 7; */
-}
-
+/* ATARI KEYBOARD                                                             */
 /* -------------------------------------------------------------------------- */
 /* Note: scancodes are a bit changed:
    raw_key & 0x7f = standard scancode
@@ -1233,8 +995,6 @@ int Atari_Keyboard(void)
 	int keycode;
 	int shift_mask;
 	static int stillpressed;	/* is 5200 button 2 still pressed */
-
-	extern int ui_is_active;	/* to workaround a problem in 5200 stuff */
 
 #ifdef AT_USE_ALLEGRO_JOY
 	extern volatile int joy_left, joy_right, joy_up, joy_down;
@@ -1272,7 +1032,6 @@ int Atari_Keyboard(void)
 /*
  * This needs a bit of tidying up - array lookup
  */
-
 /* Atari5200 stuff */
 	if (machine == Atari5200 && !ui_is_active) {
 		POT[0] = 120;

@@ -34,6 +34,7 @@ int default_system;
 int default_tv_mode;
 int hold_option;
 int enable_c000_ram;
+int enable_rom_patches;
 int enable_sio_patch;
 int disk_directories;
 
@@ -70,6 +71,7 @@ int RtConfigLoad(char *rtconfig_filename)
 	default_tv_mode = 1;
 	hold_option = 1;
 	enable_c000_ram = 0;
+	enable_rom_patches = 1;
 	enable_sio_patch = 1;
 
 	if (rtconfig_filename) {
@@ -109,12 +111,12 @@ int RtConfigLoad(char *rtconfig_filename)
 					strcpy(atari_basic_filename, ptr);
 				else if (strcmp(string, "5200_ROM") == 0)
 					strcpy(atari_5200_filename, ptr);
-				else if (strcmp(string, "DISK_DIR") == 0)
+				else if (strcmp(string, "DISK_DIR") == 0) {
 					if (disk_directories == MAX_DIRECTORIES)
 						printf("All disk directory slots used!\n");
-					else {
+					else
 						strcpy(atari_disk_dirs[disk_directories++], ptr);
-					}
+				}
 				else if (strcmp(string, "ROM_DIR") == 0)
 					strcpy(atari_rom_dir, ptr);
 				else if (strcmp(string, "H1_DIR") == 0)
@@ -133,8 +135,14 @@ int RtConfigLoad(char *rtconfig_filename)
 					sscanf(ptr, "%d", &hold_option);
 				else if (strcmp(string, "ENABLE_C000_RAM") == 0)
 					sscanf(ptr, "%d", &enable_c000_ram);
-				else if (strcmp(string, "ENABLE_SIO_PATCH") == 0)
-					sscanf(ptr, "%d", &enable_sio_patch);
+				else if (strcmp(string, "ENABLE_ROM_PATCH") == 0)
+					sscanf(ptr, "%d", &enable_rom_patches);
+				else if (strcmp(string, "ENABLE_SIO_PATCH") == 0) {
+					if (enable_rom_patches)
+						sscanf(ptr, "%d", &enable_sio_patch);
+					else
+						enable_sio_patch = 0;
+				}
 				else if (strcmp(string, "DEFAULT_SYSTEM") == 0) {
 					if (strcmp(ptr, "Atari OS/A") == 0)
 						default_system = 1;
@@ -248,7 +256,8 @@ void RtConfigSave(void)
 
 	fprintf(fp, "HOLD_OPTION=%d\n", hold_option);
 	fprintf(fp, "ENABLE_C000_RAM=%d\n", enable_c000_ram);
-	fprintf(fp, "ENABLE_SIO_PATCH=%d\n", enable_sio_patch);
+	fprintf(fp, "ENABLE_ROM_PATCH=%d\n", enable_rom_patches);
+	fprintf(fp, "ENABLE_SIO_PATCH=%d\n", enable_rom_patches ? enable_sio_patch : 0);
 
 	fclose(fp);
 }
@@ -311,9 +320,19 @@ void RtConfigUpdate(void)
 	} while ((enable_c000_ram < 0) || (enable_c000_ram > 1));
 
 	do {
-		GetNumber("Enable SIO PATCH (Recommended for speed) [%d] ",
-				  &enable_sio_patch);
-	} while ((enable_sio_patch < 0) || (enable_sio_patch > 1));
+		GetNumber("Enable ROM PATCH (for H: device and SIO PATCH) [%d] ",
+				  &enable_rom_patches);
+	} while ((enable_rom_patches < 0) || (enable_rom_patches > 1));
+
+	if (enable_rom_patches) {
+		do {
+			GetNumber("Enable SIO PATCH (Recommended for speed) [%d] ",
+				  	&enable_sio_patch);
+		} while ((enable_sio_patch < 0) || (enable_sio_patch > 1));
+	}
+	else
+		enable_sio_patch = 0;	/* sio_patch only if rom_patches */
+
 #ifdef VGA
 	printf("Standard joysticks configuration selected.\n"
 			"Use joycfg.exe to change it. Press RETURN to continue ");

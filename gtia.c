@@ -36,7 +36,6 @@ extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
 extern int rom_inserted;
-
 extern int mach_xlxe;
 
 UBYTE COLBK;
@@ -153,10 +152,17 @@ extern UWORD cl_word[24];
 #define L_PM2 (3*5-4)
 #define L_PM3 (4*5-4)
 #define L_PM23 (5*5-4)
-extern int new_pm_lookup[16];
-extern UBYTE prior_table[35 * 16];
-extern UBYTE cur_prior[35];
-extern UBYTE p5_mask;
+/*6-11 are 0-5 +6 to mean 5th player as well*/
+#define L_PMNONE (12*5-4)
+#define L_PM5PONLY (13*5-4) /*these should be the last two*/
+#define NUM_PLAYER_TYPES 14
+extern UBYTE prior_table[5*NUM_PLAYER_TYPES * 16];
+extern UBYTE cur_prior[5*NUM_PLAYER_TYPES];
+extern signed char *new_pm_lookup;
+extern signed char pm_lookup_normal[256];
+extern signed char pm_lookup_multi[256];
+extern signed char pm_lookup_5p[256];
+extern signed char pm_lookup_multi_5p[256];
 
 int next_console_value = 7;
 
@@ -209,7 +215,7 @@ void new_pm_scanline(void)
 
 				for (j = 0; j < sizep0; j++) {
 					if ((hposp0 >= 0) && (hposp0 < ATARI_WIDTH / 2)) {
-						UBYTE playfield = scrn_ptr[hposp0 << 1];
+						/* UBYTE playfield = scrn_ptr[hposp0 << 1]; */
 						pm_scanline[hposp0] |= 0x01;
 						P0PL |= pm_scanline[hposp0];
 					}
@@ -242,7 +248,7 @@ void new_pm_scanline(void)
 
 				for (j = 0; j < sizep1; j++) {
 					if ((hposp1 >= 0) && (hposp1 < ATARI_WIDTH / 2)) {
-						UBYTE playfield = scrn_ptr[hposp1 << 1];
+						/* UBYTE playfield = scrn_ptr[hposp1 << 1]; */
 						pm_scanline[hposp1] |= 0x02;
 						P1PL |= pm_scanline[hposp1];
 					}
@@ -275,7 +281,7 @@ void new_pm_scanline(void)
 
 				for (j = 0; j < sizep2; j++) {
 					if ((hposp2 >= 0) && (hposp2 < ATARI_WIDTH / 2)) {
-						UBYTE playfield = scrn_ptr[hposp2 << 1];
+						/* UBYTE playfield = scrn_ptr[hposp2 << 1]; */
 						pm_scanline[hposp2] |= 0x04;
 						P2PL |= pm_scanline[hposp2];
 					}
@@ -308,7 +314,7 @@ void new_pm_scanline(void)
 
 				for (j = 0; j < sizep3; j++) {
 					if ((hposp3 >= 0) && (hposp3 < ATARI_WIDTH / 2)) {
-						UBYTE playfield = scrn_ptr[hposp3 << 1];
+						/* UBYTE playfield = scrn_ptr[hposp3 << 1]; */
 						pm_scanline[hposp3] |= 0x08;
 						P3PL |= pm_scanline[hposp3];
 					}
@@ -346,7 +352,7 @@ void new_pm_scanline(void)
 					switch (i & 0x06) {
 					case 0x00:
 						if ((hposm3 >= 0) && (hposm3 < ATARI_WIDTH / 2)) {
-							UBYTE playfield = scrn_ptr[hposm3 << 1];
+							/* UBYTE playfield = scrn_ptr[hposm3 << 1]; */
 							UBYTE player = pm_scanline[hposm3];
 							pm_scanline[hposm3] |= 0x80;
 							M3PL |= player;
@@ -355,7 +361,7 @@ void new_pm_scanline(void)
 						break;
 					case 0x02:
 						if ((hposm2 >= 0) && (hposm2 < ATARI_WIDTH / 2)) {
-							UBYTE playfield = scrn_ptr[hposm2 << 1];
+							/* UBYTE playfield = scrn_ptr[hposm2 << 1]; */
 							UBYTE player = pm_scanline[hposm2];
 							pm_scanline[hposm2] |= 0x40;
 							M2PL |= player;
@@ -364,7 +370,7 @@ void new_pm_scanline(void)
 						break;
 					case 0x04:
 						if ((hposm1 >= 0) && (hposm1 < ATARI_WIDTH / 2)) {
-							UBYTE playfield = scrn_ptr[hposm1 << 1];
+							/* UBYTE playfield = scrn_ptr[hposm1 << 1]; */
 							UBYTE player = pm_scanline[hposm1];
 							pm_scanline[hposm1] |= 0x20;
 							M1PL |= player;
@@ -373,7 +379,7 @@ void new_pm_scanline(void)
 						break;
 					case 0x06:
 						if ((hposm0 >= 0) && (hposm0 < ATARI_WIDTH / 2)) {
-							UBYTE playfield = scrn_ptr[hposm0 << 1];
+							/* UBYTE playfield = scrn_ptr[hposm0 << 1]; */
 							UBYTE player = pm_scanline[hposm0];
 							pm_scanline[hposm0] |= 0x10;
 							M0PL |= player;
@@ -502,10 +508,10 @@ UBYTE GTIA_GetByte(UWORD addr)
 		byte = P3PL & 0x07;		/* mask in player 0,1, and 2 */
 		break;
 	case _PAL:
-		if (tv_mode == PAL)
+		if (tv_mode == TV_PAL)
 			byte = 0x00;
 		else
-			byte = 0x0e;
+			byte = 0x0f;
 		break;
 	case _TRIG0:
 		byte = Atari_TRIG(0);
@@ -725,29 +731,25 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 		global_sizep3 = PM_Width[byte & 0x03];
 		break;
 	case _PRIOR:
-		if ((byte & 0x20) != (PRIOR & 0x20)) {	/* multi-colour player */
-
-			if (byte & 0x20) {
-				new_pm_lookup[3] = L_PM01;
-				new_pm_lookup[7] = L_PM01;
-				new_pm_lookup[11] = L_PM01;
-				new_pm_lookup[12] = L_PM23;
-			}
-			else {
-				new_pm_lookup[3] = L_PM0;
-				new_pm_lookup[7] = L_PM0;
-				new_pm_lookup[11] = L_PM0;
-				new_pm_lookup[12] = L_PM2;
-			}
+		if ((byte & 0x30) != (PRIOR & 0x30)) {
+		switch(byte&0x30){
+		case 0x00:
+                new_pm_lookup=pm_lookup_normal;
+		break;
+		case 0x10:
+                new_pm_lookup=pm_lookup_5p;
+		break;
+		case 0x20:
+                new_pm_lookup=pm_lookup_multi;
+		break;
+		case 0x30:
+                new_pm_lookup=pm_lookup_multi_5p;
+		break;
 		}
-		if (byte & 0x10)
-			p5_mask = 0xf0;		/* missile=pf3 5th player */
-
-		else
-			p5_mask = 0x00;
+		}
 		if ((byte & 0x0f) != (PRIOR & 0x0f)) {
-			memcpy(&cur_prior, &prior_table[((byte & 0x0f) * 35)], 35);
-		}
+			memcpy(&cur_prior, &prior_table[( (byte&0x0f)*(NUM_PLAYER_TYPES*5) )], (NUM_PLAYER_TYPES*5));
+                }
 		PRIOR = byte;
 		break;
 	case _GRACTL:

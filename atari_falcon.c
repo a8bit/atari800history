@@ -1,7 +1,7 @@
 /* -------------------------------------------------------------------------- */
 
 /*
- * Falcon Backend for David Firth's Atari 800 emulator
+ * Atari Falcon/TT/Nova Backend for David Firth's Atari 800 emulator
  *
  * by Petr Stehlik & Karel Rous (C)1997-98  See file COPYRIGHT for policy.
  *
@@ -12,11 +12,20 @@
 #include <osbind.h>
 #include <string.h>
 #include <stdio.h>
-#include <linea.h>
+#include <stdlib.h>		/* for free */
+// #include <linea.h>
+#include <falcon.h>		/* for VsetRGB */
+
 #include "cpu.h"
 #include "colours.h"
 #include "config.h"
-#include "cflib.h"
+#include "platform.h"
+#include "monitor.h"
+#include "log.h"
+
+#include "gemfast.h"
+#include "aesbind.h"
+#include "vdibind.h"
 
 /* -------------------------------------------------------------------------- */
 
@@ -40,6 +49,10 @@ int get_cookie(long cookie, long *value)
 	return (0);
 }
 
+/* -------------------------------------------------------------------------- */
+
+#ifdef CLOCKY_SCREENSAVER
+
 #include "jclkcook.h"
 
 int screensaver(int on)
@@ -48,7 +61,7 @@ int screensaver(int on)
 	JCLKSTRUCT *jclk;
 	int oldval;
 
-	CHECK_CLOCKY_STRUCT;
+/*	CHECK_CLOCKY_STRUCT; */
 
 	if (!get_cookie((long) 'JCLK', &adr))
 		return 0;
@@ -70,40 +83,45 @@ int screensaver(int on)
 }
 
 static int screensaverval;		/* original value */
+#endif	/* CLOCKY_SCREENSAVER */
 
-static int NOVA = FALSE;
-static int HOST_WIDTH;
-static int HOST_HEIGHT;
-#define QUAD	1
-#ifndef QUAD
-#define EMUL_WIDTH	336
-#define EMUL_HEIGHT	240
-#else
-#define EMUL_WIDTH	2*336
-#define EMUL_HEIGHT	2*240
-#endif
+/* -------------------------------------------------------------------------- */
+
+typedef enum {
+	UNKNOWN,
+	NOVA,
+	F030,
+	TT030
+} Video_HW;
+
+static Video_HW video_hw = UNKNOWN;
+static int gl_vdi_handle;
+static int NOVA_double_size = 0;
+static int HOST_WIDTH, HOST_HEIGHT, HOST_PLANES;
+#define EMUL_WIDTH	(NOVA_double_size ? 2*336 : 336)
+#define EMUL_HEIGHT	(NOVA_double_size ? 2*240 : 240)
+#undef QUAD
 #define CENTER_X	((HOST_WIDTH - EMUL_WIDTH) / 2)
 #define CENTER_Y	((HOST_HEIGHT - EMUL_HEIGHT) / 2)
 #define CENTER		(CENTER_X + CENTER_Y * HOST_WIDTH)
 
-/* -------------------------------------------------------------------------- */
-
-#ifdef BACKUP_MSG
-extern char backup_msg_buf[300];
+#ifdef SET_LED
+static int LED_timeout = 0;
 #endif
+
+/* -------------------------------------------------------------------------- */
 
 static int consol;
 static int trig0;
 static int stick0;
 static int joyswap = FALSE;
 
-short screenw = ATARI_WIDTH;
-short screenh = ATARI_HEIGHT;
+/* parameters for c2p_uni */
+UWORD screenw, screenh, vramw, vramh;
 UBYTE *odkud, *kam;
-static int jen_nekdy = 0;
-static int resolution = 0;
 
-static int bgwin;
+/* parameters for DisplayScreen */
+static int skip_N_frames = 0;
 
 #ifdef CPUASS
 #include "cpu_asm.h"
@@ -117,123 +135,120 @@ _KEYTAB *key_tab;
 unsigned char keybuf[KEYBUF_SIZE];
 int kbhead = 0;
 
-UBYTE *Log_base, *Phys_base;
+UBYTE *Original_Log_base, *Original_Phys_base;
 
-UWORD stara_graf[25];
-UWORD nova_graf_384[25] =
-{0x0057, 0x0000, 0x0000, 0x0000, 0x0000, 0x0007, 0x0000, 0x0010, \
- 0x00C0, 0x0186, 0x0005, 0x00D7, 0x00B2, 0x000B, 0x02A1, 0x00A0, \
- 0x00B9, 0x0000, 0x0000, 0x0425, 0x03F3, 0x0033, 0x0033, 0x03F3, 0x0415};
+UWORD original_videl_settings[25];
+UWORD mode336x240_videl_settings[25]=
+{0x0133, 0x0001, 0x3b00, 0x0150, 0x00f0, 0x0008, 0x0002, 0x0010, \
+ 0x00a8, 0x0186, 0x0005, 0x00c6, 0x0095, 0x000d, 0x0292, 0x0083, \
+ 0x0096, 0x0000, 0x0000, 0x0419, 0x03ff, 0x003f, 0x003f, 0x03ff, 0x0415};
 
-UWORD nova_graf_352[25] =
-{0x003b, 0x0001, 0x004a, 0x0160, 0x00F0, 0x0008, 0x0000, 0x0010, \
- 0x00b0, 0x0186, 0x0005, 0x00D7, 0x00a2, 0x001B, 0x02b1, 0x0090, \
- 0x00B9, 0x0000, 0x0000, 0x0425, 0x03F3, 0x0033, 0x0033, 0x03F3, 0x0415};
-
-UWORD nova_graf_320[25] =
-{0xc133, 0x0001, 0x2c00, 0x0140, 0x00f0, 0x0008, 0x0002, 0x0010, \
- 0x00a0, 0x0186, 0x0005, 0x00c6, 0x008d, 0x0015, 0x029a, 0x007b, \
- 0x0096, 0x0000, 0x0000, 0x0419, 0x03FF, 0x003f, 0x003f, 0x03Ff, 0x0415};
-
-UBYTE *nova_vram;
+static int new_videl_mode_valid = 0;
+static int reprogram_VIDEL = 0;
+UBYTE *new_videoram = NULL;
 
 extern void rplanes(void);
-extern void rplanes_320(void);
-extern void rplanes_352(void);
 extern void load_r(void);
 extern void save_r(void);
 extern ULONG *p_str_p;
 
-ULONG f030coltable[256];
-ULONG f030coltable_zaloha[256];
-ULONG *col_table;
-int NOVAcoltable[256][3];
-int NOVAcoltable_zaloha[256][3];
+long RGBcoltable[256], RGBcoltable_backup[256];
+int coltable[256][3], coltable_backup[256][3];
 
-void get_colors_on_f030(void)
+void set_colors(int new)
 {
 	int i;
-	ULONG *x = (ULONG *) 0xff9800;
 
-	for (i = 0; i < 256; i++)
-		col_table[i] = x[i];
+	switch(video_hw) {
+		case F030:
+//			VsetRGB(0, 256, new ? RGBcoltable : RGBcoltable_backup);
+//			break;
+		case TT030:
+//			Esetpalette();
+//			break;
+		default:
+			for(i=0; i<256; i++) {
+				vs_color(gl_vdi_handle, i, new ? coltable[i] : coltable_backup[i]);
+		}
+	}
 }
 
-void set_colors_on_f030(void)
+void save_original_colors(void)
 {
 	int i;
-	ULONG *x = (ULONG *) 0xff9800;
 
-	for (i = 0; i < 256; i++)
-		x[i] = col_table[i];
+	switch(video_hw) {
+		case F030:
+//			VgetRGB(0, 256, RGBcoltable_backup);
+//			break;
+		case TT030:
+			// Egetpalette
+//			break;
+		default:
+			for(i=0; i<256; i++) {
+				vq_color(gl_vdi_handle, i, 1, coltable_backup[i]);
+		}
+	}
 }
+
+void set_new_colors(void) { set_colors(1); }
+
+void restore_original_colors(void) { set_colors(0); }
 
 /* -------------------------------------------------------------------------- */
 
-void SetupFalconEnvironment(void)
+void SetupEmulatedEnvironment(void)
 {
-	if (! NOVA) {
-		/* switch to new graphics mode 384x240x256 */
-#define DELKA_VIDEORAM	(384UL*256UL)
-		nova_vram = (UBYTE *) Mxalloc((DELKA_VIDEORAM), 0);
-		if (nova_vram == NULL) {
-			printf("Error allocating video memory\n");
-			exit(-1);
-		}
-		memset(nova_vram, 0, DELKA_VIDEORAM);
-		Setscreen(nova_vram, nova_vram, -1);
-
-		/* Check current resolution - if it is one of supported, do not touch VIDEL */
-		linea0();
-		if (VPLANES == 8 && V_Y_MAX == 240 && (
-								   (resolution == 2 && V_X_MAX == 384) ||
-								   (resolution == 1 && V_X_MAX == 352) ||
-								   (resolution == 0 && V_X_MAX == 320)));	/* the current resolution is OK */
-		else {
-			switch (resolution) {
-			case 2:
-				p_str_p = (ULONG *) nova_graf_384;
-				break;
-			case 1:
-				p_str_p = (ULONG *) nova_graf_352;
-				break;
-			case 0:
-			default:
-				p_str_p = (ULONG *) nova_graf_320;
-			}
-			Supexec(load_r);		/* set new video resolution by direct VIDEL programming */
-		}
-
-		/* nastav nove barvy */
-		col_table = f030coltable;
-		Supexec(set_colors_on_f030);
+	if (reprogram_VIDEL) {
+		/* set new video resolution by direct VIDEL programming */
+		(void)Vsetscreen(new_videoram, new_videoram, -1, -1);
+		p_str_p = (ULONG *)mode336x240_videl_settings;
+		Supexec(load_r);
+		new_videl_mode_valid = 1;
 	}
 
-	Supexec(init_kb);
+	set_new_colors();	/* setup new color palette */
 
-	/* joystick init */
-	Bconout(4, 0x14);
+	Supexec(init_kb);	/* our keyboard routine */
+
+	Bconout(4, 0x14);	/* joystick init */
+}
+
+void ShutdownEmulatedEnvironment(void)
+{
+	if (new_videl_mode_valid) {
+		/* restore original VIDEL mode */
+		p_str_p = (ULONG *) original_videl_settings;
+		Supexec(load_r);
+		new_videl_mode_valid = 0;
+		(void)Vsetscreen(Original_Log_base, Original_Phys_base, -1, -1);
+	}
+
+	restore_original_colors();
+
+	Supexec(rem_kb);	/* original keyboard routine */
+
+	Bconout(4, 8);		/* joystick disable */
 }
 
 void Atari_Initialise(int *argc, char *argv[])
 {
 	int i;
 	int j;
-	long val;
+
+	int work_in[11], work_out[57];
+	int maxx, maxy, maxw, maxh, wcell, hcell, wbox, hbox;
+	int video_hardware;
 
 	for (i = j = 1; i < *argc; i++) {
 		if (strcmp(argv[i], "-interlace") == 0) {
-			sscanf(argv[++i], "%d", &jen_nekdy);
-		}
-		else if (strcmp(argv[i], "-resolution") == 0) {
-			sscanf(argv[++i], "%d", &resolution);
+			sscanf(argv[++i], "%d", &skip_N_frames);
 		}
 		else if (strcmp(argv[i], "-joyswap") == 0)
 			joyswap = TRUE;
 		else {
 			if (strcmp(argv[i], "-help") == 0) {
-				printf("\t-interlace number  Generate screen only every number-th frame\n");
-				printf("\t-resolution X      0 => 320x240, 1 => 352x240, 2=> 384x240\n");
+				printf("\t-interlace x  Generate screen only every number-th frame\n");
 			}
 
 			argv[j++] = argv[i];
@@ -247,217 +262,235 @@ void Atari_Initialise(int *argc, char *argv[])
 		int r = (colortable[i] >> 18) & 0x3f;
 		int g = (colortable[i] >> 10) & 0x3f;
 		int b = (colortable[i] >> 2) & 0x3f;
-		f030coltable[i] = (r << 26) | (g << 18) | (b << 2);
-		NOVAcoltable[i][0] = r * 1000 / 64;
-		NOVAcoltable[i][1] = g * 1000 / 64;
-		NOVAcoltable[i][2] = b * 1000 / 64;
+		RGBcoltable[i] = (r << 16) | (g << 8) | b;
+		coltable[i][0] = r * 1000 / 64;
+		coltable[i][1] = g * 1000 / 64;
+		coltable[i][2] = b * 1000 / 64;
 	}
 
-	NOVA = get_cookie('NOVA', &i);
+	/* check for VIDEL hardware */
+	if (!get_cookie('_VDO', &video_hardware))
+		video_hardware = 0;
+	switch(video_hardware >> 16) {
+		case 2:
+			video_hw = TT030;
+			break;
+		case 3:
+			video_hw = F030;
+			break;
+		default:
+			video_hw = UNKNOWN;
+	}
 
-	if (NOVA) {
-		int vdi[57];
-		init_app(NULL, -1);		/* fills gl_vdi_handle */
-		vq_extnd(gl_vdi_handle, 0, &vdi);
-		HOST_WIDTH = vdi[0] + 1;
-		HOST_HEIGHT = vdi[1] + 1;
+	/* check for NOVA graphics card */
+	if (get_cookie('NOVA', NULL))
+		video_hw = NOVA;
 
-		hide_mouse();
+	/* GEM init */
+	appl_init();
+	graf_mouse(M_OFF, NULL);
+	wind_get(0, WF_WORKXYWH, &maxx, &maxy, &maxw, &maxh);
 
-		bgwin = wind_create(0,20,0,vdi[0],vdi[1]);
-		wind_open(bgwin,0,20,vdi[0],vdi[1]);
+	gl_vdi_handle = graf_handle(&wcell, &hcell, &wbox, &hbox);
 
-		v_clrwk(gl_vdi_handle);		/* clear whole screen */
+	work_in[0] = Getrez() + 2;
+	for(i = 1;i < 10;work_in[i++] = 1);
+	work_in[10] = 2;
+	v_opnvwk(work_in, &gl_vdi_handle, work_out);
 
-		wind_update(BEG_UPDATE);
+	/* get current screen size and color depth */
+	HOST_WIDTH = work_out[0] + 1;
+	HOST_HEIGHT = work_out[1] + 1;
 
-		for(i=0; i<256; i++) {
-			vq_color(gl_vdi_handle, i, 1, NOVAcoltable_zaloha[i]);
-			vs_color(gl_vdi_handle, i, NOVAcoltable[i]);
-		}
+	vq_extnd(gl_vdi_handle, 1, work_out);
+	HOST_PLANES = work_out[4];
+
+	if (HOST_PLANES == 8 && HOST_WIDTH >= 320 && HOST_HEIGHT >= ATARI_HEIGHT) {
+		/* current resolution is OK */
+		vramw = HOST_WIDTH;
+		vramh = HOST_HEIGHT;
+
+/*
+		if (vramw > 336)
+			screenw = 336;
+		else
+*/
+			screenw = 320;
+		screenh = ATARI_HEIGHT;
 	}
 	else {
-		if (!get_cookie('_VDO', &val))
-			val = 0;
+		if (video_hw == F030) {	/* we may switch VIDEL directly */
+			/* save original VIDEL settings */
+			p_str_p = (ULONG *) original_videl_settings;
+			Supexec(save_r);
 
-		if (val != 0x30000) {
-			printf("This Atari800 emulator requires Falcon video hardware\n");
+			if ((new_videoram = (UBYTE *)Mxalloc((336UL*ATARI_HEIGHT), 0)) == NULL) {
+				form_alert(1, "[1][Error allocating video memory ][ OK ]");
+				exit(-1);
+			}
+
+			/* create new graphics mode 336x240 in 256 colors */
+			reprogram_VIDEL = 1;
+			vramw = screenw = 336;
+			vramh = screenh = ATARI_HEIGHT;
+		}
+		else { /* non-Falcon hardware */
+			form_alert(1, "[1][Atari800 emulator needs |320x240 or higher res|in 256 colors][ OK ]");
 			exit(-1);
 		}
-
-		/* uschovat stare barvy */
-		col_table = f030coltable_zaloha;
-		Supexec(get_colors_on_f030);
-
-		/* uschovej starou grafiku */
-		p_str_p = (ULONG *) stara_graf;
-		Supexec(save_r);
 	}
 
-	screensaverval = screensaver(0);	/* turn off screen saver */
+	/* lock GEM */
+	v_clrwk(gl_vdi_handle);		/* clear whole screen */
+	wind_update(BEG_UPDATE);
 
-	Log_base = Logbase();
-	Phys_base = Physbase();
+	save_original_colors();
+
+#ifdef CLOCKY_SCREENSAVER
+	screensaverval = screensaver(0);	/* turn off Clocky's screen saver */
+#endif
+
+	Original_Log_base = Logbase();
+	Original_Phys_base = Physbase();
+
+	key_tab = Keytbl(-1, -1, -1);
+
+	consol = 7;
+
+#ifdef CPUASS
+	CPU_INIT();
+#endif
 
 #ifdef DMASOUND
 	Sound_Initialise(argc, argv);
 #endif
 
-	key_tab = Keytbl(-1, -1, -1);
-	consol = 7;
-#ifdef CPUASS
-	CPU_INIT();
-#endif
-
-	SetupFalconEnvironment();
+	SetupEmulatedEnvironment();
 }
 
 /* -------------------------------------------------------------------------- */
 
 int Atari_Exit(int run_monitor)
 {
-	if (! NOVA) {
-		/* vratit puvodni graficky mod */
-		p_str_p = (ULONG *) stara_graf;
-		Supexec(load_r);
-		Setscreen(Log_base, Phys_base, -1);
+	ShutdownEmulatedEnvironment();
 
-		/* obnovit stare barvy */
-		col_table = f030coltable_zaloha;
-		Supexec(set_colors_on_f030);
-	}
-
-	Supexec(rem_kb);
-
-	/* joystick disable */
-	Bconout(4, 8);
-
-#ifdef BACKUP_MSG
-	if (*backup_msg_buf) {		/* print the buffer */
-		puts(backup_msg_buf);
-		*backup_msg_buf = 0;
-	}
+#ifdef BUFFERED_LOG
+	Aflushlog();
 #endif
 
-	if (run_monitor)
+	if (run_monitor) {
 		if (monitor()) {
-			SetupFalconEnvironment();
+			SetupEmulatedEnvironment();
 
 			return 1;			/* go back to emulation */
 		}
+	}
 
 #ifdef DMASOUND
 	Sound_Exit();
 #endif
 
-	if (NOVA) {
-		int i;
+	if (new_videoram)
+		free(new_videoram);
 
-		for(i=0; i<256; i++) {
-			vs_color(gl_vdi_handle, i, NOVAcoltable_zaloha[i]);
-		}
-		wind_update(END_UPDATE);
-		wind_close(bgwin);
-		wind_delete(bgwin);
+	/* unlock GEM */
+	wind_update(END_UPDATE);
+	form_dial(FMD_FINISH, 0, 0, 0, 0, 0, 0, HOST_WIDTH, HOST_HEIGHT);	/* redraw screen */
+	graf_mouse(M_ON, NULL);
+	/* GEM exit */
+	appl_exit();
 
-		show_mouse();
-		exit_gem();
-	}
-	else {
-		screensaver(screensaverval);
-	}
+#ifdef CLOCKY_SCREENSAVER
+	screensaver(screensaverval);
+#endif
 
 	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
 
-void Atari_DisplayScreen(UBYTE * screen)
+void Atari_DisplayScreen(UBYTE *screen)
 {
 	static int i = 0;
-	if (i >= jen_nekdy) {
-		odkud = screen;
-		kam = Logbase();
-		if (NOVA) {
-			UBYTE *ptr_from = screen + 24;
-			UBYTE *ptr_dest = kam + CENTER;
-			int j;
 
-			for(j=0; j<ATARI_HEIGHT; j++) {
-#if 0	/* ASM */
-#ifdef QUAD
-				memcpy(ptr_dest, ptr_from, 336);
-				ptr_dest += HOST_WIDTH;
+#ifdef SET_LED
+	if (LED_timeout)
+		if (--LED_timeout == 0)
+			Atari_Set_LED(0);
 #endif
-				memcpy(ptr_dest, ptr_from, 336);
-				ptr_from += ATARI_WIDTH;
-				ptr_dest += HOST_WIDTH;
-#else
-				{
-					register cycles = 20;
-#ifdef QUAD
-					long tmp, tmp2;
-					cycles = 167;
-/*
-	movew d0,d1
-	swap d0
-	movew d1,d0
-	rorw #8,d0
-	rorl #8,d0
-*/
-					__asm__ __volatile__("\n\t\
-					1:\n\t\
-						movew	%3@+,%4\n\t\
-						movew	%4,%5\n\t\
-						swap	%4\n\t\
-						movew	%5,%4\n\t\
-						rorw	#8,%4\n\t\
-						rorl	#8,%4\n\t\
-						movel	%4,%2@+\n\t\
 
-						dbra	%0,1b"
-						: "=d" (cycles)
-						: "0" (cycles), "a" (ptr_dest), "a" (ptr_from), "d" (tmp), "d" (tmp2)
-					);
-					ptr_dest += HOST_WIDTH;	/* odd lines only */
-#else
-					__asm__ __volatile__("\n\t\
-					1:\n\t\
-						movel	%3@+,%2@+\n\t\
-						movel	%3@+,%2@+\n\t\
-						movel	%3@+,%2@+\n\t\
-						movel	%3@+,%2@+\n\t\
-						dbra	%0,1b"
-						: "=d" (cycles)
-						: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
-					);
-#endif	/* QUAD */
-				}
-				ptr_from += ATARI_WIDTH-336;
-				ptr_dest += HOST_WIDTH-EMUL_WIDTH;
-#endif	/* ASM */
-			}
-		}
-		else {
-			switch (resolution) {
-			case 2:
-				rplanes();
-				break;
-			case 1:
-				rplanes_352();
-				break;
-			case 0:
-			default:
-				rplanes_320();
-			}
-		}
-		i = 0;
-	}
-	else
+	if (i < skip_N_frames) {
 		i++;
+		return;
+	}
+	i = 0;
 
-	consol = 7;
+	odkud = screen;
+	kam = Logbase();
+
+	if (video_hw == NOVA) {
+		UBYTE *ptr_from = screen + 24;
+		UBYTE *ptr_dest = kam + CENTER;
+		int j;
+
+		for(j=0; j<ATARI_HEIGHT; j++) {
+			int cycles;
+			long tmp=0, tmp2=0;
+
+			if (NOVA_double_size) {
+				cycles = 167;
+
+				__asm__ __volatile__("\n\t\
+				1:\n\t\
+					movew	%3@+,%4\n\t\
+					movew	%4,%5\n\t\
+					swap	%4\n\t\
+					movew	%5,%4\n\t\
+					rorw	#8,%4\n\t\
+					rorl	#8,%4\n\t\
+					movel	%4,%2@+\n\t\
+
+					dbra	%0,1b"
+					: "=d" (cycles)
+					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from), "d" (tmp), "d" (tmp2)
+				);
+				ptr_dest += HOST_WIDTH;	/* odd lines only */
+			}
+			else {
+				cycles = 20;
+				__asm__ __volatile__("\n\t\
+				1:\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					movel	%3@+,%2@+\n\t\
+					dbra	%0,1b"
+					: "=d" (cycles)
+					: "0" (cycles), "a" (ptr_dest), "a" (ptr_from)
+				);
+			}
+			ptr_from += ATARI_WIDTH-336;
+			ptr_dest += HOST_WIDTH-EMUL_WIDTH;
+		}
+	}
+	else {
+		rplanes();
+	}
 }
+
+#ifdef SET_LED
+void Atari_Set_LED(int how)
+{
+	if (how) {
+		Offgibit(~0x02);
+		LED_timeout = 8;
+	}
+	else {
+		Ongibit(0x02);
+		LED_timeout = 0;
+	}
+}
+#endif
 
 /* -------------------------------------------------------------------------- */
 
@@ -468,8 +501,6 @@ int Atari_Keyboard(void)
 	UBYTE control_key;
 	int scancode, keycode;
 	int i;
-
-	consol = 7;
 
 	trig0 = 1;
 	stick0 = STICK_CENTRE;

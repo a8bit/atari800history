@@ -76,8 +76,6 @@ void Atari_DisplayScreen(UBYTE * screen)
 	int xpos;
 	int ypos;
 
-	consol = 7;
-
 	screenaddr = (memory[89] << 8) | memory[88];
 
 	for (ypos = 0; ypos < 24; ypos++) {

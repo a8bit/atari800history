@@ -22,6 +22,8 @@ Usage: atari800 [-atari] [-xl] [-xe] [-5200] [-b] [-c] [-d]
 -rambo  Use Rambo mode of 320 kB memory.
 -5200   Enable Atari 5200 Games System Emulation Mode.
 
+-artif   enables Colour Artifacting
+
 -nobasic Disables BASIC (just like when you hold down OPTION while booting)
 
 -basic   Enables BASIC (even if disabled in atari800.cfg by HoldOption)

@@ -211,6 +211,12 @@ void CPU_GetStatus(void)
 	CPUGET();
 }
 
+void GenerateIRQ(void)
+{
+	IRQ = 1;
+	GO(0);						/* does not execute any instruction */
+}
+
 void tisk(void)
 {
 	void *adresa = (long *) 0x400000;

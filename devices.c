@@ -1,4 +1,3 @@
-
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
@@ -30,11 +29,6 @@
 #include <io.h>
 #include <sys/stat.h>
 #include "windows.h"
-extern char	memory_log[];
-extern char	scratch[];
-extern unsigned int	memory_log_index;
-#define ADDLOG( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
-#define ADDLOGTEXT( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
 #endif
 
 #ifdef DO_DIR
@@ -52,6 +46,7 @@ static char *rcsid = "$Id: devices.c,v 1.21 1998/02/21 15:17:44 david Exp $";
 #include "cpu.h"
 #include "devices.h"
 #include "rt-config.h"
+#include "log.h"
 
 #define	ICHIDZ	0x0020
 #define	ICDNOZ	0x0021
@@ -120,14 +115,7 @@ void Device_Initialise(int *argc, char *argv[])
 	}
 
 	if (devbug)
-#ifdef WIN32
-	{
-		sprintf ( scratch, "H%d: %s\n", i, H[i]);
-		ADDLOG( scratch );
-	}
-#else
-		printf("H%d: %s\n", i, H[i]);
-#endif
+		Aprint("H%d: %s", i, H[i]);
 
 	*argc = j;
 }
@@ -224,11 +212,7 @@ void Device_HHOPEN(void)
 	int temp;
 
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT( "HHOPEN" );
-#else
-		printf("HHOPEN\n");
-#endif
+		Aprint("HHOPEN");
 
 	fid = memory[0x2e] >> 4;
 
@@ -248,14 +232,8 @@ void Device_HHOPEN(void)
  */
 	devnum = memory[ICDNOZ];
 	if (devnum > 9) {
-#ifdef WIN32
-	  sprintf ( scratch, "Attempt to access H%d: device\n", devnum);
-	  ADDLOG( scratch );
-	  return;
-#else
-		printf("Attempt to access H%d: device\n", devnum);
-		exit(1);
-#endif
+		Aprint("Attempt to access H%d: device", devnum);
+		return;
 	}
 	if (devnum >= 5) {
 		flag[fid] = TRUE;
@@ -270,8 +248,8 @@ void Device_HHOPEN(void)
    specification! */
 	sprintf(fname, "%s:%s", H[devnum], filename);
 #else
-#ifdef WIN32
-  sprintf (fname, "%s\\%s", H[devnum], filename);
+#ifdef BACK_SLASH
+	sprintf (fname, "%s\\%s", H[devnum], filename);
 #else
 	sprintf(fname, "%s/%s", H[devnum], filename);
 #endif
@@ -391,11 +369,7 @@ void Device_HHOPEN(void)
 void Device_HHCLOS(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT( "HHCLOS" );
-#else
-		printf("HHCLOS\n");
-#endif
+		Aprint("HHCLOS");
 
 	fid = memory[0x2e] >> 4;
 
@@ -410,11 +384,7 @@ void Device_HHCLOS(void)
 void Device_HHREAD(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT( "HHREAD" );
-#else
-		printf("HHREAD\n");
-#endif
+		Aprint("HHREAD");
 
 	fid = memory[0x2e] >> 4;
 
@@ -450,11 +420,7 @@ void Device_HHREAD(void)
 void Device_HHWRIT(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("HHWRIT");    
-#else
-		printf("HHWRIT\n");
-#endif
+		Aprint("HHWRIT");
 
 	fid = memory[0x2e] >> 4;
 
@@ -484,11 +450,7 @@ void Device_HHWRIT(void)
 void Device_HHSTAT(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT( "HHSTAT" );
-#else
-		printf("HHSTAT\n");
-#endif
+		Aprint("HHSTAT");
 
 	fid = memory[0x2e] >> 4;
 
@@ -496,93 +458,48 @@ void Device_HHSTAT(void)
 	SetN;
 }
 
-#ifdef WIN32
-void Device_HHSPEC (void)
-{
-  if (devbug)
-    ADDLOGTEXT("HHSPEC");
-
-  fid = memory[0x2e] >> 4;
-
-  switch (memory[ICCOMZ])
-    {
-    case 0x20 :
-      ADDLOGTEXT ("RENAME Command");
-      break;
-    case 0x21 :
-      ADDLOGTEXT ("DELETE Command");
-      break;
-    case 0x23 :
-      ADDLOGTEXT ("LOCK Command");
-      break;
-    case 0x24 :
-      ADDLOGTEXT ("UNLOCK Command");
-      break;
-    case 0x25 :
-      ADDLOGTEXT ("NOTE Command");
-      break;
-    case 0x26 :
-      ADDLOGTEXT ("POINT Command");
-      break;
-    case 0xFE :
-      ADDLOGTEXT ("FORMAT Command");
-      break;
-    default :
-      ADDLOGTEXT ("UNKNOWN Command");
-      break;
-    }
-
-  regY = 146;
-  SetN;
-}
-#else
 void Device_HHSPEC(void)
 {
 	if (devbug)
-		printf("HHSPEC\n");
+		Aprint("HHSPEC");
 
 	fid = memory[0x2e] >> 4;
 
 	switch (memory[ICCOMZ]) {
 	case 0x20:
-		printf("RENAME Command\n");
+		Aprint("RENAME Command");
 		break;
 	case 0x21:
-		printf("DELETE Command\n");
+		Aprint("DELETE Command");
 		break;
 	case 0x23:
-		printf("LOCK Command\n");
+		Aprint("LOCK Command");
 		break;
 	case 0x24:
-		printf("UNLOCK Command\n");
+		Aprint("UNLOCK Command");
 		break;
 	case 0x25:
-		printf("NOTE Command\n");
+		Aprint("NOTE Command");
 		break;
 	case 0x26:
-		printf("POINT Command\n");
+		Aprint("POINT Command");
 		break;
 	case 0xFE:
-		printf("FORMAT Command\n");
+		Aprint("FORMAT Command");
 		break;
 	default:
-		printf("UNKNOWN Command\n");
+		Aprint("UNKNOWN Command");
 		break;
 	}
 
 	regY = 146;
 	SetN;
 }
-#endif
 
 void Device_HHINIT(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("HHINIT");
-#else
-		printf("HHINIT\n");
-#endif
+		Aprint("HHINIT");
 }
 
 static int phfd = -1;
@@ -592,11 +509,7 @@ static char *spool_file = NULL;
 void Device_PHOPEN(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHOPEN");
-#else
-		printf("PHOPEN\n");
-#endif
+		Aprint("PHOPEN");
 
 	if (phfd != -1)
 		Device_PHCLOS();
@@ -616,11 +529,7 @@ void Device_PHOPEN(void)
 void Device_PHCLOS(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHCLOS");
-#else
-		printf("PHCLOS\n");
-#endif
+		Aprint("PHCLOS");
 
 	if (phfd != -1) {
 		char command[256];
@@ -650,11 +559,7 @@ void Device_PHCLOS(void)
 void Device_PHREAD(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHREAD");
-#else
-		printf("PHREAD\n");
-#endif
+		Aprint("PHREAD");
 
 	regY = 146;
 	SetN;
@@ -666,11 +571,7 @@ void Device_PHWRIT(void)
 	int status;
 
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHWRIT");
-#else
-		printf("PHWRIT\n");
-#endif
+		Aprint("PHWRIT");
 
 	byte = regA;
 	if (byte == 0x9b)
@@ -690,21 +591,13 @@ void Device_PHWRIT(void)
 void Device_PHSTAT(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHSTAT");
-#else
-		printf("PHSTAT\n");
-#endif
+		Aprint("PHSTAT");
 }
 
 void Device_PHSPEC(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHSPEC");
-#else
-		printf("PHSPEC\n");
-#endif
+		Aprint("PHSPEC");
 
 	regY = 1;
 	ClrN;
@@ -713,11 +606,7 @@ void Device_PHSPEC(void)
 void Device_PHINIT(void)
 {
 	if (devbug)
-#ifdef WIN32
-		ADDLOGTEXT("PHINIT");
-#else
-		printf("PHINIT\n");
-#endif
+		Aprint("PHINIT");
 
 	phfd = -1;
 	regY = 1;

@@ -6,21 +6,11 @@ o The obsolete variable "countdown_rate" is still in use within
   to do it without an Amiga to check it. I've left it defined in "atari.c"
   so that there are no linker errors on the Amiga.
 
-o enable artifacting in all architectures (not only Win32). Use -artifact
-  or similar command line switch.
-
-o ADDLOG should become the standard for reporting errors (all printf() should
-  be removed and replaced with ADDLOG). Then define ADDLOG for every
-  architecture (for Unices it might still use just printf, but Falcon and DOS
-  will list the error report after switching back to text mode).
-  My BACKUP_MSG kludge should be replaced with ADDLOG as well. Perhaps also
-  delayed_vga_init() from Perry could be removed thanks to that.
-
 o A new feature that would allow user to "freeze" the emulated program,
   save everything to disk and later restore the emulator in the same state.
   Idea invented by Rich so he hopefully will write the code as well :-)
 
-o enable digitised sound in the 'official' DOS port (Makefile.pm already does
-  support the digitised sound). The same applies to keyclick sound.
+o enable digitised sound in the non-Allegro DOS port (Allegro version of A800
+  already does support the digitised sound). The same applies to keyclick sound.
 
 o fix all known bugs (see BUGS file)

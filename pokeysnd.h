@@ -59,7 +59,7 @@
 #define uint32 unsigned int32
 
 #ifdef __MWERKS__
-#define BIG_ENDIAN
+#define POKEYSND_BIG_ENDIAN
 #endif
 
 #endif

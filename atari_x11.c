@@ -2366,8 +2366,8 @@ void Atari_Initialise(int *argc, char *argv[])
 		printf("Failed to allocate space for image\n");
 		exit(1);
 	}
-	keyboard_consol = 7;
-	menu_consol = 7;
+
+	consol = 7;
 
 	if (x11bug) {
 		printf("Initial X11 controller configuration\n");

@@ -58,13 +58,13 @@ UBYTE PIA_GetByte(UWORD addr)
 		if (!(PACTL & 0x04))
  			byte = ~PORTA_mask;
 		else
-			byte = (PORTA & (~PORTA_mask)) | (Atari_PORT(0) & PORTA_mask);
+			byte = Atari_PORT(0) & (PORTA_mask|PORTA);
 		break;
 	case _PORTB:
 		switch (machine) {
 		case Atari:
 			byte = Atari_PORT(1);
-			/* byte &= PORTB_mask; - disabled by Golda - four joysticks didn't work */
+			byte &= PORTB_mask|PORTB;
 			break;
 		case AtariXL:
 		case AtariXE:

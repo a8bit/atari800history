@@ -1,15 +1,16 @@
-
 *-------------------------------------------------------*
 
 	OPT		P=68040,L1,O+,W-
-	output c2p.o
+	output		c2p_uni.o
 *-------------------------------------------------------*
 
 *-------------------------------------------------------*
-*	Initialisation functions			* 
+*	Initialisation functions			*
 *-------------------------------------------------------*
 
-	xref		_screenw,_screenh,_odkud,_kam
+	xref		_screenw,_screenh
+	xref		_vramw,_vramh
+	xref		_odkud,_kam
 
 *-------------------------------------------------------*
 *	General functions				*
@@ -24,7 +25,7 @@
 push	macro
 	move.\0		\1,-(sp)
 	endm
-	
+
 pop	macro
 	move.\0		(sp)+,\1
 	endm
@@ -32,7 +33,7 @@ pop	macro
 pushall	macro
 	movem.l		d0-a6,-(sp)
 	endm
-	
+
 popall	macro
 	movem.l		(sp)+,d0-a6
 	endm
@@ -52,6 +53,36 @@ _rplanes:
 *-------------------------------------------------------*
 	move.l		_odkud,a0
 	move.l		_kam,a1
+
+; centering of view at screen 
+	move.w		#384,d0		; width of Atari800 emulated screen
+	sub.w		_screenw,d0	; width of displayed screen
+	move.w		d0,src_line_offset
+	lsr.w		#1,d0		; centering
+	lea		(a0,d0),a0	; offset 24 or 32 pixels
+
+; centering of screen in videoram in horizontal axis
+	move.w		_vramw,d0
+	sub.w		_screenw,d0
+	move.w		d0,dst_line_offset
+	lsr.w		#1,d0
+	neg.w		d0
+	lea		(a1,d0),a1	; negative pre-offset (will be OK at .ylp)
+
+; centering of screen in videoram in vertical axis
+	move.w		_vramh,d0
+	sub.w		_screenh,d0
+	lsr.w		#1,d0
+	move.w		_vramw,d1
+	mulu		d1,d0
+	lea		(a1,d0.l),a1
+
+; precompute line width in long words
+	move.w		_screenw,d0
+	lsr.w		#4,d0
+	subq.w		#1,d0
+	move.w		d0,line_long_width
+
 *-------------------------------------------------------*
 	movem.l		(a0)+,d1-d4
 *-------------------------------------------------------*
@@ -103,11 +134,15 @@ _rplanes:
 	move.w		_screenh,d6
 	subq.w		#1,d6
 *-------------------------------------------------------*
-.ylp:	move.w		_screenw,d5
-	lsr.w		#4,d5
-	subq.w		#1,d5
+.ylp:	move.w		line_long_width,d5
+	move.w		dst_line_offset,d0
+	lea		(a1,d0),a1
 *-------------------------------------------------------*
-.xlp:	movem.l		(a0)+,d1-d4
+.xlp:	tst.w		d5
+	bne.s		.nono
+	move.w		src_line_offset,d0
+	lea		(a0,d0),a0	; offset D0 pixels to beginning of next line
+.nono	movem.l		(a0)+,d1-d4
 *-------------------------------------------------------*
 	move.l		#$00FF00FF,d0	; 4
 	splice.8	d1,d3,d0,d7	; 18
@@ -163,19 +198,23 @@ _rplanes:
 	move.l		d1,a5
 *-------------------------------------------------------*
 	dbra		d5,.xlp
-	tst.w		d6
-	beq.s		.none
+;	tst.w		d6
+;	beq.s		.none
 	dbra		d6,.ylp
 *-------------------------------------------------------*
-.none:	move.l		a2,(a1)+
-	move.l		a3,(a1)+
-	move.l		a4,(a1)+
-	move.l		a5,(a1)+
+;.none:	move.l		a2,(a1)+
+;	move.l		a3,(a1)+
+;	move.l		a4,(a1)+
+;	move.l		a5,(a1)+
 *-------------------------------------------------------*
 	popall
 *-------------------------------------------------------*
 	rts
 
 *-------------------------------------------------------*
-			text
+			bss
+*-------------------------------------------------------*
+src_line_offset		ds.w	1
+dst_line_offset		ds.w	1
+line_long_width		ds.w	1
 *-------------------------------------------------------*

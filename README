@@ -1,4 +1,4 @@
-Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.6
+Atari 800 Emulator for Unix, Amiga, MS-DOS and Falcon, Version 0.9.7
 --------------------------------------------------------------------
 
     Copyright (C) 1995 David Firth. E-Mail: david@signus.demon.co.uk
@@ -19,7 +19,7 @@ be configured to run in the following ways :-
 	4. X-Windows + Optional XVIEW or MOTIF User Interface
 	5. CBM Amiga
  	6. MS-DOS
-	7. Atari Falcon
+	7. Atari Falcon/TT and compatible machines
 	8. MS-Windows
 
 The basic mode is only useful for running programs such as MAC65,
@@ -47,8 +47,8 @@ graphics, sound (SoundBlaster compatible sound cards, 8bit, 22 kHz),
 keyboard, one joystick connected to game port and up to three additional
 digital joysticks connected to parallel (printer) ports.
 
-The Atari Falcon030/040 version supports 320x240, 352x240 and also full
-384x240 graphics, NOVA graphics, sound (DMA 12.5 kHz) and up to two
+The Atari Falcon030/040 version supports 320x240 and 336x240 Falcon/TT
+8-bit planes graphics modes, NOVA graphics cards, DMA sound and both
 joysticks (old CX-40, Atari800 compatible - not the new paddle-like ones).
 
 From version 0.7.0 all versions supporting bitmapped graphics have

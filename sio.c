@@ -18,11 +18,7 @@
 #ifdef WIN32
 #include <windows.h>
 #include <fcntl.h>
-extern char	memory_log[];
-extern char	scratch[];
-extern unsigned int	memory_log_index;
-#define ADDLOG( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
-#define ADDLOGTEXT( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
+#include <io.h>
 #else
 #ifdef VMS
 #include <unixio.h>
@@ -53,6 +49,8 @@ static char *rcsid = "$Id: sio.c,v 1.9 1998/02/21 14:55:21 david Exp $";
 #include "cpu.h"
 #include "sio.h"
 #include "pokeysnd.h"
+#include "platform.h"
+#include "log.h"
 
 void CopyFromMem(int to, UBYTE *, int size);
 void CopyToMem(UBYTE *, ATPtr from, int size);
@@ -173,10 +171,10 @@ int SIO_Mount(int diskno, char *filename)
 			}
 
 #ifdef DEBUG
-			printf("ATR: sectorcount = %d, sectorsize = %d\n",
+			Aprint("ATR: sectorcount = %d, sectorsize = %d",
 				   sectorcount[diskno - 1],
 				   sectorsize[diskno - 1]);
-			printf("%s ATR\n", atr_format[diskno - 1] == SIO2PC_ATR ? "SIO2PC" : "???");
+			Aprint("%s ATR\n", atr_format[diskno - 1] == SIO2PC_ATR ? "SIO2PC" : "???");
 #endif
 		}
 		else {
@@ -230,14 +228,9 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 			offset = (sector - 1) * size + 16;
 		break;
 	default:
-#ifdef WIN32
-		ADDLOGTEXT( "Fatal error in atari_sio.c" );
+		Aprint("Fatal Error in atari_sio.c");
 		Atari800_Exit(FALSE);
 		return;
-#else
-		printf("Fatal Error in atari_sio.c\n");
-		Atari800_Exit(FALSE);
-#endif
 	}
 
 	if (sz)
@@ -257,7 +250,7 @@ int SeekSector(int unit, int sector)
 	/* printf("Sector %x,Offset: %x\n",sector,offset); */
 	if (offset > lseek(disk[unit], 0L, SEEK_END)) {
 #ifdef DEBUG
-		printf("Seek after end of file\n");
+		Aprint("Seek after end of file");
 #endif
 /*
 		Atari800_Exit(FALSE);
@@ -475,7 +468,8 @@ int DriveStatus(int unit, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (drive_status[unit] == ReadWrite) {
 			buffer[0] = (sectorsize[unit] == 256) ? (32 + 16) : (16);
-			buffer[1] = (disk[unit] != -1) ? (128) : (0);
+			/* buffer[1] = (disk[unit] != -1) ? (128) : (0); */
+			buffer[1] = (disk[unit] != -1) ? (255) : (0);	/* for StripPoker */
 		}
 		else {
 			buffer[0] = (sectorsize[unit] == 256) ? (32) : (0);
@@ -641,16 +635,9 @@ void Command_Frame(void)
 	sector = CommandFrame[2] | (((UWORD) (CommandFrame[3])) << 8);
 	unit = CommandFrame[0] - '1';
 	if (unit > 8) {				/* UBYTE - range ! */
-#ifdef WIN32
-		sprintf( scratch, "Unknown command frame: %02x %02x %02x %02x %02x\n",
+		Aprint("Unknown command frame: %02x %02x %02x %02x %02x",
 			   CommandFrame[0], CommandFrame[1], CommandFrame[2],
 			   CommandFrame[3], CommandFrame[4]);
-		ADDLOG( scratch );
-#else
-		printf("Unknown command frame: %02x %02x %02x %02x %02x\n",
-			   CommandFrame[0], CommandFrame[1], CommandFrame[2],
-			   CommandFrame[3], CommandFrame[4]);
-#endif
 		result = 0;
 	}
 	else
@@ -712,16 +699,9 @@ void Command_Frame(void)
 			result = 'A';		/* Not yet supported... to be done later... */
 			break;
 		default:
-#ifdef WIN32
-			sprintf( scratch, "Command frame: %02x %02x %02x %02x %02x\n",
+			Aprint("Command frame: %02x %02x %02x %02x %02x",
 				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
 				   CommandFrame[3], CommandFrame[4]);
-			ADDLOG( scratch );
-#else
-			printf("Command frame: %02x %02x %02x %02x %02x\n",
-				   CommandFrame[0], CommandFrame[1], CommandFrame[2],
-				   CommandFrame[3], CommandFrame[4]);
-#endif
 			break;
 			result = 0;
 		}
@@ -737,14 +717,7 @@ void SwitchCommandFrame(int onoff)
 
 	if (onoff) {				/* Enabled */
 		if (TransferStatus != SIO_NoFrame)
-#ifdef WIN32
-		{
-			sprintf( scratch, "Unexpected command frame %x.\n", TransferStatus);
-			ADDLOG( scratch );
-		}
-#else
-			printf("Unexpected command frame %x.\n", TransferStatus);
-#endif
+			Aprint("Unexpected command frame %x.", TransferStatus);
 		CommandIndex = 0;
 		DataIndex = 0;
 		ExpectedBytes = 5;
@@ -758,14 +731,7 @@ void SwitchCommandFrame(int onoff)
 		if (TransferStatus != SIO_StatusRead && TransferStatus != SIO_NoFrame &&
 			TransferStatus != SIO_ReadFrame) {
 			if (!(TransferStatus == SIO_CommandFrame && CommandIndex == 0))
-#ifdef WIN32
-			{
-				sprintf( scratch, "Command frame %02x unfinished.\n", TransferStatus);
-				ADDLOG( scratch );
-			}
-#else
-				printf("Command frame %02x unfinished.\n", TransferStatus);
-#endif
+				Aprint("Command frame %02x unfinished.", TransferStatus);
 			TransferStatus = SIO_NoFrame;
 		}
 		CommandIndex = 0;
@@ -820,11 +786,7 @@ void SIO_PutByte(int byte)
 			}
 		}
 		else {
-#ifdef WIN32
-			ADDLOGTEXT( "Invalid command frame!" );
-#else
-			printf("Invalid command frame!\n");
-#endif
+			Aprint("Invalid command frame!");
 			TransferStatus = SIO_NoFrame;
 		}
 		break;
@@ -857,22 +819,11 @@ void SIO_PutByte(int byte)
 			}
 		}
 		else {
-#ifdef WIN32
-			ADDLOGTEXT( "Invalid data frame!" );
-#else
-			printf("Invalid data frame!\n");
-#endif
+			Aprint("Invalid data frame!");
 		}
 		break;
 	default:
-#ifdef WIN32
-		{
-		sprintf( scratch, "Unexpected data output :%x\n", byte);
-		ADDLOG( scratch );
-		}
-#else
-		printf("Unexpected data output :%x\n", byte);
-#endif
+		Aprint("Unexpected data output :%x", byte);
 	}
 	DELAYED_SEROUT_IRQ += SEROUT_INTERVAL;
 
@@ -908,11 +859,7 @@ int SIO_GetByte(void)
 			}
 		}
 		else {
-#ifdef WIN32
-			ADDLOG("Invalid read frame!");
-#else
-			printf("Invalid read frame!\n");
-#endif
+			Aprint("Invalid read frame!");
 			TransferStatus = SIO_NoFrame;
 		}
 		break;
@@ -934,11 +881,7 @@ int SIO_GetByte(void)
 			}
 		}
 		else {
-#ifdef WIN32
-			ADDLOG("Invalid read frame!");
-#else
-			printf("Invalid read frame!\n");
-#endif
+			Aprint("Invalid read frame!");
 #ifdef SET_LED
 			Atari_Set_LED(0);
 #endif
@@ -946,11 +889,7 @@ int SIO_GetByte(void)
 		}
 		break;
 	default:
-#ifdef WIN32
-		ADDLOG("Unexpected data reading!\n");
-#else
-		printf("Unexpected data reading!\n");
-#endif
+		Aprint("Unexpected data reading!");
 		break;
 	}
 

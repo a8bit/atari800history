@@ -427,13 +427,14 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 
 	if (chan_mask & (1 << CHAN2)) {
 		/* process channel 2 frequency */
-		if (AUDCTL[chip] & CH1_CH2)
+		if (AUDCTL[chip] & CH1_CH2) {
 			if (AUDCTL[chip] & CH1_179)
 				new_val = AUDF[CHAN2 + chip_offs] * 256 +
 					AUDF[CHAN1 + chip_offs] + 7;
 			else
 				new_val = (AUDF[CHAN2 + chip_offs] * 256 +
 						   AUDF[CHAN1 + chip_offs] + 1) * Base_mult[chip];
+		}
 		else
 			new_val = (AUDF[CHAN2 + chip_offs] + 1) * Base_mult[chip];
 
@@ -464,13 +465,14 @@ void Update_pokey_sound(uint16 addr, uint8 val, uint8 chip, uint8 gain)
 
 	if (chan_mask & (1 << CHAN4)) {
 		/* process channel 4 frequency */
-		if (AUDCTL[chip] & CH3_CH4)
+		if (AUDCTL[chip] & CH3_CH4) {
 			if (AUDCTL[chip] & CH3_179)
 				new_val = AUDF[CHAN4 + chip_offs] * 256 +
 					AUDF[CHAN3 + chip_offs] + 7;
 			else
 				new_val = (AUDF[CHAN4 + chip_offs] * 256 +
 						   AUDF[CHAN3 + chip_offs] + 1) * Base_mult[chip];
+		}
 		else
 			new_val = (AUDF[CHAN4 + chip_offs] + 1) * Base_mult[chip];
 
@@ -553,7 +555,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 	register uint8 *vol_ptr;
 
 	/* set a pointer to the whole portion of the samp_n_cnt */
-#ifdef BIG_ENDIAN
+#ifdef POKEYSND_BIG_ENDIAN
 	samp_cnt_w_ptr = (uint32 *) ((uint8 *) (&Samp_n_cnt[0]) + 3);
 #else
 	samp_cnt_w_ptr = (uint32 *) ((uint8 *) (&Samp_n_cnt[0]) + 1);
@@ -767,7 +769,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 		else {					/* otherwise we're processing a sample */
 			/* adjust the sample counter - note we're using the 24.8 integer
 			   which includes an 8 bit fraction for accuracy */
-#ifdef BIG_ENDIAN
+#ifdef POKEYSND_BIG_ENDIAN
 			*(Samp_n_cnt + 1) += Samp_n_max;
 #else
 			*Samp_n_cnt += Samp_n_max;

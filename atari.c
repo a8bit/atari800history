@@ -7,7 +7,7 @@
 #include <windows.h>
 #include <io.h>
 #include <time.h>
-#include "../winatari.h"
+#include "winatari.h"
 #else
 #include <sys/time.h>
 #include <unistd.h>
@@ -23,10 +23,6 @@
 #ifdef DJGPP
 #include "djgpp.h"
 int timesync = 1;
-#endif
-
-#ifdef USE_DOSSOUND
-#include <audio.h>
 #endif
 
 #ifdef AT_USE_ALLEGRO
@@ -52,8 +48,11 @@ static char *rcsid = "$Id: atari.c,v 1.48 1998/02/21 15:22:04 david Exp $";
 #include "platform.h"
 #include "prompts.h"
 #include "rt-config.h"
+#include "ui.h"
+#include "ataripcx.h"		/* for Save_PCX() */
+#include "log.h"
 
-TVmode tv_mode = PAL;
+TVmode tv_mode = TV_PAL;
 Machine machine = Atari;
 int mach_xlxe = FALSE;
 int verbose = FALSE;
@@ -72,17 +71,12 @@ extern void GetJoystickInput( void );
 extern void ReadRegDrives( HKEY hkInitKey );
 extern void WriteAtari800Registry( HKEY hkInitKey );
 extern void Start_Atari_Timer( void );
+extern void Screen_Paused( UBYTE *screen );
 int			unAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
 int		test_val;
 int		FindCartType( char *rom_filename );
 char	current_rom[ _MAX_PATH ];
-char	memory_log[8192];
-char	scratch[256];
-unsigned int	memory_log_index = 0;
-#define ADDLOG( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x, strlen( x ) ); memory_log_index += strlen( x ); }
-#define ADDLOGTEXT( x ) { if( memory_log_index + strlen( x ) > 8192 ) memory_log_index = 0; memcpy( &memory_log[ memory_log_index ], x"\x00d\x00a", strlen( x"\x00d\x00a" ) ); memory_log_index += strlen( x"\x00d\x00a" ); }
 int	os = 2;
-
 #else	/* not Win32 */
 static int os = 2;
 #endif
@@ -105,10 +99,6 @@ int cart_type = NO_CART;
 
 int countdown_rate = 4000;
 double deltatime;
-
-#ifdef BACKUP_MSG
-char backup_msg_buf[512];
-#endif
 
 void add_esc(UWORD address, UBYTE esc_code);
 int Atari800_Exit(int run_monitor);
@@ -144,26 +134,17 @@ int load_image(char *filename, int addr, int nbytes)
 	if (fd != -1) {
 		status = read(fd, &memory[addr], nbytes);
 		if (status != nbytes) {
-#ifdef BACKUP_MSG
-			sprintf(backup_msg_buf, "Error reading %s\n", filename);
-#else
-#ifdef WIN32
-			sprintf ( scratch, "Error reading %s\x00d\x00a", filename);
-			ADDLOG( scratch );
-			return FALSE;
-#endif
-			printf("Error reading %s\n", filename);
-#endif
+			Aprint("Error reading %s", filename);
 			Atari800_Exit(FALSE);
-			exit(1);
+			return FALSE;
 		}
 		close(fd);
 
 		status = TRUE;
 	}
-	else if (verbose) {
-		perror(filename);
-	}
+	else
+		Aprint("Error loading rom: %s", filename);
+
 	return status;
 }
 
@@ -323,13 +304,7 @@ int Insert_32K_5200ROM(char *filename)
 		}
 		else if (status != 0x4000) {
 			close(fd);
-			printf("%X", status);
-#ifdef WIN32
-			sprintf ( scratch, "Error reading 32K 5200 rom, %X\x00d\x00a", status);
-			ADDLOG( scratch );
-			return FALSE;
-#endif
-			exit(0);
+			Aprint("Error reading 32K 5200 rom, %X", status);
 			return FALSE;
 		}
 		else {
@@ -454,27 +429,29 @@ int Insert_Cartridge(char *filename)
 				status = TRUE;
 				break;
 			default:
-#ifdef WIN32
-                sprintf ( scratch, "%s is in unsupported cartridge format %d\x00d\x00a", filename, type);
-				ADDLOG( scratch );
-#else
-				printf("%s is in unsupported cartridge format %d\n",
-					   filename, type);
-#endif
+				Aprint("%s is in unsupported cartridge format %d", filename, type);
 				break;
 			}
 		}
 		else {
-#ifdef WIN32
-			sprintf ( scratch, "%s is not a cartridge\n", filename);
-			ADDLOG( scratch );
-#else
-			printf ("%s is not a cartridge\n", filename);
-#endif
+			Aprint("%s is not a cartridge", filename);
 		}
 		close(fd);
 	}
 	return status;
+}
+
+void RestoreSIO( void )
+{
+	memory[0xe459] = 0x4c;
+	memory[0xe45a] = 0x59;
+	memory[0xe45b] = 0xe9;
+}
+
+void SetSIOEsc( void )
+{
+	if (enable_sio_patch)
+		add_esc(0xe459, ESC_SIOV);
 }
 
 void PatchOS(void)
@@ -487,17 +464,23 @@ void PatchOS(void)
 	/* const unsigned short   o_special = 10; */
 	const unsigned short o_init = 12;
 
-	unsigned short addr;
+	unsigned short addr = 0;
 	unsigned short entry;
 	unsigned short devtab;
 	int i;
+
+/*
+	Check if ROM patches are enabled - if not return immediately
+*/
+	if (enable_rom_patches == 0)
+		return;
 /*
    =====================
    Disable Checksum Test
    =====================
  */
-	if (enable_sio_patch)
-		add_esc(0xe459, ESC_SIOV);
+
+	SetSIOEsc( );
 
 	switch (machine) {
 	case Atari:
@@ -511,14 +494,8 @@ void PatchOS(void)
 		memory[0xc31a] = 0xff;
 		break;
 	default:
-#ifdef WIN32
-	  ADDLOGTEXT("Fatal Error in atari.c: PatchOS(): Unknown machine");
-	  Atari800_Exit (FALSE);
-#else
-      printf ("Fatal Error in atari.c: PatchOS(): Unknown machine\n");
-      Atari800_Exit (FALSE);
-      exit (1);
-#endif
+		Aprint("Fatal Error in atari.c: PatchOS(): Unknown machine");
+		Atari800_Exit(FALSE);
 		break;
 	}
 /*
@@ -536,14 +513,8 @@ void PatchOS(void)
 		addr = 0xc42e;
 		break;
 	default:
-#ifdef WIN32
-      ADDLOGTEXT ("Fatal Error in atari.c: PatchOS(): Unknown machine");
-      Atari800_Exit (FALSE);
-#else
-      printf ("Fatal Error in atari.c: PatchOS(): Unknown machine\n");
-      Atari800_Exit (FALSE);
-      exit (1);
-#endif
+		Aprint("Fatal Error in atari.c: PatchOS(): Unknown machine");
+		Atari800_Exit(FALSE);
 		break;
 	}
 
@@ -712,22 +683,9 @@ int Initialise_AtariXL(void)
 				Coldstart();
 			}
 			else {
-#ifdef BACKUP_MSG
-				sprintf(backup_msg_buf, "Unable to load %s\n", atari_basic_filename);
-#else
-#ifdef WIN32
-		  sprintf( scratch, "Unable to load %s\x00d\x00a", atari_basic_filename);
-		  ADDLOG( scratch );
-		  Atari800_Exit (FALSE);
-		  return FALSE;
-#else
-				printf("Unable to load %s\n", atari_basic_filename);
+				Aprint("Unable to load %s", atari_basic_filename);
 				Atari800_Exit(FALSE);
-				exit(1);
-#endif
-#endif
-				Atari800_Exit(FALSE);
-				exit(1);
+		  		return FALSE;
 			}
 		}
 		else {
@@ -832,7 +790,7 @@ int Initialise_EmuOS(void)
 	if (!status)
 		memcpy(&memory[0xc000], emuos_h, 0x4000);
 	else
-		printf("EmuOS: Using external emulated OS\n");
+		Aprint("EmuOS: Using external emulated OS");
 
 	machine = Atari;
 	PatchOS();
@@ -845,21 +803,21 @@ int Initialise_EmuOS(void)
 	SetHARDWARE(0xd000, 0xd7ff);
 	Coldstart();
 
-	status = TRUE;
-
-	return status;
+	return TRUE;
 }
 
 int main(int argc, char **argv)
 {
+	int status;
+	int error = FALSE;
+	int diskno = 1;
+	int i, j;
+
 #ifdef WIN32
 	/* The Win32 version doesn't use configuration files, it reads values in from the Registry */
 	struct tm *newtime;
 	long ltime;
-	int status;
-	int error = FALSE;
-	int diskno = 1;
-	int i, j, update_registry = FALSE;
+	int update_registry = FALSE;
 
 	if( argc > 1 )
 		update_registry = TRUE;
@@ -867,22 +825,11 @@ int main(int argc, char **argv)
 	newtime = gmtime( &ltime );
 	unAtariState &= ~ATARI_UNINITIALIZED;
 	unAtariState |= ATARI_INITIALIZING | ATARI_PAUSED;
-	ZeroMemory( memory_log, 8192 );
 	rom_inserted = FALSE;
-	sprintf( scratch, "Start log %s", asctime( newtime ));
-	strcpy( &scratch[ strlen(scratch)-1 ], "\x00d\x00a" );
-	ADDLOG( scratch );
+	Aprint("Start log %s", asctime( newtime ));
 #else
-	int status;
-	int error;
-	int diskno = 1;
-	int i;
-	int j;
-
 	char *rtconfig_filename = NULL;
 	int config = FALSE;
-
-	error = FALSE;
 
 	for (i = j = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-configure") == 0)
@@ -891,7 +838,7 @@ int main(int argc, char **argv)
 			rtconfig_filename = argv[++i];
 		else if (strcmp(argv[i], "-v") == 0) {
 			printf("%s\n", ATARI_TITLE);
-			exit(1);
+			return 0;
 		}
 		else if (strcmp(argv[i], "-verbose") == 0)
 			verbose = TRUE;
@@ -937,13 +884,13 @@ int main(int argc, char **argv)
 
 	switch (default_tv_mode) {
 	case 1:
-		tv_mode = PAL;
+		tv_mode = TV_PAL;
 		break;
 	case 2:
-		tv_mode = NTSC;
+		tv_mode = TV_NTSC;
 		break;
 	default:
-		tv_mode = PAL;
+		tv_mode = TV_PAL;
 		break;
 	}
 
@@ -971,10 +918,12 @@ int main(int argc, char **argv)
 			hold_option = FALSE;
 		else if (strcmp(argv[i], "-nopatch") == 0)
 			enable_sio_patch = FALSE;
+		else if (strcmp(argv[i], "-nopatchall") == 0)
+			enable_rom_patches = enable_sio_patch = FALSE;
 		else if (strcmp(argv[i], "-pal") == 0)
-			tv_mode = PAL;
+			tv_mode = TV_PAL;
 		else if (strcmp(argv[i], "-ntsc") == 0)
-			tv_mode = NTSC;
+			tv_mode = TV_NTSC;
 		else if (strcmp(argv[i], "-osa_rom") == 0)
 			strcpy(atari_osa_filename, argv[++i]);
 		else if (strcmp(argv[i], "-osb_rom") == 0)
@@ -1062,7 +1011,7 @@ int main(int argc, char **argv)
 
 	argc = j;
 
-	if (tv_mode == PAL)
+	if (tv_mode == TV_PAL)
 	{
 		deltatime = (1.0 / 50.0);
 		default_tv_mode = 1;
@@ -1112,41 +1061,26 @@ int main(int argc, char **argv)
 			char	tempname[ MAX_PATH ];
 			strcpy( tempname, sio_filename[i] );
 			if( !SIO_Mount( i + 1, tempname ) )
-			{
-				sprintf( scratch, "Disk file %s not found\x00d\x00a", sio_filename[i] );
-				ADDLOG( scratch );
-			}
+				Aprint("Disk file %s not found", sio_filename[i]);
 		}
 	}
-#endif
+#endif /* WIN32 */
 	/*
 	 * Any parameters left on the command line must be disk images.
 	 */
 
 	for (i = 1; i < argc; i++) {
 		if (!SIO_Mount(diskno++, argv[i])) {
-#ifdef WIN32
-			sprintf( scratch, "Error reading disk: %s", argv[i] );
-			ADDLOG( scratch );
-#else
-			printf("Disk File %s not found\n", argv[i]);
-#endif
+			Aprint("Disk File %s not found", argv[i]);
 			error = TRUE;
 		}
 	}
 
 	if (error) {
-#ifndef WIN32
-#ifdef BACKUP_MSG
-		sprintf(backup_msg_buf, "Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]\n", argv[0]);
-		sprintf(backup_msg_buf + strlen(backup_msg_buf), "\t-help         Extended Help\n");
-#else
-		printf("Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]\n", argv[0]);
-		printf("\t-help         Extended Help\n");
-#endif
+		Aprint("Usage: %s [-rom filename] [-oss filename] [diskfile1...diskfile8]", argv[0]);
+		Aprint("\t-help         Extended Help");
 		Atari800_Exit(FALSE);
-		exit(1);
-#endif /* WIN32 */
+		return FALSE;
 	}
 	/*
 	 * Install CTRL-C Handler
@@ -1187,32 +1121,29 @@ int main(int argc, char **argv)
 		status = Initialise_Atari5200();
 		break;
 	default:
-#ifdef WIN32
-		ADDLOGTEXT( "Fatal error in atari.c (bad machine setting?)" );
-		Atari800_Exit( FALSE );
-		return( FALSE );
-#endif
-		printf("Fatal Error in atari.c\n");
+		Aprint("Fatal Error in atari.c");
 		Atari800_Exit(FALSE);
-		exit(1);
+		return FALSE;
 	}
 
 #ifdef WIN32
 	if (!status || (unAtariState & ATARI_UNINITIALIZED) )
     {
-		ADDLOG("Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.");
-		unAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED;
-		InvalidateRect( hWnd, NULL, FALSE );
+		Aprint("Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.");
+		unAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED | ATARI_LOAD_WARNING;
+		if( hWnd )
+			InvalidateRect( hWnd, NULL, FALSE );
 		if( update_registry )
 			WriteAtari800Registry( NULL );
-		MessageBox( NULL, "Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.", "Atari800Win", MB_OK );
 		return FALSE;
+	}
 #else
 	if (!status) {
-#endif
-		printf("Operating System not available - using Emulated OS\n");
+		Aprint("Operating System not available - using Emulated OS");
 		status = Initialise_EmuOS();
 	}
+#endif /* WIN32 */
+
 /*
  * ================================
  * Install requested ROM cartridges
@@ -1232,14 +1163,14 @@ int main(int argc, char **argv)
 				cart_type = NORMAL8_CART;
 		}
 	}
-#endif
+#endif /* WIN32 */
 	if (rom_filename) {
 #ifdef WIN32
 	  if( !cart_type || cart_type == NO_CART )
 	  {
 		  cart_type = FindCartType( rom_filename );
 	  }
-#endif
+#endif /* WIN32 */
 		switch (cart_type) {
 		case CARTRIDGE:
 			status = Insert_Cartridge(rom_filename);
@@ -1277,23 +1208,17 @@ int main(int argc, char **argv)
  * ======================================
  */
 
-#ifdef DELAYED_VGAINIT
-	SetupVgaEnvironment();
-#endif
-
 #ifdef WIN32
 	if( update_registry )
 		WriteAtari800Registry( NULL );
 	Start_Atari_Timer();
 	unAtariState = ATARI_HW_READY | ATARI_PAUSED;
-	return 0;
 #else
 	Atari800_Hardware();
-	printf("Fatal error: Atari800_Hardware() returned\n");
+	Aprint("Fatal error: Atari800_Hardware() returned");
 	Atari800_Exit(FALSE);
-	exit(1);
-	return 1;
-#endif
+#endif /* WIN32 */
+	return 0;
 }
 
 #ifdef WIN32
@@ -1319,7 +1244,7 @@ int FindCartType( char *rom_filename )
 
 	return cart_type;
 }
-#endif
+#endif /* WIN32 */
 
 void add_esc(UWORD address, UBYTE esc_code)
 {
@@ -1373,11 +1298,7 @@ void E_Device(UBYTE esc_code)
 
 	switch (esc_code) {
 	case ESC_E_OPEN:
-#ifdef WIN32
-		ADDLOGTEXT( "Editor device open" );
-#else
-		printf ("Editor Open\n");
-#endif
+		Aprint( "Editor device open" );
 		regY = 1;
 		ClrN;
 		break;
@@ -1422,10 +1343,14 @@ void AtariEscape(UBYTE esc_code)
 #ifdef MONITOR_BREAK
 	case ESC_BREAK:
 		Atari800_Exit(TRUE);
-		break;
+		return;
 #endif
 	case ESC_SIOV:
-		SIO();
+		/* jump to SIO emulation only if it's really our ESC code */
+		if (enable_sio_patch && (regPC == (0xe459+2))) {
+			SIO();
+			return;
+		}
 		break;
 	case ESC_K_OPEN:
 	case ESC_K_CLOSE:
@@ -1434,74 +1359,80 @@ void AtariEscape(UBYTE esc_code)
 	case ESC_K_STATUS:
 	case ESC_K_SPECIAL:
 		K_Device(esc_code);
+		return;
 		break;
 	case ESC_E_OPEN:
 	case ESC_E_READ:
 	case ESC_E_WRITE:
 		E_Device(esc_code);
+		return;
 		break;
 	case ESC_PHOPEN:
 		Device_PHOPEN();
+		return;
 		break;
 	case ESC_PHCLOS:
 		Device_PHCLOS();
+		return;
 		break;
 	case ESC_PHREAD:
 		Device_PHREAD();
+		return;
 		break;
 	case ESC_PHWRIT:
 		Device_PHWRIT();
+		return;
 		break;
 	case ESC_PHSTAT:
 		Device_PHSTAT();
+		return;
 		break;
 	case ESC_PHSPEC:
 		Device_PHSPEC();
+		return;
 		break;
 	case ESC_PHINIT:
 		Device_PHINIT();
+		return;
 		break;
 	case ESC_HHOPEN:
 		Device_HHOPEN();
+		return;
 		break;
 	case ESC_HHCLOS:
 		Device_HHCLOS();
+		return;
 		break;
 	case ESC_HHREAD:
 		Device_HHREAD();
+		return;
 		break;
 	case ESC_HHWRIT:
 		Device_HHWRIT();
+		return;
 		break;
 	case ESC_HHSTAT:
 		Device_HHSTAT();
+		return;
 		break;
 	case ESC_HHSPEC:
 		Device_HHSPEC();
+		return;
 		break;
 	case ESC_HHINIT:
 		Device_HHINIT();
-		break;
-	default:
-#ifdef WIN32
-		sprintf ( scratch, "Invalid ESC Code %x at Address %x\n", esc_code, regPC - 2);
-		ADDLOG( scratch );
-		Atari800_Exit (TRUE);
 		return;
-#else
-		Atari800_Exit (FALSE);
-		printf ("Invalid ESC Code %x at Address %x\n",
-			esc_code, regPC - 2);
-		monitor();
-		exit (1);
-#endif
+		break;
 	}
+	/* for all codes that fall through the cases */
+	Aprint("Invalid ESC Code %x at Address %x", esc_code, regPC - 2);
+	Atari800_Exit(TRUE);
 }
 
 int Atari800_Exit(int run_monitor)
 {
 	if (verbose) {
-		printf("Current Frames per Secound = %f\n", fps);
+		Aprint("Current Frames per Secound = %f", fps);
 	}
 	return Atari_Exit(run_monitor);
 }
@@ -1557,6 +1488,9 @@ UBYTE Atari800_GetByte(UWORD addr)
 		break;
 	case 0xd400:				/* ANTIC */
 		byte = ANTIC_GetByte((UWORD)(addr - 0xd400));
+		break;
+	case 0xd500:				/* RTIME-8 */
+		byte = SuperCart_GetByte((UWORD)(addr - 0xd500));
 		break;
 	case 0xc000:				/* GTIA - 5200 */
 		byte = GTIA_GetByte((UWORD)(addr - 0xc000));
@@ -1626,7 +1560,7 @@ int Atari800_PutByte(UWORD addr, UBYTE byte)
 void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 {
 	UWORD *ptr, *ptr2;
-	int i = (clock() - lastspeed) * (tv_mode == PAL ? 50 : 60) / CLK_TCK / refresh_rate;
+	int i = (clock() - lastspeed) * (tv_mode == TV_PAL ? 50 : 60) / CLK_TCK / refresh_rate;
 	lastspeed = clock();
 
 	if (i > ATARI_WIDTH / 4)
@@ -1644,8 +1578,6 @@ void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 	}
 }
 #endif
-
-void ui(UBYTE * screen);	/* forward reference */
 
 void Atari800_Hardware(void)
 {
@@ -1700,7 +1632,7 @@ void Atari800_Hardware(void)
 				EnablePILL();
 			break;
 		case AKEY_SCREENSHOT:
-			Save_PCX(atari_screen);
+			Save_PCX((UBYTE *)atari_screen);
 			break;
 		case AKEY_NONE:
 			last_key = -1;
@@ -1724,7 +1656,7 @@ void Atari800_Hardware(void)
 
 #ifndef BASIC
 		if (++test_val == refresh_rate) {
-			ANTIC_RunDisplayList();
+			ANTIC_RunDisplayList();			/* generate screen */
 #ifdef SNAILMETER
 			if (emu_too_fast == 0)
 				ShowRealSpeed(atari_screen, refresh_rate);
@@ -1749,7 +1681,7 @@ void Atari800_Hardware(void)
 
 #ifdef USE_CLOCK
 		/* on Atari Falcon CLK_TCK = 200 (i.e. 5 ms granularity) */
-		/* on DOS (DJGPP) CLK_TCK = 91 */
+		/* on DOS (DJGPP) CLK_TCK = 91 (not too precise, but should work anyway)*/
 		if (nextclock) {
 			ULONG curclock;
 
@@ -1759,7 +1691,7 @@ void Atari800_Hardware(void)
 				emu_too_fast++;
 			} while (curclock < nextclock);
 
-			nextclock = curclock + (CLK_TCK / (tv_mode == PAL ? 50 : 60));
+			nextclock = curclock + (CLK_TCK / (tv_mode == TV_PAL ? 50 : 60));
 		}
 #else
 #ifndef DJGPP
@@ -1813,75 +1745,59 @@ void Atari800_Hardware(void)
 #ifdef WIN32
 void WinAtari800_Hardware (void)
 {
-	int	pil_on = FALSE;
 	int	keycode;
-  
+	
+	keycode = Atari_Keyboard ();
+	
+	switch (keycode) {
+	case AKEY_COLDSTART:
+		Coldstart();
+		break;
+	case AKEY_WARMSTART:
+		Warmstart();
+		break;
+	case AKEY_EXIT:
+	/*		  Atari800_Exit(FALSE);
+		exit(1);*/
+		break;
+	case AKEY_BREAK:
+		IRQST &= ~0x80;
+		if (IRQEN & 0x80) {
+			GenerateIRQ();
+		}
+		break;
+	case AKEY_UI:
+		/*		  ui((UBYTE *)atari_screen);*/
+		break;
+	case AKEY_PIL:
+		if (pil_on)
+			DisablePILL();
+		else
+			EnablePILL();
+		break;
+	case AKEY_NONE:
+		break;
+	default:
+		KBCODE = keycode;
+		IRQST &= ~0x40;
+		if (IRQEN & 0x40) {
+			GenerateIRQ();
+		}
+		break;
+	}
+	
 	/*
-      colour_lookup[8] = colour_translation_table[COLBK];
-	  */
-	  
-      keycode = Atari_Keyboard ();
-	  
-      switch (keycode)
-	  {
-	  case AKEY_COLDSTART :
-		  Coldstart ();
-		  break;
-	  case AKEY_WARMSTART :
-		  Warmstart ();
-		  break;
-/*
-	  case AKEY_EXIT :
-		  Atari800_Exit (FALSE);
-		  exit (1);
-*/
-	  case AKEY_BREAK :
-		  IRQST &= 0x7f;
-		  IRQ = 1;
-		  break;
-/*
-	  case AKEY_UI :
-          ui (atari_screen);
-          break;
-*/
-	  case AKEY_PIL :
-		  if (pil_on)
-		  {
-			  SetRAM (0x8000, 0xbfff);
-			  pil_on = FALSE;
-		  }
-		  else
-		  {
-			  SetROM (0x8000, 0xbfff);
-			  pil_on = TRUE;
-		  }
-		  break;
-	  case AKEY_NONE :
-		  break;
-	  default :
-		  KBCODE = keycode;
-		  IRQST &= 0xbf;
-		  IRQ = 1;
-		  break;
-	  }
-
-      /*
-	  * Generate Screen
-	  */
-	  GetJoystickInput( );
-	  ANTIC_RunDisplayList();
-      if (++test_val == refresh_rate)
-	  {
-		  Atari_DisplayScreen ((UBYTE*)atari_screen);
-		  test_val = 0;
-	  }
-      else
-	  {
-		  for (ypos=0;ypos<ATARI_HEIGHT;ypos++)
-		  {
-			  GO (114);
-		  }
-	  }
-	  Atari_PlaySound();
+	* Generate Screen
+	*/
+	GetJoystickInput( );
+	ANTIC_RunDisplayList();			/* generate screen */
+	if (++test_val==refresh_rate)
+	{
+		Atari_DisplayScreen ((UBYTE*)atari_screen);
+		test_val = 0;
+	}
+	Atari_PlaySound();
+	if( unAtariState & ATARI_PAUSED )
+		Screen_Paused( (UBYTE *)atari_screen );
 }
 #endif /* Win32 */

@@ -380,11 +380,12 @@ void Update_Counter(int chan_mask)
 
 	if (chan_mask & (1 << CHAN2)) {
 		/* process channel 2 frequency */
-		if (AUDCTL & CH1_CH2)
+		if (AUDCTL & CH1_CH2) {
 			if (AUDCTL & CH1_179)
 				new_val = AUDF[CHAN2] * 256 + AUDF[CHAN1] + 7;
 			else
 				new_val = (AUDF[CHAN2] * 256 + AUDF[CHAN1] + 1) * TimeBase;
+		}
 		else
 			new_val = (AUDF[CHAN2] + 1) * TimeBase;
 
@@ -409,11 +410,12 @@ void Update_Counter(int chan_mask)
 
 	if (chan_mask & (1 << CHAN4)) {
 		/* process channel 4 frequency */
-		if (AUDCTL & CH3_CH4)
+		if (AUDCTL & CH3_CH4) {
 			if (AUDCTL & CH3_179)
 				new_val = AUDF[CHAN4] * 256 + AUDF[CHAN3] + 7;
 			else
 				new_val = (AUDF[CHAN4] * 256 + AUDF[CHAN3] + 1) * TimeBase;
+		}
 		else
 			new_val = (AUDF[CHAN4] + 1) * TimeBase;
 

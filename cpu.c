@@ -51,6 +51,12 @@ static char *rcsid = "$Id: cpu.c,v 1.22 1998/02/21 15:02:12 david Exp $";
 
 #define UPDATE_GLOBAL_REGS regPC=PC;regS=S;regA=A;regX=X;regY=Y
 #define UPDATE_LOCAL_REGS PC=regPC;S=regS;A=regA;X=regX;Y=regY
+#define PH(x) memory[0x0100 + S--] = (x) 
+#define PHW(x) PH((x)>>8); PH((x) & 0xff)
+#define PL (memory[0x100 + ++S])
+#define dGetWord(x) (memory[x] | (memory[x+1] << 8))
+#define dGetByte(x) (memory[x])
+#define dPutByte(x,y) (memory[x] = y)
 
 UWORD regPC;
 UBYTE regA;
@@ -220,9 +226,9 @@ void SetHARDWARE(int addr1, int addr2)
             data |= (regP & 0x3c); \
 	    data |= (Z == 0) ? 0x02 : 0; \
 	    data |= C; \
-	    memory[0x0100 + S--] = data;
+	    PH(data);
 
-#define PLP data = memory[0x0100 + ++S]; \
+#define PLP data = PL; \
 	    N = (data & 0x80); \
 	    V = (data & 0x40) ? 1 : 0; \
 	    Z = (data & 0x02) ? 0 : 1; \
@@ -234,11 +240,10 @@ void NMI(void)
 	UBYTE S = regS;
 	UBYTE data;
 
-	memory[0x0100 + S--] = regPC >> 8;
-	memory[0x0100 + S--] = (UBYTE) regPC;
+	PHW(regPC);
 	PHP;
 	SetI;
-	regPC = (memory[0xfffb] << 8) | memory[0xfffa];
+	regPC = dGetWord(0xfffa);
 	regS = S;
 #ifdef MONITOR_BREAK
 	ret_nesting++;
@@ -251,36 +256,34 @@ void NMI(void)
 {									\
 	if (IRQ) {							\
 		if (!(regP & I_FLAG)) {					\
-			memory[0x0100 + S--] = PC >> 8;			\
-			memory[0x0100 + S--] = (UBYTE)PC;		\
+			PHW(PC);					\
 			PHP;						\
 			SetI;						\
-			PC = (memory[0xffff] << 8) | memory[0xfffe];	\
+			PC = dGetWord(0xfffe);				\
 			IRQ = 0;					\
 			ret_nesting+=1;					\
 		}							\
 	}								\
 }
 #else
-#define CPUCHECKIRQ											\
-{															\
-	if (IRQ) {												\
-		if (!(regP & I_FLAG)) {								\
-			memory[0x0100 + S--] = PC >> 8;					\
-			memory[0x0100 + S--] = (UBYTE)PC;				\
-			PHP;											\
-			SetI;											\
-			PC = (memory[0xffff] << 8) | memory[0xfffe];	\
-			IRQ = 0;										\
-		}													\
-	}														\
+#define CPUCHECKIRQ							\
+{									\
+	if (IRQ) {							\
+		if (!(regP & I_FLAG)) {					\
+			PHW(PC);					\
+			PHP;						\
+			SetI;						\
+			PC = dGetWord(0xfffe);				\
+			IRQ = 0;					\
+		}							\
+	}								\
 }
 #endif
 /* sets the IRQ flag and checks it */
 void GenerateIRQ(void)
 {
 	IRQ = 1;
-	GO(0);						/* does not execute any instruction */
+	GO(0);				/* does not execute any instruction */
 }
 
 /*
@@ -442,14 +445,14 @@ int GO(int ncycles)
    =====================================
  */
 
-#define	ABSOLUTE	addr=(memory[PC+1]<<8)+memory[PC];PC+=2;
-#define	ZPAGE		addr=memory[PC++];
-#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+X;PC+=2;
-#define	ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+Y;PC+=2;
-#define	INDIRECT_X	addr=(UBYTE)(memory[PC++]+X);addr=(memory[(UBYTE)(addr+1)]<<8)+memory[addr];
-#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[(UBYTE)(addr+1)]<<8)+memory[addr]+Y;
-#define	ZPAGE_X		addr=(UBYTE)(memory[PC++]+X);
-#define	ZPAGE_Y		addr=(UBYTE)(memory[PC++]+Y);
+#define	ABSOLUTE	addr=dGetWord(PC);PC+=2;
+#define	ZPAGE		addr=dGetByte(PC++);
+#define	ABSOLUTE_X	addr=dGetWord(PC)+X;PC+=2;
+#define	ABSOLUTE_Y	addr=dGetWord(PC)+Y;PC+=2;
+#define	INDIRECT_X	addr=(UBYTE)(dGetByte(PC++)+X);addr=dGetWord(addr);
+#define	INDIRECT_Y	addr=dGetByte(PC++);addr=dGetWord(addr)+Y;
+#define	ZPAGE_X		addr=(UBYTE)(dGetByte(PC++)+X);
+#define	ZPAGE_Y		addr=(UBYTE)(dGetByte(PC++)+Y);
 
 #ifdef __i386__
 #undef ABSOLUTE
@@ -489,7 +492,7 @@ int GO(int ncycles)
 #endif
 
 #ifdef PROFILE
-		count[memory[PC]]++;
+		count[dGetByte(PC)]++;
 #endif
 
 #ifdef MONITOR_BREAK
@@ -505,12 +508,12 @@ int GO(int ncycles)
 			UPDATE_LOCAL_REGS;
 		}
 #endif
-		ncycles -= cycles[memory[PC]];
+		ncycles -= cycles[dGetByte(PC)];
 
 #ifdef GNU_C
-		goto *opcode[memory[PC++]];
+		goto *opcode[dGetByte(PC++)];
 #else
-		switch (memory[PC++]) {
+		switch (dGetByte(PC++)) {
 		case 0x00:
 			goto opcode_00;
 		case 0x01:
@@ -1044,12 +1047,11 @@ int GO(int ncycles)
 	  opcode_00:				/* BRK */
 		if (!(regP & I_FLAG)) {
 			UWORD retadr = PC + 1;
-			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = (UBYTE) retadr;
+			PHW(retadr);
 			SetB;
 			PHP;
 			SetI;
-			PC = (memory[0xffff] << 8) | memory[0xfffe];
+			PC = dGetWord(0xfffe);
 #ifdef MONITOR_BREAK
 			ret_nesting++;
 #endif
@@ -1067,15 +1069,15 @@ int GO(int ncycles)
 
 	  opcode_05:				/* ORA ab */
 		ZPAGE;
-		ORA(memory[addr]);
+		ORA(dGetByte(addr));
 		goto next;
 
 	  opcode_06:				/* ASL ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = (data & 0x80) ? 1 : 0;
 		Z = N = data << 1;
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_08:				/* PHP */
@@ -1083,7 +1085,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_09:				/* ORA #ab */
-		ORA(memory[PC++]);
+		ORA(dGetByte(PC++));
 		goto next;
 
 	  opcode_0a:				/* ASL */
@@ -1110,7 +1112,7 @@ int GO(int ncycles)
 
 	  opcode_10:				/* BPL */
 		if (!(N & 0x80)) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1131,15 +1133,15 @@ int GO(int ncycles)
 
 	  opcode_15:				/* ORA ab,x */
 		ZPAGE_X;
-		ORA(memory[addr]);
+		ORA(dGetByte(addr));
 		goto next;
 
 	  opcode_16:				/* ASL ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = (data & 0x80) ? 1 : 0;
 		Z = N = data << 1;
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_18:				/* CLC */
@@ -1183,9 +1185,8 @@ int GO(int ncycles)
 			remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
 			ret_nesting++;
 #endif
-			memory[0x0100 + S--] = retadr >> 8;
-			memory[0x0100 + S--] = (UBYTE) retadr;
-			PC = (memory[PC + 1] << 8) | memory[PC];
+			PHW(retadr);
+			PC = dGetWord(PC);
 		}
 		goto next;
 
@@ -1196,19 +1197,19 @@ int GO(int ncycles)
 
 	  opcode_24:				/* BIT ab */
 		ZPAGE;
-		N = memory[addr];
+		N = dGetByte(addr);
 		V = N & 0x40;
 		Z = (A & N);
 		goto next;
 
 	  opcode_25:				/* AND ab */
 		ZPAGE;
-		AND(memory[addr]);
+		AND(dGetByte(addr));
 		goto next;
 
 	  opcode_26:				/* ROL ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = (data & 0x80) ? 1 : 0;
 			Z = N = (data << 1) | 1;
@@ -1217,7 +1218,7 @@ int GO(int ncycles)
 			C = (data & 0x80) ? 1 : 0;
 			Z = N = (data << 1);
 		}
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_28:				/* PLP */
@@ -1226,7 +1227,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_29:				/* AND #ab */
-		AND(memory[PC++]);
+		AND(dGetByte(PC++));
 		goto next;
 
 	  opcode_2a:				/* ROL */
@@ -1268,7 +1269,7 @@ int GO(int ncycles)
 
 	  opcode_30:				/* BMI */
 		if (N & 0x80) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1289,12 +1290,12 @@ int GO(int ncycles)
 
 	  opcode_35:				/* AND ab,x */
 		ZPAGE_X;
-		AND(memory[addr]);
+		AND(dGetByte(addr));
 		goto next;
 
 	  opcode_36:				/* ROL ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = (data & 0x80) ? 1 : 0;
 			Z = N = (data << 1) | 1;
@@ -1303,7 +1304,7 @@ int GO(int ncycles)
 			C = (data & 0x80) ? 1 : 0;
 			Z = N = (data << 1);
 		}
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_38:				/* SEC */
@@ -1347,8 +1348,8 @@ int GO(int ncycles)
 
 	  opcode_40:				/* RTI */
 		PLP;
-		data = memory[0x0100 + ++S];
-		PC = (memory[0x0100 + ++S] << 8) | data;
+		data = PL;
+		PC = (PL << 8) | data;
 		CPUCHECKIRQ;
 #ifdef MONITOR_BREAK
 		if (break_ret && ret_nesting <= 0)
@@ -1370,24 +1371,24 @@ int GO(int ncycles)
 
 	  opcode_45:				/* EOR ab */
 		ZPAGE;
-		EOR(memory[addr]);
+		EOR(dGetByte(addr));
 		goto next;
 
 	  opcode_46:				/* LSR ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = data & 1;
 		Z = data >> 1;
 		N = 0;
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_48:				/* PHA */
-		memory[0x0100 + S--] = A;
+		PH(A);
 		goto next;
 
 	  opcode_49:				/* EOR #ab */
-		EOR(memory[PC++]);
+		EOR(dGetByte(PC++));
 		goto next;
 
 	  opcode_4a:				/* LSR */
@@ -1402,7 +1403,7 @@ int GO(int ncycles)
 		memmove(&remember_JMP[0], &remember_JMP[1], 2 * (REMEMBER_JMP_STEPS - 1));
 		remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
 #endif
-		PC = (memory[PC + 1] << 8) | memory[PC];
+		PC = (dGetByte(PC + 1) << 8) | dGetByte(PC);
 		goto next;
 
 	  opcode_4d:				/* EOR abcd */
@@ -1421,7 +1422,7 @@ int GO(int ncycles)
 
 	  opcode_50:				/* BVC */
 		if (!V) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1442,16 +1443,16 @@ int GO(int ncycles)
 
 	  opcode_55:				/* EOR ab,x */
 		ZPAGE_X;
-		EOR(memory[addr]);
+		EOR(dGetByte(addr));
 		goto next;
 
 	  opcode_56:				/* LSR ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = data & 1;
 		Z = data >> 1;
 		N = 0;
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_58:				/* CLI */
@@ -1490,8 +1491,8 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_60:				/* RTS */
-		data = memory[0x0100 + ++S];
-		PC = ((memory[0x0100 + ++S] << 8) | data) + 1;
+		data = PL;
+		PC = ((PL << 8) | data) + 1;
 #ifdef MONITOR_BREAK
 		if (break_ret && ret_nesting <= 0)
 			break_step = 1;
@@ -1512,12 +1513,12 @@ int GO(int ncycles)
 
 	  opcode_65:				/* ADC ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		goto adc;
 
 	  opcode_66:				/* ROR ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = data & 1;
 			Z = N = (data >> 1) | 0x80;
@@ -1526,15 +1527,15 @@ int GO(int ncycles)
 			C = data & 1;
 			Z = N = (data >> 1);
 		}
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_68:				/* PLA */
-		Z = N = A = memory[0x0100 + ++S];
+		Z = N = A = PL;
 		goto next;
 
 	  opcode_69:				/* ADC #ab */
-		data = memory[PC++];
+		data = dGetByte(PC++);
 		goto adc;
 
 	  opcode_6a:				/* ROR */
@@ -1553,14 +1554,14 @@ int GO(int ncycles)
 		memmove(&remember_JMP[0], &remember_JMP[1], 2 * (REMEMBER_JMP_STEPS - 1));
 		remember_JMP[REMEMBER_JMP_STEPS - 1] = PC - 1;
 #endif
-		addr = (memory[PC + 1] << 8) | memory[PC];
+		addr = (dGetByte(PC + 1) << 8) | dGetByte(PC);
 #ifdef CPU65C02
-		PC = (memory[addr + 1] << 8) | memory[addr];
+		PC = (dGetByte(addr + 1) << 8) | dGetByte(addr);
 #else							/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
 		if ((UBYTE) addr == 0xff)
-			PC = (memory[addr & ~0xff] << 8) | memory[addr];
+			PC = (dGetByte(addr & ~0xff) << 8) | dGetByte(addr);
 		else
-			PC = (memory[addr + 1] << 8) | memory[addr];
+			PC = (dGetByte(addr + 1) << 8) | dGetByte(addr);
 #endif
 		goto next;
 
@@ -1585,7 +1586,7 @@ int GO(int ncycles)
 
 	  opcode_70:				/* BVS */
 		if (V) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1606,12 +1607,12 @@ int GO(int ncycles)
 
 	  opcode_75:				/* ADC ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		goto adc;
 
 	  opcode_76:				/* ROR ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = data & 1;
 			Z = N = (data >> 1) | 0x80;
@@ -1620,7 +1621,7 @@ int GO(int ncycles)
 			C = data & 1;
 			Z = N = (data >> 1);
 		}
-		memory[addr] = Z;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_78:				/* SEI */
@@ -1681,17 +1682,17 @@ int GO(int ncycles)
 
 	  opcode_84:				/* STY ab */
 		ZPAGE;
-		memory[addr] = Y;
+		dPutByte(addr, Y);
 		goto next;
 
 	  opcode_85:				/* STA ab */
 		ZPAGE;
-		memory[addr] = A;
+		dPutByte(addr, A);
 		goto next;
 
 	  opcode_86:				/* STX ab */
 		ZPAGE;
-		memory[addr] = X;
+		dPutByte(addr, X);
 		goto next;
 
 	  opcode_88:				/* DEY */
@@ -1719,7 +1720,7 @@ int GO(int ncycles)
 
 	  opcode_90:				/* BCC */
 		if (!C) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1733,12 +1734,12 @@ int GO(int ncycles)
 
 	  opcode_94:				/* STY ab,x */
 		ZPAGE_X;
-		memory[addr] = Y;
+		dPutByte(addr, Y);
 		goto next;
 
 	  opcode_95:				/* STA ab,x */
 		ZPAGE_X;
-		memory[addr] = A;
+		dPutByte(addr, A);
 		goto next;
 
 	  opcode_96:				/* STX ab,y */
@@ -1765,7 +1766,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_a0:				/* LDY #ab */
-		LDY(memory[PC++]);
+		LDY(dGetByte(PC++));
 		goto next;
 
 	  opcode_a1:				/* LDA (ab,x) */
@@ -1774,7 +1775,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_a2:				/* LDX #ab */
-		LDX(memory[PC++]);
+		LDX(dGetByte(PC++));
 		goto next;
 
 	  opcode_a3:				/* LAX (ind,x) [unofficial] */
@@ -1784,17 +1785,17 @@ int GO(int ncycles)
 
 	  opcode_a4:				/* LDY ab */
 		ZPAGE;
-		LDY(memory[addr]);
+		LDY(dGetByte(addr));
 		goto next;
 
 	  opcode_a5:				/* LDA ab */
 		ZPAGE;
-		LDA(memory[addr]);
+		LDA(dGetByte(addr));
 		goto next;
 
 	  opcode_a6:				/* LDX ab */
 		ZPAGE;
-		LDX(memory[addr]);
+		LDX(dGetByte(addr));
 		goto next;
 
 	  opcode_a7:				/* LAX zpage [unofficial] */
@@ -1807,7 +1808,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_a9:				/* LDA #ab */
-		LDA(memory[PC++]);
+		LDA(dGetByte(PC++));
 		goto next;
 
 	  opcode_aa:				/* TAX */
@@ -1836,7 +1837,7 @@ int GO(int ncycles)
 
 	  opcode_b0:				/* BCS */
 		if (C) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1856,12 +1857,12 @@ int GO(int ncycles)
 
 	  opcode_b4:				/* LDY ab,x */
 		ZPAGE_X;
-		LDY(memory[addr]);
+		LDY(dGetByte(addr));
 		goto next;
 
 	  opcode_b5:				/* LDA ab,x */
 		ZPAGE_X;
-		LDA(memory[addr]);
+		LDA(dGetByte(addr));
 		goto next;
 
 	  opcode_b6:				/* LDX ab,y */
@@ -1912,7 +1913,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_c0:				/* CPY #ab */
-		CPY(memory[PC++]);
+		CPY(dGetByte(PC++));
 		goto next;
 
 	  opcode_c1:				/* CMP (ab,x) */
@@ -1928,17 +1929,18 @@ int GO(int ncycles)
 
 	  opcode_c4:				/* CPY ab */
 		ZPAGE;
-		CPY(memory[addr]);
+		CPY(dGetByte(addr));
 		goto next;
 
 	  opcode_c5:				/* CMP ab */
 		ZPAGE;
-		CMP(memory[addr]);
+		CMP(dGetByte(addr));
 		goto next;
 
 	  opcode_c6:				/* DEC ab */
 		ZPAGE;
-		Z = N = --memory[addr];
+		Z = N = dGetByte(addr) - 1;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_c8:				/* INY */
@@ -1946,7 +1948,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_c9:				/* CMP #ab */
-		CMP(memory[PC++]);
+		CMP(dGetByte(PC++));
 		goto next;
 
 	  opcode_ca:				/* DEX */
@@ -1971,7 +1973,7 @@ int GO(int ncycles)
 
 	  opcode_d0:				/* BNE */
 		if (Z) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -1992,14 +1994,15 @@ int GO(int ncycles)
 
 	  opcode_d5:				/* CMP ab,x */
 		ZPAGE_X;
-		CMP(memory[addr]);
+		CMP(dGetByte(addr));
 		Z = N = A - data;
 		C = (A >= data);
 		goto next;
 
 	  opcode_d6:				/* DEC ab,x */
 		ZPAGE_X;
-		Z = N = --memory[addr];
+		Z = N = dGetByte(addr) - 1;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_d8:				/* CLD */
@@ -2032,7 +2035,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_e0:				/* CPX #ab */
-		CPX(memory[PC++]);
+		CPX(dGetByte(PC++));
 		goto next;
 
 	  opcode_e1:				/* SBC (ab,x) */
@@ -2048,17 +2051,18 @@ int GO(int ncycles)
 
 	  opcode_e4:				/* CPX ab */
 		ZPAGE;
-		CPX(memory[addr]);
+		CPX(dGetByte(addr));
 		goto next;
 
 	  opcode_e5:				/* SBC ab */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		goto sbc;
 
 	  opcode_e6:				/* INC ab */
 		ZPAGE;
-		Z = N = ++memory[addr];
+		Z = N = dGetByte(addr) + 1;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_e8:				/* INX */
@@ -2066,7 +2070,7 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_e9:				/* SBC #ab */
-		data = memory[PC++];
+		data = dGetByte(PC++);
 		goto sbc;
 
 	  opcode_ea:				/* NOP */
@@ -2090,7 +2094,7 @@ int GO(int ncycles)
 
 	  opcode_f0:				/* BEQ */
 		if (!Z) {
-			SBYTE sdata = memory[PC];
+			SBYTE sdata = dGetByte(PC);
 			NCYCLES_JMP;
 			PC += (SWORD) sdata;
 		}
@@ -2111,12 +2115,13 @@ int GO(int ncycles)
 
 	  opcode_f5:				/* SBC ab,x */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		goto sbc;
 
 	  opcode_f6:				/* INC ab,x */
 		ZPAGE_X;
-		Z = N = ++memory[addr];
+		Z = N = dGetByte(addr) + 1;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_f8:				/* SED */
@@ -2151,14 +2156,14 @@ int GO(int ncycles)
 		goto next;
 
 	  opcode_d2:				/* ESCRTS #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
-		data = memory[PC++];
+		data = dGetByte(PC++);
 		UPDATE_GLOBAL_REGS;
 		CPU_GetStatus();
 		AtariEscape(data);
 		CPU_PutStatus();
 		UPDATE_LOCAL_REGS;
-		data = memory[0x0100 + ++S];
-		PC = ((memory[0x0100 + ++S] << 8) | data) + 1;
+		data = PL;
+		PC = ((PL << 8) | data) + 1;
 #ifdef MONITOR_BREAK
 		if (break_ret && ret_nesting <= 0)
 			break_step = 1;
@@ -2168,7 +2173,7 @@ int GO(int ncycles)
 
 	  opcode_f2:				/* ESC #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
 		/* opcode_ff: ESC #ab - opcode FF is now used for INS [unofficial] instruction !RS! */
-		data = memory[PC++];
+		data = dGetByte(PC++);
 		UPDATE_GLOBAL_REGS;
 		CPU_GetStatus();
 		AtariEscape(data);
@@ -2223,7 +2228,8 @@ int GO(int ncycles)
 
 	  opcode_87:				/* AXS zpage [unofficial - Store result A AND X] */
 		ZPAGE;
-		Z = N = memory[addr] = A & X;
+		Z = N = A & X;
+		dPutByte(addr, Z);
 		goto next;
 
 	  opcode_8f:				/* AXS abcd [unofficial - Store result A AND X] */
@@ -2240,7 +2246,8 @@ int GO(int ncycles)
 
 	  opcode_97:				/* AXS zpage,y [unofficial - Store result A AND X] */
 		ZPAGE_Y;
-		Z = N = memory[addr] = A & X;
+		Z = N = A & X;
+		dPutByte(addr, Z);
 		goto next;
 
 
@@ -2256,10 +2263,10 @@ int GO(int ncycles)
 
 	  opcode_07:				/* ASO zpage [unofficial - ASL then ORA with Acc] */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = (data & 0x80) ? 1 : 0;
 		data = (data << 1);
-		memory[addr] = data; 
+		dPutByte(addr, data); 
 		Z = N = A |= data;
 		goto next;
 
@@ -2283,10 +2290,10 @@ int GO(int ncycles)
 
 	  opcode_17:				/* ASO zpage,x [unofficial - ASL then ORA with Acc] */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = (data & 0x80) ? 1 : 0;
 		data = (data << 1);
-		memory[addr] = data; 
+		dPutByte(addr, data); 
 		Z = N = A |= data;
 		goto next;
 
@@ -2312,14 +2319,14 @@ int GO(int ncycles)
 
 	  opcode_0b:				/* ASO #ab [unofficial - ASL then ORA with Acc] */
 		/* !!! Tested on real Atari => AND #ab */
-		AND(memory[PC++]);
+		AND(dGetByte(PC++));
 		goto next;
 
 
 
 	  opcode_8b:				/* XAA #ab [unofficial - X AND Mem to Acc] */
 		/* !!! Tested on real Atari => AND #ab */
-		AND(memory[PC++]);
+		AND(dGetByte(PC++));
 		goto next;
 
 
@@ -2365,10 +2372,10 @@ int GO(int ncycles)
 
 	  opcode_47:				/* LSE zpage [unofficial - LSR then EOR result with A] */
 		ZPAGE;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = data & 1;
 		data = data >> 1;
-		memory[addr] = data;
+		dPutByte(addr, data);
 		Z = N = A ^= data;
 		goto next;
 
@@ -2395,10 +2402,10 @@ int GO(int ncycles)
 
 	  opcode_57:				/* LSE zpage,x [unofficial - LSR then EOR result with A] */
 		ZPAGE_X;
-		data = memory[addr];
+		data = dGetByte(addr);
 		C = data & 1;
 		data = data >> 1;
-		memory[addr] = data;
+		dPutByte(addr, data);
 		Z = N = A ^= data;
 		goto next;
 
@@ -2425,14 +2432,14 @@ int GO(int ncycles)
 
 
 	  opcode_4b:				/* ALR #ab [unofficial - Acc AND Data, LSR result] */
-		data = A & memory[PC++];
+		data = A & dGetByte(PC++);
 		C = data & 1;
 		Z = N = A = (data >> 1);
 		goto next;
 
 
 	  opcode_6b:				/* ARR #ab [unofficial - Acc AND Data, ROR result] */
-		data = A & memory[PC++];
+		data = A & dGetByte(PC++);
 		if (C) {
 			C = data & 1;
 			Z = N = A = (data >> 1) | 0x80;
@@ -2470,7 +2477,7 @@ int GO(int ncycles)
 		ZPAGE;
 
 	  rla_zpage:
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = (data & 0x80) ? 1 : 0;
 			data = (data << 1) | 1;
@@ -2479,14 +2486,14 @@ int GO(int ncycles)
 			C = (data & 0x80) ? 1 : 0;
 			data = (data << 1);
 		}
-		memory[addr] = data;
+		dPutByte(addr, data);
 		Z = N = A &= data;
 		goto next;
 
 
 	  opcode_2b:				/* RLA #ab [unofficial - ROL Mem, then AND with A] */
 		/* !!! Tested on real Atari => AND #ab */
-		AND(memory[PC++]);
+		AND(dGetByte(PC++));
 		goto next;
 
 
@@ -2541,7 +2548,7 @@ int GO(int ncycles)
 		ZPAGE;
 
 	  rra_zpage:
-		data = memory[addr];
+		data = dGetByte(addr);
 		if (C) {
 			C = data & 1;
 			data = (data >> 1) | 0x80;
@@ -2550,7 +2557,7 @@ int GO(int ncycles)
 			C = data & 1;
 			data = (data >> 1);
 		}
-		memory[addr] = data;
+		dPutByte(addr, data);
 		goto adc;
 
 
@@ -2587,7 +2594,7 @@ int GO(int ncycles)
 
 	  opcode_ab:  /* OAL #ab [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
 		/* !!! Tested on real Atari => AND #ab, TAX */
-		A &= memory[PC++];
+		A &= dGetByte(PC++);
 		Z = N = X = A;
 		goto next;
 
@@ -2611,7 +2618,8 @@ int GO(int ncycles)
 		ZPAGE;
 
 	  dcm_zpage:
-		data = memory[addr] = memory[addr] - 1;
+		data = dGetByte(addr) - 1;
+		dPutByte(addr, data);
 		CMP(data);
 		goto next;
 
@@ -2647,7 +2655,7 @@ int GO(int ncycles)
 	  opcode_cb:				/* SAX #ab [unofficial - A AND X, then SBC Mem, store to X] */
 		X = A & X;
 
-		data = memory[PC++];
+		data = dGetByte(PC++);
 
 		if (!(regP & D_FLAG)) {
 
@@ -2719,9 +2727,9 @@ int GO(int ncycles)
 		ZPAGE;
 
 	  ins_zpage:
-		data = Z = N = memory[addr] + 1;
+		data = Z = N = dGetByte(addr) + 1;
 
-		memory[addr] = data;
+		dPutByte(addr, data);
 
 		goto sbc;
 
@@ -2785,7 +2793,7 @@ int GO(int ncycles)
 
 
 	  opcode_eb:				/* SBC #ab [unofficial] */
-		data = memory[PC++];
+		data = dGetByte(PC++);
 
 		goto sbc;
 

@@ -285,8 +285,6 @@ void Atari_DisplayScreen(UBYTE * screen)
 #ifdef VOXWARE
 	Voxware_UpdateSound();
 #endif
-
-	consol = 7;
 }
 
 static int special_keycode = -1;

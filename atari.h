@@ -31,8 +31,8 @@
 #endif
 
 typedef enum {
-	PAL,
-	NTSC
+	TV_PAL,
+	TV_NTSC
 } TVmode;
 
 typedef enum {
@@ -49,7 +49,7 @@ extern int verbose;
 
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.6"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.7"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -340,5 +340,7 @@ int Atari800_Exit(int run_monitor);
 UBYTE Atari800_GetByte(UWORD addr);
 int Atari800_PutByte(UWORD addr, UBYTE byte);
 void AtariEscape(UBYTE esc_code);
+int Initialise_EmuOS(void);
+int Insert_Cartridge(char *filename);
 
 #endif
