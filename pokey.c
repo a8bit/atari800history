@@ -13,6 +13,7 @@
 #include "gtia.h"
 #include "sio.h"
 #include "platform.h"
+#include "statesav.h"
 
 #ifdef USE_DOSSOUND
 #include "pokeysnd.h"
@@ -20,8 +21,6 @@
 
 #define FALSE 0
 #define TRUE 1
-
-static char *rcsid = "$Id: pokey.c,v 1.11 1998/02/21 15:20:28 david Exp $";
 
 UBYTE KBCODE;
 UBYTE IRQST;
@@ -44,7 +43,7 @@ UBYTE POKEY_GetByte(UWORD addr)
 	UBYTE byte = 0xff;
 	static int rand_init = 0;
 
-	addr &= 0xff0f;
+	addr &= 0x0f;
 	switch (addr) {
 	case _KBCODE:
 		byte = KBCODE;
@@ -122,7 +121,7 @@ int POKEY_siocheck(void)
 
 int POKEY_PutByte(UWORD addr, UBYTE byte)
 {
-	addr &= 0xff0f;
+	addr &= 0x0f;
 	switch (addr) {
 	case _AUDC1:
 		AUDC[CHAN1] = byte;
@@ -424,4 +423,52 @@ void Update_Counter(int chan_mask)
 			DivNIRQ[CHAN4] = 0;
 		}
 	}
+}
+
+void POKEYStateSave( void )
+{
+	SaveUBYTE( &KBCODE, 1 );
+	SaveUBYTE( &IRQST, 1 );
+	SaveUBYTE( &IRQEN, 1 );
+	SaveUBYTE( &SKSTAT, 1 );
+
+	SaveINT( &SHIFT_KEY, 1 );
+	SaveINT( &KEYPRESSED, 1 );
+	SaveINT( &DELAYED_SERIN_IRQ, 1 );
+	SaveINT( &DELAYED_SEROUT_IRQ, 1 );
+	SaveINT( &DELAYED_XMTDONE_IRQ, 1 );
+
+	SaveUBYTE( &AUDF[0], 4 );
+	SaveUBYTE( &AUDC[0], 4 );
+	SaveUBYTE( &AUDCTL, 1 );
+
+	/* This needs to be examined, since SaveINT will only work for
+	   ULONGS if sizeof( ULONG ) == 4 */
+	SaveINT( &DivNIRQ[0], 4);
+	SaveINT( &DivNMax[0], 4);
+	SaveINT( &TimeBase, 1 );
+}
+
+void POKEYStateRead( void )
+{
+	ReadUBYTE( &KBCODE, 1 );
+	ReadUBYTE( &IRQST, 1 );
+	ReadUBYTE( &IRQEN, 1 );
+	ReadUBYTE( &SKSTAT, 1 );
+
+	ReadINT( &SHIFT_KEY, 1 );
+	ReadINT( &KEYPRESSED, 1 );
+	ReadINT( &DELAYED_SERIN_IRQ, 1 );
+	ReadINT( &DELAYED_SEROUT_IRQ, 1 );
+	ReadINT( &DELAYED_XMTDONE_IRQ, 1 );
+
+	ReadUBYTE( &AUDF[0], 4 );
+	ReadUBYTE( &AUDC[0], 4 );
+	ReadUBYTE( &AUDCTL, 1 );
+
+	/* This needs to be examined, since ReadINT will only work for
+	   ULONGS if sizeof( ULONG ) == 4 */
+	ReadINT( &DivNIRQ[0], 4);
+	ReadINT( &DivNMax[0], 4);
+	ReadINT( &TimeBase, 1 );
 }

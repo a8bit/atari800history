@@ -6,7 +6,7 @@
 
 CC		= gcc
 CPPFLAGS	= $(OTHER)
-CFLAGS		= -c -O6 -DGNU_C
+CFLAGS		= -c -g -O6 -DGNU_C -Wall -fomit-frame-pointer
 LD		= gcc
 LDFLAGS		=
 LDLIBS		= -lm
@@ -46,7 +46,7 @@ basic :
 
 linux-svgalib :
 	make atari800 \
-		LDLIBS="-lvgagl -lvga -lm" \
+		LDLIBS="-lvgagl -lvga -lm -lz" \
 		OBJ="atari_svgalib.o"
 
 linux-svgalib-nas-obsolete :
@@ -267,11 +267,15 @@ OBJECTS	=	atari.o \
 		prompts.o \
 		rt-config.o \
 		ui.o \
-                list.o \
-                sound.o \
-                pokeysnd.o \
+		list.o \
+		sound.o \
+		pokeysnd.o \
 		ataripcx.o \
-		log.o
+		log.o \
+		compfile.o \
+		memory.o \
+		pbi.o \
+		statesav.o
 
 atari800	:	$(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -302,6 +306,9 @@ pokey.o		:	pokey.c $(INCLUDES)
 
 pia.o		:	pia.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) pia.c
+
+pbi.o		:	pbi.c $(INCLUDES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) pbi.c
 
 supercart.o	:	supercart.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) supercart.c
@@ -338,6 +345,22 @@ sound.o		:	sound.c $(INCLUDES)
 
 pokeysnd.o	:	pokeysnd.c pokeysnd.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) pokeysnd.c
+
+compfile.o	:	compfile.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) compfile.c
+
+log.o		:	log.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
+
+ataripcx.o	:	ataripcx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) ataripcx.c
+
+statesav.o	:	statesav.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) statesav.c
+
+memory.o	:	memory.c memory.h memory-d.c memory-d.h \
+			memory-p.h memory-p.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) memory.c
 
 clean	:
 	rm -f configure

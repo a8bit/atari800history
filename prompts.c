@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "prompts.h"
-
-static char *rcsid = "$Id: prompts.c,v 1.4 1998/02/21 14:51:54 david Exp $";
 
 void GetString(char *message, char *string)
 {

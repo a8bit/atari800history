@@ -7,8 +7,6 @@
 #include <vga.h>
 #include <vgagl.h>
 
-static char *rcsid = "$Id: atari_svgalib.c,v 1.11 1998/02/21 14:53:17 david Exp $";
-
 #include "config.h"
 #include "atari.h"
 #include "colours.h"
@@ -38,13 +36,13 @@ static int js1_centre_y;
 static struct JS_DATA_TYPE js_data;
 #endif
 
-static int lookup[256];
+/* static int lookup[256]; */
 
 #define FALSE 0
 #define TRUE 1
 
-static int vgamouse_stick;
-static int vgamouse_strig;
+/* static int vgamouse_stick; */
+/* static int vgamouse_strig; */
 static int trig0;
 static int stick0;
 static int consol;
@@ -64,8 +62,8 @@ void Atari_Initialise(int *argc, char *argv[])
 {
 	int VGAMODE = G320x200x256;
 
-	int fd;
-	int status;
+	/* int fd; */
+	/* int status; */
 
 	int i;
 	int j;
@@ -170,7 +168,7 @@ int Atari_Exit(int run_monitor)
 
 	if (restart) {
 		int VGAMODE = G320x200x256;
-		int status;
+		/* int status; */
 		int i;
 
 		if (!vga_hasmode(VGAMODE)) {
@@ -293,6 +291,7 @@ int Atari_Keyboard(void)
 {
 	int keycode;
 
+	consol = 7;
 	trig0 = 1;
 
 	if (special_keycode != -1) {

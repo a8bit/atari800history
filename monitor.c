@@ -13,10 +13,9 @@
 #include <fcntl.h>
 #endif
 
-static char *rcsid = "$Id: monitor.c,v 1.15 1998/02/21 15:19:59 david Exp $";
-
 #include "atari.h"
 #include "cpu.h"
+#include "memory.h"
 #include "antic.h"
 #include "pia.h"
 #include "gtia.h"
@@ -24,10 +23,10 @@ static char *rcsid = "$Id: monitor.c,v 1.15 1998/02/21 15:19:59 david Exp $";
 #define FALSE   0
 #define TRUE    1
 
-extern int count[256];
+#ifdef PROFILE
+extern int instruction_count[256];
+#endif
 extern int cycles[256];
-
-extern UBYTE memory[65536];
 
 extern int rom_inserted;
 extern UWORD dlist;
@@ -513,11 +512,12 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				s[p] = toupper(t[p]);
 
 		if (strcmp(t, "CONT") == 0) {
+#ifdef PROFILE
 			int i;
 
 			for (i = 0; i < 256; i++)
-				count[i] = 0;
-
+				instruction_count[i] = 0;
+#endif
 			return 1;
 		}
 #ifdef MONITOR_BREAK
@@ -548,7 +548,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 
 				printf("%04x: ", tdlist);
 
-				IR = memory[tdlist++];
+				IR = dGetByte(tdlist++);
 
 				if (IR & 0x80)
 					printf("DLI ");
@@ -558,7 +558,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 					printf("%d BLANK", ((IR >> 4) & 0x07) + 1);
 					break;
 				case 0x01:
-					addr = memory[tdlist] | (memory[tdlist + 1] << 8);
+					addr = dGetByte(tdlist) | (dGetByte(tdlist + 1) << 8);
 					if (IR & 0x40) {
 						printf("JVB %04x ", addr);
 						tdlist += 2;
@@ -571,7 +571,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 					break;
 				default:
 					if (IR & 0x40) {
-						addr = memory[tdlist] | (memory[tdlist + 1] << 8);
+						addr = dGetByte(tdlist) | (dGetByte(tdlist + 1) << 8);
 						tdlist += 2;
 						printf("LMS %04x ", addr);
 					}
@@ -672,6 +672,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 		else if (strcmp(t, "TROFF") == 0)
 			tron = FALSE;
 #endif
+#ifdef PROFILE
 		else if (strcmp(t, "PROFILE") == 0) {
 			int i;
 
@@ -679,18 +680,18 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				int max, instr;
 				int j;
 
-				max = count[0];
+				max = instruction_count[0];
 				instr = 0;
 
 				for (j = 1; j < 256; j++) {
-					if (count[j] > max) {
-						max = count[j];
+					if (instruction_count[j] > max) {
+						max = instruction_count[j];
 						instr = j;
 					}
 				}
 
 				if (max > 0) {
-					count[instr] = 0;
+					instruction_count[instr] = 0;
 					printf("%02x has been executed %d times\n",
 						   instr, max);
 				}
@@ -700,6 +701,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				}
 			}
 		}
+#endif
 		else if (strcmp(t, "SHOW") == 0) {
 			printf("PC=%04x, A=%02x, S=%02x, X=%02x, Y=%02x, P=%02x\n",
 				   regPC,
@@ -709,6 +711,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				   regY,
 				   regP);
 		}
+#ifndef PAGED_MEM
 		else if (strcmp(t, "ROM") == 0) {
 			UWORD addr1;
 			UWORD addr2;
@@ -763,12 +766,14 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				printf("*** Memory Unchanged (Missing Parameter) ***\n");
 			}
 		}
+#endif
 		else if (strcmp(t, "COLDSTART") == 0) {
 			Coldstart();
 		}
 		else if (strcmp(t, "WARMSTART") == 0) {
 			Warmstart();
 		}
+#ifndef PAGED_MEM
 		else if (strcmp(t, "READ") == 0) {
 			char *filename;
 			UWORD addr;
@@ -822,6 +827,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				close(fd);
 			}
 		}
+#endif
 		else if (strcmp(t, "SUM") == 0) {
 			UWORD addr1;
 			UWORD addr2;
@@ -835,7 +841,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				int i;
 
 				for (i = addr1; i <= addr2; i++)
-					sum += (UWORD) memory[i];
+					sum += (UWORD) dGetByte(i);
 				printf("SUM: %X\n", sum);
 			}
 		}
@@ -849,11 +855,11 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			while (count) {
 				printf("%04X : ", addr);
 				for (i = 0; i < 16; i++)
-					printf("%02X ", memory[(UWORD) (addr + i)]);
+					printf("%02X ", dGetByte((UWORD) (addr + i)));
 				printf("\t");
 				for (i = 0; i < 16; i++) {
-					if (isalnum(memory[(UWORD) (addr + i)])) {
-						printf("%c", memory[(UWORD) (addr + i)]);
+					if (isalnum(dGetByte((UWORD) (addr + i)))) {
+						printf("%c", dGetByte((UWORD) (addr + i)));
 					}
 					else {
 						printf(".");
@@ -864,6 +870,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				count--;
 			}
 		}
+#ifndef PAGED_MEM
 		else if (strcmp(t, "F") == 0) {
 			int addr;
 			int addr1;
@@ -882,6 +889,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			for (addr = addr1; addr <= addr2; addr++)
 				memory[addr] = (UBYTE) (hexval & 0x00ff);
 		}
+#endif
 		else if (strcmp(t, "S") == 0) {
 			int addr;
 			int addr1;
@@ -898,13 +906,14 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 			addr2 = xaddr2;
 
 			for (addr = addr1; addr <= addr2; addr++)
-				if (memory[addr] == (UBYTE) (hexval & 0x00ff)) {
+				if (dGetByte(addr) == (UBYTE) (hexval & 0x00ff)) {
 					if (hexval & 0xff00)
-						if (memory[addr + 1] != (UBYTE) (hexval >> 8))
+						if (dGetByte(addr + 1) != (UBYTE) (hexval >> 8))
 							continue;
 					printf("Found at %04x\n", addr);
 				}
 		}
+#ifndef PAGED_MEM
 		else if (strcmp(t, "C") == 0) {
 			UWORD addr;
 			UWORD temp;
@@ -918,6 +927,7 @@ static char old_s[sizeof(s)]=""; /*GOLDA CHANGED*/
 				addr++;
 			}
 		}
+#endif
 #ifdef MONITOR_BREAK
 		else if (strcmp(t, "G") == 0) {
 		        break_step=1;
@@ -1060,9 +1070,9 @@ unsigned int disassemble(UWORD addr1)
 	while (count) {
 		printf("%04X\t", addr);
 		addr1 = show_instruction(addr, 20);
-		printf("; %Xcyc ; ", cycles[memory[addr]]);
+		printf("; %Xcyc ; ", cycles[dGetByte(addr)]);
 		for (i = 0; i < addr1; i++)
-			printf("%02X ", memory[(UWORD) (addr + i)]);
+			printf("%02X ", dGetByte((UWORD) (addr + i)));
 		printf("\n");
 		addr += addr1;
 		count--;
@@ -1154,7 +1164,7 @@ UWORD show_instruction(UWORD inad, int wid)
         UBYTE operand=0;
 #endif
 
-	instr = memory[inad];
+	instr = dGetByte(inad);
 	strcpy(dissbf, instr6502[instr]);
 
 	for (i = 0; dissbf[i] != 0; i++) {
@@ -1164,7 +1174,7 @@ UWORD show_instruction(UWORD inad, int wid)
 			printf(dissbf);
 			switch (dissbf[i + 1]) {
 			case '0':
-				value = (UWORD) (inad + (char) memory[(UWORD) (inad + 1)] + 2);
+				value = (UWORD) (inad + (char) dGetByte((UWORD) (inad + 1)) + 2);
 				inad = 2;
 				wid -= 5;
 				printf("$%04X", value);
@@ -1173,7 +1183,7 @@ UWORD show_instruction(UWORD inad, int wid)
 #endif
 				break;
 			case '1':
-				value = (UBYTE) memory[(UWORD) (inad + 1)];
+				value = (UBYTE) dGetByte((UWORD) (inad + 1));
 				inad = 2;
 				wid -= 3;
 				printf("$%02X", value);
@@ -1182,7 +1192,7 @@ UWORD show_instruction(UWORD inad, int wid)
 #endif
 				break;
 			case '2':
-				value = (UWORD) memory[(UWORD) (inad + 1)] | (memory[(UWORD) (inad + 2)] << 8);
+				value = (UWORD) dGetByte((UWORD) (inad + 1)) | (dGetByte((UWORD) (inad + 2)) << 8);
 				inad = 3;
 				wid -= 5;
 				printf("$%04X", value);

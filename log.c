@@ -9,7 +9,9 @@ void Aprint(char *format, ... )
 {
 	va_list args;
 	char buffer[256];
+#ifdef BUFFERED_LOG
 	int buflen;
+#endif
 
 	va_start(args, format);
 	vsprintf(buffer, format, args);

@@ -19,8 +19,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static char *rcsid = "$Id: list.c,v 1.3 1998/02/21 14:56:45 david Exp $";
-
 #include "list.h"
 
 #define	FALSE 0

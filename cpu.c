@@ -35,13 +35,34 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 
-static char *rcsid = "$Id: cpu.c,v 1.22 1998/02/21 15:02:12 david Exp $";
-
-#define	FALSE	0
-#define	TRUE	1
-
 #include	"atari.h"
 #include	"cpu.h"
+#include	"memory.h"
+#include	"statesav.h"
+
+#ifdef CPUASS
+extern UBYTE IRQ;
+
+#ifdef PAGED_MEM
+#error cpu_m68k.s cannot work with paged memory
+#endif
+
+void CPU_Initialise(void)
+{
+	CPU_INIT();
+}
+
+void CPU_GetStatus(void)
+{
+	CPUGET();
+}
+
+void CPU_PutStatus(void)
+{
+	CPUPUT();
+}
+
+#else
 
 /*
    ==========================================================
@@ -51,12 +72,19 @@ static char *rcsid = "$Id: cpu.c,v 1.22 1998/02/21 15:02:12 david Exp $";
 
 #define UPDATE_GLOBAL_REGS regPC=PC;regS=S;regA=A;regX=X;regY=Y
 #define UPDATE_LOCAL_REGS PC=regPC;S=regS;A=regA;X=regX;Y=regY
+
+#ifdef PAGED_MEM
+#define PH(x) PutByte((0x0100 + S--), (x))
+#define PL (GetByte(0x100 + ++S))
+#define dGetWord(x) (GetByte(x) | (GetByte(x+1) << 8))
+#else
 #define PH(x) memory[0x0100 + S--] = (x) 
-#define PHW(x) PH((x)>>8); PH((x) & 0xff)
 #define PL (memory[0x100 + ++S])
 #define dGetWord(x) (memory[x] | (memory[x+1] << 8))
-#define dGetByte(x) (memory[x])
 #define dPutByte(x,y) (memory[x] = y)
+#endif
+
+#define PHW(x) PH((x)>>8); PH((x) & 0xff)
 
 UWORD regPC;
 UBYTE regA;
@@ -70,10 +98,6 @@ static UBYTE Z;					/* zero (0) or non-zero (1) */
 static UBYTE V;
 static UBYTE C;					/* zero (0) or one(1) */
 
-#define RAM 0
-#define ROM 1
-#define HARDWARE 2
-
 /*
    #define PROFILE
  */
@@ -85,10 +109,9 @@ extern int tron;
 /*
  * The following array is used for 6502 instruction profiling
  */
-
-int count[256];
-
-UBYTE memory[65536];
+#ifdef PROFILE
+int instruction_count[256];
+#endif
 
 UBYTE IRQ;
 
@@ -103,10 +126,6 @@ extern UBYTE break_ret;
 extern UBYTE break_cim;
 extern int ret_nesting;
 #endif
-
-UBYTE attrib[65536];
-#define	GetByte(addr)		((attrib[addr] == HARDWARE) ? Atari800_GetByte(addr) : memory[addr])
-#define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) if (Atari800_PutByte(addr,byte)) break;
 
 /*
    ===============================================================
@@ -160,55 +179,6 @@ void CPU_PutStatus(void)
 		C = 1;
 	else
 		C = 0;
-}
-
-UBYTE BCDtoDEC[256];
-UBYTE DECtoBCD[256];
-
-void CPU_Reset(void)
-{
-	int i;
-
-	for (i = 0; i < 256; i++) {
-		BCDtoDEC[i] = ((i >> 4) & 0xf) * 10 + (i & 0xf);
-		DECtoBCD[i] = (((i % 100) / 10) << 4) | (i % 10);
-#ifdef PROFILE
-		count[i] = 0;
-#endif
-	}
-
-	IRQ = 0;
-
-	regP = 0x20;				/* The unused bit is always 1 */
-	regS = 0xff;
-	regPC = (GetByte(0xfffd) << 8) | GetByte(0xfffc);
-}
-
-void SetRAM(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = RAM;
-	}
-}
-
-void SetROM(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = ROM;
-	}
-}
-
-void SetHARDWARE(int addr1, int addr2)
-{
-	int i;
-
-	for (i = addr1; i <= addr2; i++) {
-		attrib[i] = HARDWARE;
-	}
 }
 
 #define AND(t_data) data = t_data; Z = N = A &= data
@@ -279,12 +249,6 @@ void NMI(void)
 	}								\
 }
 #endif
-/* sets the IRQ flag and checks it */
-void GenerateIRQ(void)
-{
-	IRQ = 1;
-	GO(0);				/* does not execute any instruction */
-}
 
 /*
    ==============================================================
@@ -329,6 +293,7 @@ int cycles[256] =
 
 int GO(int ncycles)
 {
+	UBYTE insn;
 
 #ifdef GNU_C
 	static void *opcode[256] =
@@ -454,6 +419,7 @@ int GO(int ncycles)
 #define	ZPAGE_X		addr=(UBYTE)(dGetByte(PC++)+X);
 #define	ZPAGE_Y		addr=(UBYTE)(dGetByte(PC++)+Y);
 
+#ifndef PAGED_MEM
 #ifdef __i386__
 #undef ABSOLUTE
 #undef ABSOLUTE_X
@@ -480,6 +446,7 @@ int GO(int ncycles)
 		       : "r" ((ULONG)PC), "r" ((UWORD)Y));PC+=2;
 #endif
 #endif
+#endif
 
 	while (ncycles > 0 && !wsync_halt) {
 
@@ -492,7 +459,7 @@ int GO(int ncycles)
 #endif
 
 #ifdef PROFILE
-		count[dGetByte(PC)]++;
+		instruction_count[dGetByte(PC)]++;
 #endif
 
 #ifdef MONITOR_BREAK
@@ -508,10 +475,12 @@ int GO(int ncycles)
 			UPDATE_LOCAL_REGS;
 		}
 #endif
-		ncycles -= cycles[dGetByte(PC)];
+		insn = dGetByte(PC);
+		ncycles -= cycles[insn];
 
 #ifdef GNU_C
-		goto *opcode[dGetByte(PC++)];
+		PC++;
+		goto *opcode[insn];
 #else
 		switch (dGetByte(PC++)) {
 		case 0x00:
@@ -2659,56 +2628,34 @@ int GO(int ncycles)
 
 		if (!(regP & D_FLAG)) {
 
-			UWORD temp;
+	/* THOR */
+      UWORD tmp;
 
-			UWORD t_data;
+      tmp = X - data - !C;
+      
+      C = tmp < 0x100;
+      V = ((X ^ tmp) & 0x80) && ((X ^ data) & 0x80);
+      Z = N = X = tmp;
+    } else {
+      UWORD al, ah, tmp;
 
-
-			t_data = data + !C;
-
-			temp = X - t_data;
-
-
-			Z = N = (UBYTE) temp;
-
-
-			V = (~(X ^ t_data)) & (Z ^ X) & 0x80;
-
-			C = (temp > 255) ? 0 : 1;
-
-			X = Z;
-
-		}
-
-		else {
-
-			int bcd1, bcd2;
-
-
-			bcd1 = BCDtoDEC[X];
-
-			bcd2 = BCDtoDEC[data];
-
-
-			bcd1 = bcd1 - bcd2 - !C;
-
-
-			if (bcd1 < 0)
-				bcd1 = 100 - (-bcd1);
-
-			Z = N = DECtoBCD[bcd1];
-
-
-			C = (X < (data + !C)) ? 0 : 1;
-
-			V = (Z ^ X) & 0x80;
-
-			X = Z;
-
-		}
-
-		goto next;
-
+      tmp = X - data - !C;
+      
+      al = (X & 0x0f) - (data & 0x0f) - !C;	/* Calculate lower nybble */
+      ah = (X >> 4) - (data >> 4);		/* Calculate upper nybble */
+      if (al & 0x10) {
+	al -= 6;	/* BCD fixup for lower nybble */
+	ah--;
+      }
+      if (ah & 0x10) ah -= 6;	 /* BCD fixup for upper nybble */
+      
+      C = tmp < 0x100;		 /* Set flags */
+      V = ((X ^ tmp) & 0x80) && ((X ^ data) & 0x80);
+      Z = N = tmp;
+      
+      X = (ah << 4) | (al & 0x0f);	/* Compose result */
+    }
+    goto next;
 
 /* INS [unofficial - INC Mem then SBC with Acc] */
 
@@ -2829,36 +2776,6 @@ int GO(int ncycles)
     }
     goto next;
 
-
-	/* OLD
-			UWORD temp;
-			UWORD t_data;
-
-			t_data = data + C;
-			Z = N = temp = A + t_data;
-
-			V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
-
-			C = temp >> 8;
-			A = Z;
-		}
-		else {
-			int bcd1, bcd2;
-
-			bcd1 = BCDtoDEC[A];
-			bcd2 = BCDtoDEC[data];
-
-			bcd1 += bcd2 + C;
-
-			Z = N = DECtoBCD[bcd1];
-
-			V = (Z ^ A) & 0x80;
-			C = (bcd1 > 99);
-			A = Z;
-		}
-		goto next;
-	 OLD */
-
 	  sbc:
 
 		if (!(regP & D_FLAG)) {
@@ -2892,42 +2809,6 @@ int GO(int ncycles)
     }
     goto next;
 
-
-	/* OLD
-			UWORD temp;
-			UWORD t_data;
-
-			t_data = data + !C;
-			temp = A - t_data;
-
-			Z = N = (UBYTE) temp;
-
-			V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
-
-			C = (temp > 255) ? 0 : 1;
-			A = Z;
-		}
-		else {
-			int bcd1, bcd2;
-
-			bcd1 = BCDtoDEC[A];
-			bcd2 = BCDtoDEC[data];
-
-			bcd1 = bcd1 - bcd2 - !C;
-
-			if (bcd1 < 0)
-				bcd1 = 100 - (-bcd1);
-			Z = N = DECtoBCD[bcd1];
-
-			C = (A < (data + !C)) ? 0 : 1;
-			V = (Z ^ A) & 0x80;
-			A = Z;
-		}
-		goto next;
-	  OLD */
-
-
-
 	  next:
 #ifdef MONITOR_BREAK
 		if (break_step) {
@@ -2946,4 +2827,67 @@ int GO(int ncycles)
 	if (wsync_halt && ncycles >= 0)
 		return 0;				/* WSYNC stopped CPU */
 	return ncycles;
+}
+
+void CPU_Initialise(void)
+{
+}
+#endif /* CPU_ASM */
+
+void CPU_Reset(void)
+{
+#ifdef PROFILE
+	int i;
+
+	for (i = 0; i < 256; i++) {
+		instruction_count[i] = 0;
+	}
+#endif
+
+	IRQ = 0;
+
+	regP = 0x20;				/* The unused bit is always 1 */
+	regS = 0xff;
+	regPC = (GetByte(0xfffd) << 8) | GetByte(0xfffc);
+}
+
+/* sets the IRQ flag and checks it */
+void GenerateIRQ(void)
+{
+	IRQ = 1;
+	GO(0);				/* does not execute any instruction */
+}
+
+void CpuStateSave( UBYTE SaveVerbose )
+{
+	SaveUBYTE( &regA, 1 );
+
+	CPU_GetStatus( ); /* Make sure flags are all updated */
+	SaveUBYTE( &regP, 1 );
+	
+	SaveUBYTE( &regS, 1 );
+	SaveUBYTE( &regX, 1 );
+	SaveUBYTE( &regY, 1 );
+	SaveUBYTE( &IRQ, 1 );
+
+	MemStateSave( SaveVerbose );
+	
+	SaveUWORD( &regPC, 1 );
+}
+
+void CpuStateRead( UBYTE SaveVerbose )
+{
+	ReadUBYTE( &regA, 1 );
+	
+	ReadUBYTE( &regP, 1 );
+	CPU_PutStatus( );	/* Make sure flags are all updated */
+
+	ReadUBYTE( &regS, 1 );
+	ReadUBYTE( &regX, 1 );
+	ReadUBYTE( &regY, 1 );
+	ReadUBYTE( &IRQ, 1 );
+
+	MemStateRead( SaveVerbose );
+	
+	ReadUWORD( &regPC, 1 );
 }

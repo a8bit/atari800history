@@ -3,8 +3,6 @@
 #include "pokeysnd.h"
 #include "sbdrv.h"
 
-static char *rcsid = "$Id: sound_dos.c,v 1.2 1998/02/21 15:00:23 david Exp $";
-
 #define FALSE 0
 #define TRUE 1
 
@@ -42,7 +40,7 @@ void Sound_Initialise(int *argc, char *argv[])
 		int tmp;
 
 		if (!OpenSB(playback_freq, buffersize)) {
-			printf("Cannot init sound card\n");
+			Aprint("Cannot init sound card\n");
 			sound_enabled = FALSE;
 		}
 		else {

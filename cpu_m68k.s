@@ -1,346 +1,387 @@
-;This code is copyrighted by Empty Head (c)1997, but
-;you can use it without any charge in your own programs
-;use it on your own risk ;)
-;DEBUG ;if it is active it is possible to trace through 6502 memory
-;C_BUGGING ;debug in C - logical, isn't it ? :)
-P65C02 ;we emulate this version of processor (6502 has a bug in jump code, you can emulate this bug as well if you want, just remove this line :)
-	ifd DEBUG
-	bra START
-	endc
-	OPT		P=68040,O+,W-
+; Original Author :   empty head
+; Last changes    :   25th Oct. 1998, gerhard.janka
 
-	ifnd DEBUG
-	xref _GETBYTE ;procedures for A800 bytes
-	xref _PUTBYTE
-	xref _AtariEscape
-	xdef _PRERUSENI
-	xref _break_addr
-	xref _tisk
-	xref _wsync_halt ;CPU is stopped
-	xdef _SKOK
-	xdef _ZASTAV
-	xdef _regPC
-	xdef _regA
-	xdef _regP ;/* Processor Status Byte (Partial) */
-	xdef _regS
-	xdef _regX
-	xdef _regY
-	xref _memory
-	xref _attrib
-	xdef _IRQ
-	xdef _NMI
-	xdef _RTI
-	xdef _GO
-	xdef _CPUGET
-	xdef _CPU_INIT
-	xdef _cycles ;temporarily needed outside :)
-	xdef _OPMODE_TABLE ;need for debugging (maybe, I can't remember)
-	ifd C_BUGGING
-	xref _CEKEJ
-	xdef _ADRESA
-	xdef _AIRQ
-	endc
-	endc
+P65C02 ; we emulate this version of processor (6502 has a bug in jump code,
+       ; you can emulate this bug by commenting out this line :)
+; PROFILE  ; fills the 'instruction_count' array for instruction profiling
+
+  OPT    P=68040,L1,O+,W-
+  output cpu_m68k.o
+
+  xref _bounty_bob2
+  xref _bounty_bob1
+  xref _GTIA_GetByte
+  xref _POKEY_GetByte
+  xref _PIA_GetByte
+  xref _ANTIC_GetByte
+  xref _GTIA_PutByte
+  xref _POKEY_PutByte
+  xref _PIA_PutByte
+  xref _ANTIC_PutByte
+  xref _SuperCart_PutByte
+  xref _AtariEscape
+  xref _break_addr
+  xref _wsync_halt ;CPU is stopped
+  xdef _regPC
+  xdef _regA
+  xdef _regP ;/* Processor Status Byte (Partial) */
+  xdef _regS
+  xdef _regX
+  xdef _regY
+  xref _memory
+  xref _attrib
+  ifd PROFILE
+  xref _instruction_count
+  endc
+  xdef _IRQ
+  xdef _NMI
+  xdef _RTI
+  xdef _GO
+  xdef _CPUGET
+  xdef _CPUPUT
+  xdef _CPU_INIT
+  xdef _cycles ;temporarily needed outside :)
 
 regA
-	ds.b 1
-_regA	ds.b 1   ;d0 -A
+  ds.b 1
+_regA  ds.b 1   ;d2 -A
 
 regX
-	ds.b 1
-_regX	ds.b 1   ;d1 -X
+  ds.b 1
+_regX  ds.b 1   ;d3 -X
 
-regY		
-	ds.b 1
-_regY	ds.b 1   ;d2 -Y
+regY
+  ds.b 1
+_regY  ds.b 1   ;d4 -Y
 
-	
 regPC
-_regPC	ds.w 1   ;a2 PC
+_regPC  ds.w 1   ;a2 PC
 
 regS
-	ds.b 1
-_regS	ds.b 1   ;a4 stack
+  ds.b 1
+_regS  ds.b 1   ;a4 stack
 
-regP	ds.b 1
-VBDIFLAG	         ;same as regP
-_regP	ds.b 1   ;   -CCR
+regP  ds.b 1
+BDIFLAG         ;same as regP
+_regP  ds.b 1   ;   -CCR
 
-IRQ	         ;I have to reserve it there because other it is 32-bit number (in GCC)
-_IRQ	ds.b 1
+IRQ
+_IRQ  ds.b 1
 
+  even
 
-	even
-
-
-CD	equr a6 ;cycles counter down
-_pointer equr a1
 memory_pointer equr a5
 attrib_pointer equr a3
 stack_pointer equr a4
-PC6502	equr a2
+PC6502  equr a2
 
+CD  equr d6 ; cycles counter down
+ZFLAG  equr d1 ; Bit 0..7
+NFLAG  equr d1 ; Bit 8..15
+VFLAG  equr d5 ; Bit 16
+CCR6502  equr d5 ; Bit 0..15, only carry is usable (Extended on 68000)
+A  equr d2
+X  equr d3
+Y  equr d4
 
-ZFLAG	equr d5 ;we used it straight in shifting, because it is faster than move again
-                    ;I mean rol, ror, asl, asr, lsr, lsl
-NFLAG	equr d3 ;
-CCR6502	equr d4 ;only carry is usable (Extended on 68000)
-A	equr d0
-X	equr d1
-Y	equr d2
+;d0  contains usually adress where we are working or temporary value
+;d7  contains is a working register or adress
 
-;d6	contains usually adress where we are working or temporary value
-;d7	contains is a working register or adress
-
-
-LoHi  macro		;change order of lo and hi byte in d7 (adress)
+LoHi  macro    ;change order of lo and hi byte in d7 (address)
       ror.w #8,d7
       endm
 
-;	==========================================================
-;	Emulated Registers and Flags are kept local to this module
-;	==========================================================
+;  ==========================================================
+;  Emulated Registers and Flags are kept local to this module
+;  ==========================================================
 
+;#define UPDATE_GLOBAL_REGS regPC=PC;regA=A;regX=X;regY=Y
+UPDATE_GLOBAL_REGS  macro
+  sub.l memory_pointer,PC6502
+  movem.w d2-d4/a2,regA ;d2-d4 (A,X,Y) a2 (regPC)
+  endm
 
-
-;#define UPDATE_GLOBAL_REGS regPC=PC;regS=S;regA=A;regX=X;regY=Y
-UPDATE_GLOBAL_REGS	macro
-	sub.l memory_pointer,PC6502
-	sub.l memory_pointer,stack_pointer
-	lea -$101(stack_pointer),stack_pointer
-	movem.w d0-d2/a2/a4,regA ;d0-d2 (A,X,Y) a2-a4 (regPC and regS)
-	endm
-
-;#define UPDATE_LOCAL_REGS PC=regPC;S=regS;A=regA;X=regX;Y=regY
+;#define UPDATE_LOCAL_REGS PC=regPC;A=regA;X=regX;Y=regY
 UPDATE_LOCAL_REGS macro
-	movem.w regA,d0-d2/d6/d7 ;d0-d2 (A,X,Y) d6-d7 (regPC and regS)
-	lea $101(memory_pointer),stack_pointer
-	add.w d7,stack_pointer
-	move.l memory_pointer,PC6502
-	move.w d6,d7 ;we are sure that higher half of d7 is zero, because stack pointer on A800 was just one byte
-	add.l d7,PC6502
-	endm
+  clr.l  d7
+  movem.w regA,d2-d4       ;d2-d4 (A,X,Y)
+  lea $100(memory_pointer),stack_pointer
+  move.w regPC,d7
+  move.l memory_pointer,PC6502
+  add.l  d7,PC6502
+  endm
 
+GetTable:
+  dc.l GetGTIA5,GetNone,GetNone,GetNone        ; c0..3
+  dc.l GetNone,GetNone,GetNone,GetNone         ; c4..7
+  dc.l GetNone,GetNone,GetNone,GetNone         ; c8..b
+  dc.l GetNone,GetNone,GetNone,GetNone         ; cc..f
+  dc.l GetGTIA8,GetNone,GetPOKEY8,GetPIA8      ; d0..3
+  dc.l GetANTIC8,GetNone,GetNone,GetNone       ; d4..7
+  dc.l GetNone,GetNone,GetNone,GetNone         ; d8..b
+  dc.l GetNone,GetNone,GetNone,GetNone         ; dc..f
+  dc.l GetNone,GetNone,GetNone,GetNone         ; e0..3
+  dc.l GetNone,GetNone,GetNone,GetNone         ; e4..7
+  dc.l GetPOKEY5,GetNone,GetNone,GetPOKEY5     ; e8..b
+  dc.l GetNone,GetNone,GetNone,GetNone         ; ec..f
+  dc.l GetNone,GetNone,GetNone,GetNone         ; f0..3
+  dc.l GetNone,GetNone,GetNone,GetNone         ; f4..7
+  dc.l GetNone,GetNone,GetNone,GetNone         ; f8..b
+  dc.l GetNone,GetNone,GetNone,GetNone         ; fc..f
 
+_Local_GetByte:
+  move.l d7,d1
+  clr.l  d0
+  move.b d1,d0
+  lsr.w  #8,d1
+  sub.l  #$c0,d1
+  bmi    CouldBeBob
+  lea    GetTable,a1
+  jmp    ([a1,d1.l*4])
+CouldBeBob:
+  add.l  #$c0,d1
+  cmp.w  #$4f,d1
+  beq    ItsBob1
+  cmp.w  #$5f,d1
+  bne    GetNone
+ItsBob2:
+  move.w d7,-(a7)
+  clr.w  -(a7)
+  jsr    _bounty_bob2
+  addq.l #4,a7
+  clr.l  d0
+  rts
+ItsBob1:
+  move.w d7,-(a7)
+  clr.w  -(a7)
+  jsr    _bounty_bob1
+  addq.l #4,a7
+  clr.l  d0
+  rts
+GetNone:
+  move.l #255,d0
+  rts
+GetGTIA8:
+GetGTIA5:
+  move.l d0,-(a7)
+  jsr    _GTIA_GetByte
+  addq.l #4,a7
+  rts
+GetPOKEY8:
+GetPOKEY5:
+  move.l d0,-(a7)
+  jsr    _POKEY_GetByte
+  addq.l #4,a7
+  rts
+GetPIA8:
+  move.l d0,-(a7)
+  jsr    _PIA_GetByte
+  addq.l #4,a7
+  rts
+GetANTIC8:
+  move.l d0,-(a7)
+  jsr    _ANTIC_GetByte
+  addq.l #4,a7
+  rts
 
+PutTable:
+  dc.l PutGTIA5,PutNone,PutNone,PutNone        ; c0..3
+  dc.l PutNone,PutNone,PutNone,PutNone         ; c4..7
+  dc.l PutNone,PutNone,PutNone,PutNone         ; c8..b
+  dc.l PutNone,PutNone,PutNone,PutNone         ; cc..f
+  dc.l PutGTIA8,PutNone,PutPOKEY8,PutPIA8      ; d0..3
+  dc.l PutANTIC8,PutSCart,PutNone,PutNone      ; d4..7
+  dc.l PutNone,PutNone,PutNone,PutNone         ; d8..b
+  dc.l PutNone,PutNone,PutNone,PutNone         ; dc..f
+  dc.l PutNone,PutNone,PutNone,PutNone         ; e0..3
+  dc.l PutNone,PutNone,PutNone,PutNone         ; e4..7
+  dc.l PutPOKEY5,PutNone,PutNone,PutPOKEY5     ; e8..b
+  dc.l PutNone,PutNone,PutNone,PutNone         ; ec..f
+  dc.l PutNone,PutNone,PutNone,PutNone         ; f0..3
+  dc.l PutNone,PutNone,PutNone,PutNone         ; f4..7
+  dc.l PutNone,PutNone,PutNone,PutNone         ; f8..b
+  dc.l PutNone,PutNone,PutNone,PutNone         ; fc..f
 
+_Local_PutByte:
+  clr.l  d1
+  move.w d7,d1
+  lsr.w  #8,d1
+  sub.l  #$c0,d1
+  bmi    CouldBeBobP
+  lea    PutTable,a1
+  jmp    ([a1,d1.l*4])
+CouldBeBobP:
+  add.l  #$c0,d1
+  cmp.w  #$4f,d1
+  beq    ItsBob1P
+  cmp.w  #$5f,d1
+  bne    PutNone
+ItsBob2P:
+  move.w d7,-(a7)
+  clr.w  -(a7)
+  jsr    _bounty_bob2
+  addq.l #4,a7
+  clr.l  d0
+  rts
+ItsBob1P:
+  move.w d7,-(a7)
+  clr.w  -(a7)
+  jsr    _bounty_bob1
+  addq.l #4,a7
+  clr.l  d0
+  rts
+PutNone:
+  clr.l  d0
+  rts
+PutGTIA8:
+PutGTIA5:
+  clr.l  -(a7)
+  move.b d0,3(a7)
+  clr.l  -(a7)
+  move.b d7,3(a7)
+  jsr    _GTIA_PutByte
+  addq.l #8,a7
+  rts
+PutPOKEY8:
+PutPOKEY5:
+  clr.l  -(a7)
+  move.b d0,3(a7)
+  clr.l  -(a7)
+  move.b d7,3(a7)
+  jsr    _POKEY_PutByte
+  addq.l #8,a7
+  rts
+PutPIA8:
+  clr.l  -(a7)
+  move.b d0,3(a7)
+  clr.l  -(a7)
+  move.b d7,3(a7)
+  jsr    _PIA_PutByte
+  addq.l #8,a7
+  rts
+PutANTIC8:
+  clr.l  -(a7)
+  move.b d0,3(a7)
+  clr.l  -(a7)
+  move.b d7,3(a7)
+  jsr    _ANTIC_PutByte
+  addq.l #8,a7
+  rts
+PutSCart:
+  clr.l  -(a7)
+  move.b d0,3(a7)
+  move.w d7,-(a7)
+  clr.w  -(a7)
+  jsr    _SuperCart_PutByte
+  addq.l #8,a7
+  rts
 
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-;~~~~~ WAKE UP PROCESSOR IN DEBUG MODE ~
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+EXE_GETBYTE macro
+; move.l d7,-(a7)
+  jsr    _Local_GetByte
+; addq.l #4,a7 ;put stack onto right place
+  endm
 
+EXE_PUTBYTE macro
+; clr.l  -(a7)
+; move.b \1,3(a7) ;byte
+  move.b \1,d0
+  jsr    _Local_PutByte
+; addq.l #8,a7
+  endm
 
-	ifd DEBUG
-START:      bsr _CPU_INIT ;make from OPCODE TABLE & MODE TABLE -  OPMODE TABLE
-	clr.l -(a7)
-	move.w #32,-(a7)
-	trap #1
-	addq.l #6,a7
-	move.l d0,-(a7)
-	lea _memory,memory_pointer
-	clr.b IRQ ;no interrupt
-	move.b #$20,regP ;unused bit is always 1
-	move.b #$ff,regS ;set up stack to the star
-	move.w (memory_pointer,$fffc.l),d7 ;start addres
-	;move.w #$0020,d7
-	LoHi
-	move.w d7,regPC
-	UPDATE_LOCAL_REGS
-	clr.l d0
-	;move.l #3560,d0
-	;lea TEST,a0
-	move.l $4ba,-(a7)
-ANOTHER:
-	move.l #27360,-(a7)  ;one screen
-	bsr _GO
-	addq.l #4,a7
-	;move.l (a7)+,a0
-	;move.l d7,(a0)+
-	sub.l #1,AAA
-	bne.s ANOTHER
-	move.l $4ba.l,d7
-	sub.l (a7)+,d7
-	move.l d7,$200.w
-	move.w #32,-(a7)
-	trap #1
-	addq.l #6,a7
-	illegal
-	clr.w -(a7)
-	trap #1
-	endc
+EXE_PUTBYTE_d0 macro
+; clr.l  -(a7)
+; move.b d0,3(a7) ;byte
+  jsr    _Local_PutByte
+; addq.l #8,a7
+  endm
 
-	section data
-AAA:	dc.l 50
-	section text
-
-
+_GenerateIRQ:
+  move.b #1,_IRQ
+  clr.l  -(a7)
+  bsr    _GO
+  addq.l #4,a7
+  rts
 
 _CPU_INIT:
-	movem.l a2/a3/d2,-(a7)  ;copy opcyc table
-	lea OPMODE_TABLE,a1
-	lea MODE_TABLE2,a0 ;1st case of jump (mode)
-	lea MODE_TABLE1,a3 ;2nd case of jump (jump after mode (in put case it is instruction, if get then we will call get byte routine)
-	move.w #255,d0
-COPY
-
-	move.l (a0)+,(a1)+ ;base jump (instruction or mode)
-	move.l (a3)+,d2    ;jump
-	cmp.l #opcode_81,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_84,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_85,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_86,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_8c,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_8d,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_8e,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_91,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_94,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_95,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_96,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_99,d2
-	beq.s WRITE_WRITE
-	cmp.l #opcode_9d,d2
-	beq.s WRITE_WRITE
-	move.l d2,(a1)+ ;write jump down
-	bra.s NEXT
-WRITE_WRITE:
-	bset #31,d2
-	move.l d2,(a1)+ ;write jump down
-
-NEXT:	dbf d0,COPY
-	movem.l (a7)+,a2/a3/d2
-	lea OPMODE_TABLE,a0
-	
-	rts
-
+  rts
 
 ;these are bit in MC68000 CCR register
-NB68	equ 3
-EB68	equ 4 ;used as a carry in 6502 emulation
-ZB68	equ 2
-OB68	equ 1
-CB68	equ 0
+NB68  equ 3
+EB68  equ 4 ;used as a carry in 6502 emulation
+ZB68  equ 2
+OB68  equ 1
+CB68  equ 0
 
-N_FLAG equ $80    ;tested in ZN flag in the same way as usual on 6502
+N_FLAG equ $80
+N_FLAGN equ $7f
 N_FLAGB equ 7
 V_FLAG equ $40
+V_FLAGN equ $bf
 V_FLAGB equ 6
 G_FLAG equ $20
 G_FLAGB equ $5
 B_FLAG equ $10
 B_FLAGB equ 4
 D_FLAG equ $08
+D_FLAGN equ $f7
 D_FLAGB equ 3
 I_FLAG equ $04
+I_FLAGN equ $fb
 I_FLAGB equ 2
 Z_FLAG equ $02
+Z_FLAGN equ $fd
 Z_FLAGB equ 1
 C_FLAG equ $01
+C_FLAGN equ $fe
 C_FLAGB equ 0
+VCZN_FLAGS equ $c3
 
-;void CPU_GetStatus (void) - assembler (CPU_ST.S)
-;void CPU_PutStatus (void) - assembler (CPU_ST.S)
-;void CPU_Reset (void) - C (CPU_ST.C)
-;void SetRAM (int addr1, int addr2) - C (CPU_ST.C)
-;void SetROM (int addr1, int addr2) - C (CPU_ST.C)
-;void SetHARDWARE (int addr1, int addr2) - C (CPU_ST.C)
-;void NMI (void) - C (CPU_ST.C)
-;void GO (int cycles); - assembler (CPU_ST.S)
+SetI  macro
+  ori.b  #I_FLAG,_regP
+  endm
 
+ClrI  macro
+  andi.b #I_FLAGN,_regP
+  endm
 
+SetB  macro
+  ori.b  #B_FLAG,_regP
+  endm
 
-SetI	macro
-	bset #I_FLAGB,_regP
-	endm
+ClrD  macro
+  andi.b #D_FLAGN,_regP
+  endm
 
-ClrI	macro
-	bclr #I_FLAGB,_regP
-	endm
+SetD  macro
+  ori.b  #D_FLAG,_regP
+  endm
 
-SetB	macro
-	bset #B_FLAGB,_regP
-	endm
+;static UBYTE  N;  /* bit7 zero (0) or bit 7 non-zero (1) */
+;static UBYTE  Z;  /* zero (0) or non-zero (1) */
+;static UBYTE  V;
+;static UBYTE  C;  /* zero (0) or one(1) */
 
-ClrD	macro
-	bclr #D_FLAGB,_regP
-	endm
-
-SetD	macro
-	bset #D_FLAGB,_regP
-	endm
-
-;#define SetN regP|=N_FLAG
-;#define ClrN regP&=(~N_FLAG)
-;#define SetV regP|=V_FLAG
-;#define ClrV regP&=(~V_FLAG)
-;#define SetB regP|=B_FLAG
-;#define ClrB regP&=(~B_FLAG)
-;#define SetD regP|=D_FLAG
-;#define ClrD regP&=(~D_FLAG)
-;#define SetI regP|=I_FLAG
-;#define ClrI regP&=(~I_FLAG)
-;#define SetZ regP|=Z_FLAG
-;#define ClrZ regP&=(~Z_FLAG)
-;#define SetC regP|=C_FLAG
-;#define ClrC regP&=(~C_FLAG)
-
-;extern UBYTE memory[65536];
-
-;extern int IRQ;
-
-;#endif
-
-
-goto 	macro
-	bra \1
-	endm
-
-
-;static char *rcsid = "$Id: cpu_m68k.s,v 1.2 1998/02/21 15:02:46 david Exp $";
-
-
-
-;static UBYTE	N;	/* bit7 zero (0) or bit 7 non-zero (1) */
-;static UBYTE	Z;	/* zero (0) or non-zero (1) */
-;static UBYTE	V;
-;static UBYTE	C;	/* zero (0) or one(1) */
-
-RAM 	equ 0
-ROM 	equ 1
-HARDWARE    equ 2
-
+isRAM      equ 0
+isROM      equ 1
+isHARDWARE equ 2
 
 ;/*
 ; * The following array is used for 6502 instruction profiling
 ; */
 
-;int count[256];
+;int instruction_count[256];
+
 ;UBYTE memory[65536];
-
-;int IRQ;
-
-;static UBYTE attrib[65536];
-
-
-;#define	GetByte(addr)	((attrib[addr] == HARDWARE) ? Atari800_GetByte(addr) : memory[addr])
-;#define	PutByte(addr,byte)	if (attrib[addr] == RAM) memory[addr] = byte; else if (attrib[addr] == HARDWARE) if (Atari800_PutByte(addr,byte)) break;
+;UBYTE attrib[65536];
 
 ;/*
-;	===============================================================
-;	Z flag: This actually contains the result of an operation which
-;		would modify the Z flag. The value is tested for
-;		equality by the BEQ and BNE instruction.
-;	===============================================================
+;  ===============================================================
+;  Z flag: This actually contains the result of an operation which
+;    would modify the Z flag. The value is tested for
+;    equality by the BEQ and BNE instruction.
+;  ===============================================================
 ;*/
 
 ; Bit    : 76543210
@@ -348,581 +389,645 @@ HARDWARE    equ 2
 ; _RegP  : NV*BDIZC
 
 ConvertSTATUS_RegP macro
-	move.b _regP,d6 ;put flag VBDI into d6
-	bset #C_FLAGB,d6 ;put there carry flag
-	btst #EB68,CCR6502
-	bne.s .SETC\@
-	bclr #C_FLAGB,d6
-.SETC\@	bset #N_FLAGB,d6 ;put there Negative flag
-	tst.b NFLAG
-	bmi.s .SETN\@
-	bclr #N_FLAGB,d6
-.SETN\@	bset #Z_FLAGB,d6 ;put there zero flag
-	tst.b ZFLAG
-	beq.s .SETZ\@   ;is there beware! reverse compare is ok
-	bclr #Z_FLAGB,d6
-.SETZ\@	bclr #V_FLAGB,d6
-	swap ZFLAG
-	tst.b ZFLAG
-	beq.s .UNSETV\@
-	bset #V_FLAGB,d6
-.UNSETV\@	
-	endm
+  move.b _regP,\1 ;put flag BDI into d0
+  ori.b  #VCZN_FLAGS,\1 ; set overflow, carry, zero & negative flag
+  btst   #EB68,CCR6502
+  bne.s  .SETC\@
+  andi.b #C_FLAGN,\1
+.SETC\@
+  tst.w  NFLAG
+  bmi.s  .SETN\@
+  andi.b #N_FLAGN,\1
+.SETN\@
+  tst.b  ZFLAG
+  beq.s  .SETZ\@   ; beware! reverse compare is ok
+  andi.b #Z_FLAGN,\1
+.SETZ\@
+  btst   #16,VFLAG
+  bne.s  .SETV\@
+  andi.b #V_FLAGN,\1
+.SETV\@
+  endm
 
 ConvertRegP_STATUS macro
-	move.b _regP,d6
-	moveq #-1,CCR6502
-	btst #C_FLAGB,d6
-	bne.s .SETC\@
-	clr.w CCR6502
-.SETC\@	clr.b ZFLAG
-	btst #V_FLAGB,d6
-	beq.s .SETV\@
-	not.b ZFLAG
-.SETV\@	swap ZFLAG
-	clr.b ZFLAG
-	btst #Z_FLAGB,d6
-	bne.s .SETZ\@ ;reverse is ok
-	not.b ZFLAG
-.SETZ\@	clr.b NFLAG
-	btst #N_FLAGB,d6
-	beq.s .SETN\@
-	not.b NFLAG
-.SETN\@
-	endm
-
+  move.b _regP,\1
+  clr.l  CCR6502
+  btst   #V_FLAGB,\1
+  beq.s  .SETV\@
+  bset   #16,VFLAG
+.SETV\@
+  btst   #C_FLAGB,\1
+  beq.s  .SETC\@
+  not.w  CCR6502
+.SETC\@
+  move.b \1,NFLAG
+  lsl.w  #8,NFLAG  ; sets NFLAG and clears ZFLAG
+  btst   #Z_FLAGB,\1
+  bne.s  .SETZ\@ ;reverse is ok
+  not.b  ZFLAG
+.SETZ\@
+  endm
 
 CPU_GetStatus macro
-	ConvertSTATUS_RegP
-	move.b d6,_regP
-	endm
+  ConvertSTATUS_RegP \1
+  move.b \1,_regP
+  endm
 
 CPU_PutStatus macro
-	ConvertRegP_STATUS
-	endm
+  ConvertRegP_STATUS \1
+  endm
 
+PHP  macro
+  clr.l  \2
+  move.b _regS,\2
+  ConvertSTATUS_RegP \1
+  move.b \1,(stack_pointer,\2.l)
+  subq.b #1,\2
+  move.b \2,_regS
+  endm
 
-PHP	macro
-	ConvertSTATUS_RegP
-	move.b d6,-(stack_pointer)
-	endm
+PLP  macro
+  clr.l  \2
+  move.b _regS,\2
+  addq.b #1,\2
+  move.b (stack_pointer,\2.l),_regP
+  ConvertRegP_STATUS \1
+  move.b \2,_regS
+  endm
 
-PLP	macro
-	move.b (stack_pointer)+,_regP
-	ConvertRegP_STATUS
-	endm
+PHB  macro
+  clr.l  \2
+  move.b _regS,\2
+  move.b \1,(stack_pointer,\2.l)
+  subq.b #1,\2
+  move.b \2,_regS
+  endm
 
+PLB  macro
+  clr.l  \2
+  move.b _regS,\2
+  addq.b #1,\2
+  move.b (stack_pointer,\2.l),\1
+  move.b \2,_regS
+  endm
 
-;#define AND(t_data) data = t_data; Z = N = A &= data;
-;#define CMP(t_data) data = t_data; Z = N = A - data; C = (A >= data)
-;#define CPX(t_data) data = t_data; Z = N = X - data; C = (X >= data);
-;#define CPY(t_data) data = t_data; Z = N = Y - data; C = (Y >= data);
-;#define EOR(t_data) data = t_data; Z = N = A ^= data;
-;#define LDA(data) Z = N = A = data;
-;#define LDX(data) Z = N = X = data;
-;#define LDY(data) Z = N = Y = data;
-;#define ORA(t_data) data = t_data; Z = N = A |= data
+PHW  macro
+  clr.l  \2
+  move.b _regS,\2
+  subq.b #1,\2     ; wrong way around
+  move.b \1,(stack_pointer,\2.l)
+  addq.b #1,\2
+  ror.w  #8,\1
+  move.b \1,(stack_pointer,\2.l)
+  subq.b #2,\2
+  move.b \2,_regS
+  endm
 
-;#define PHP data =  (N & 0x80); \
-;            data |= V ? 0x40 : 0; \
-;            data |= (regP & 0x3c); \
-;	    data |= (Z == 0) ? 0x02 : 0; \
-;	    data |= C; \
-;	    memory[0x0100 + S--] = data;
-;
-;#define PLP data = memory[0x0100 + ++S]; \
-;	    N = (data & 0x80); \
-;	    V = (data & 0x40) ? 1 : 0; \
-;	    Z = (data & 0x02) ? 0 : 1; \
-;	    C = (data & 0x01); \
-;            regP = (data & 0x3c) | 0x20;
-;
+PLW  macro
+  clr.l  \2
+  move.b _regS,\2
+  addq.b #2,\2     ; wrong way around
+  move.b (stack_pointer,\2.l),\1
+  asl.w  #8,\1
+  subq.b #1,\2
+  or.b   (stack_pointer,\2.l),\1
+  addq.b #1,\2
+  move.b \2,_regS
+  endm
 
+PHW_AND_P macro
+  clr.l  \2
+  move.b _regS,\2
+  subq.b #1,\2     ; wrong way around
+  move.b \1,(stack_pointer,\2.l)
+  addq.b #1,\2
+  ror.w  #8,\1
+  move.b \1,(stack_pointer,\2.l)
+  subq.b #2,\2
+  ConvertSTATUS_RegP \1
+  move.b \1,(stack_pointer,\2.l)
+  subq.b #1,\2
+  move.b \2,_regS
+  endm
+
+PLP_AND_W macro
+  clr.l  \2
+  move.b _regS,\2
+  addq.b #1,\2
+  move.b (stack_pointer,\2.l),_regP
+  ConvertRegP_STATUS \1
+  addq.b #2,\2     ; wrong way around
+  move.b (stack_pointer,\2.l),\1
+  asl.w  #8,\1
+  subq.b #1,\2
+  or.b   (stack_pointer,\2.l),\1
+  addq.b #1,\2
+  move.b \2,_regS
+  endm
+
+CPUCHECKIRQ macro
+  tst.b  _IRQ
+  beq.w  NEXTCHANGE_WITHOUT
+  move.b _regP,d0
+  andi.b #I_FLAG,d0
+  bne.w  NEXTCHANGE_WITHOUT
+  move.l PC6502,d7
+  sub.l  memory_pointer,d7
+  PHW_AND_P d7,d0
+  SetI
+  move.w (memory_pointer,$fffe.l),d7
+  LoHi
+  move.l d7,PC6502
+  add.l  memory_pointer,PC6502
+  clr.b  _IRQ
+  bra.w  NEXTCHANGE_WITHOUT
+  endm
 
 CPUGET:
 _CPUGET:
-	ConvertSTATUS_RegP
-	move.b d6,_regP
-	rts
+  CPU_GetStatus d0
+  rts
 
-
+CPUPUT:
+_CPUPUT:
+  CPU_PutStatus d0
+  rts
 
 NMI:
 _NMI:
-	movem.l d2-d7/a2-a6,-(a7)
-	lea _memory,memory_pointer
-	move.w _regPC,d6 ;we will put adress on stack of 6502
-	ror.w #8,d6
-            clr.l d7	    ;find stack in memory
-	move.b _regS,d7
-            move.l d7,stack_pointer
-	add.l memory_pointer,stack_pointer
-	lea $101(stack_pointer),stack_pointer
-	move.w d6,-(stack_pointer) ;put back adress onto stack
-	move.b _regP,-(stack_pointer) ;put P onto stack YEAAAH!
-	SetI
-
-	;put regPC & Stack pointer adress on its place
-	move.w (memory_pointer,$fffa.l),d7
-	LoHi
-	move.w d7,_regPC
-	lea -$101(stack_pointer),stack_pointer
-	move.l stack_pointer,d7 ;put stack
-	sub.l memory_pointer,d7
-	move.b d7,_regS
-	movem.l (a7)+,d2-d7/a2-a6
-	rts
-
-  	;UBYTE S = regS;
-  	;UBYTE data;
-
-  	;memory[0x0100 + S--] = regPC >> 8;
-  	;memory[0x0100 + S--] = regPC & 0xff;
-  	;PHP;
-  	;SetI;
-  	;regPC = (memory[0xfffb] << 8) | memory[0xfffa];
-  	;regS = S;
-
-
-
-;/*
-;	==============================================================
-;	The first switch statement is used to determine the addressing
-;	mode, while the second switch implements the opcode. When I
-;	have more confidence that these are working correctly they
-;	will be combined into a single switch statement. At the
-;	moment changes can be made very easily.
-;	==============================================================
-;*/
-
-	section data
-_cycles:
-	dc.w 7, 2, 0, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
-  	dc.w 6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
-
-  	dc.w 6, 6, 0, 8, 3, 3, 7, 5, 3, 2, 2, 2, 3, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 0, 7
-  	dc.w 6, 6, 0, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
-
-  	dc.w 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4
-  	dc.w 2, 6, 0, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5
-  	dc.w 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4
-  	dc.w 2, 5, 0, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4
-
-  	dc.w 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
-  	dc.w 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6
-  	dc.w 2, 5, 0, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
-
-
-
-MODE_TABLE1:
-;when we will call instruction straight, this table is used
-;when we want to get byte, this table contains addr to GET BYTE routine
-;when we want to put byte, this table contains addr to own command
-;when we want to put and get byte (rol, ror, inc etc.), this routine is the same as in the case GET BYTE
-;if the instruction take byte straight from command, this routine contains addr to own comman as well
-
-
-	dc.l opcode_00, opcode_01, opcode_02, opcode_03
-	;     brk         ora        illegal     illegal
-
-	dc.l opcode_04,opcode_05,opcode_06, opcode_07
-	;     nop         ora          asl        nop
-
-	dc.l opcode_08,opcode_09,opcode_0a,opcode_0b
-	;     php         ora        asla       illegal
-
-	dc.l opcode_0c,opcode_0d,opcode_0e,opcode_0f
-	;     nop 3       ora          asl      illegal
-
-	dc.l opcode_10,opcode_11,  opcode_12, opcode_13
-	;     bpl         ora        illegal    illegal
-
-	dc.l opcode_14,opcode_15, opcode_16,  opcode_17
-	;     nop         ora         asl       illegal
-
-	dc.l opcode_18,opcode_19, opcode_1a,   opcode_1b
-	;     clc         ora         nop       illegal
-
-      	dc.l opcode_1c,opcode_1d,  opcode_1e, opcode_1f
-	;     nop         ora        asl        illegal
-
-      	dc.l opcode_20,opcode_21,opcode_22,  opcode_23
-	;     jsr         and       illegal     illegal
-
-      	dc.l opcode_24,opcode_25,opcode_26,opcode_27
-	;     bit         and        rol        illegal
-
-      	dc.l opcode_28, opcode_29,    opcode_2a,  opcode_2b
-	;     plp        and         rolA      illegal
-
-      	dc.l opcode_2c, opcode_2d, opcode_2e, opcode_2f
-	;      bit       and         rol       illegal
-
-      	dc.l opcode_30, opcode_31, opcode_32, opcode_33
-	;      bmi       and        illegal     illegal
-
-      	dc.l opcode_34, opcode_35, opcode_36, opcode_37
-	;     nop        and         rol       illegal
-
-      	dc.l opcode_38, opcode_39, opcode_3a, opcode_3b
-	;      sec        and        nop        illegal
-
-      	dc.l opcode_3c, opcode_3d, opcode_3e, opcode_3f
-	;      nop         and       rol        illegal
-
-      	dc.l opcode_40, opcode_41, opcode_42, opcode_43
-            ;      rti        eor        illegal   illegal
-
-      	dc.l opcode_44, opcode_45, opcode_46, opcode_47
-	;      nop        eor        lsr       illegal
-
-      	dc.l opcode_48, opcode_49, opcode_4a, opcode_4b
-      	;      pha        eor        lsrA       illegal
-
-      	dc.l opcode_4c, opcode_4d, opcode_4e, opcode_4f
-	;      jmp        eor        lsr       illegal
-
-      	dc.l opcode_50, opcode_51,  opcode_52, opcode_53
-	;      bvc       eor        illegal     illegal
-
-      	dc.l opcode_54, opcode_55, opcode_56, opcode_57
-	;      nop        eor      lsr       illegal
-
-      	dc.l opcode_58, opcode_59, opcode_5a, opcode_5b
-	;      cli        eor      nop         illegal
-
-      	dc.l opcode_5c, opcode_5d, opcode_5e, opcode_5f
-	;      nop        eor        lsr        illegal
-
-      	dc.l opcode_60, opcode_61, opcode_62, opcode_63
-	;      rts        adc        illegal    illegal
-
-      	dc.l opcode_64, opcode_65, opcode_66, opcode_67
-	;      nop        adc        ror        illegal
-
-      	dc.l opcode_68, opcode_69,opcode_6a,opcode_6b
-	;      pla       adc         rorA       illegal
-
-      	dc.l opcode_6c, opcode_6d, opcode_6e, opcode_6f
-	;    jmp (abcd)   adc      ror          illegal
-
-      	dc.l opcode_70, opcode_71, opcode_72, opcode_73
-	;      bvs        adc      illegal    illegal
-
-      	dc.l opcode_74, opcode_75, opcode_76, opcode_77
-	;      nop         adc       ror       illegal
-
-      	dc.l opcode_78, opcode_79, opcode_7a, opcode_7b
-	;     SEI          adc        illegal   illegal
-
-      	dc.l opcode_7c, opcode_7d, opcode_7e, opcode_7f
-	;     nop          adc       ror        illegal
-
-      	dc.l opcode_80, opcode_81, opcode_82, opcode_83
-	;     nop          sta       nop        illegal
-
-      	dc.l opcode_84, opcode_85, opcode_86,opcode_87
-	;     sty	       sta       stx        illegal
-
-      	dc.l opcode_88, opcode_89, opcode_8a, opcode_8b
-	;     dey          nop        txa       illegal
-
-      	dc.l opcode_8c, opcode_8d, opcode_8e, opcode_8f
-	;     sty	       sta       stx        illegal
-
-      	dc.l opcode_90, opcode_91, opcode_92, opcode_93
-	;      bcc         sta       illegal    illegal
-
-      	dc.l opcode_94, opcode_95, opcode_96, opcode_97
-	;      sty       sta         stx        illegal
-
-      	dc.l opcode_98, opcode_99, opcode_9a, opcode_9b
-	;     tya        sta         txs         illegal
-
-      	dc.l opcode_9c, opcode_9d, opcode_9e, opcode_9f
-	;     illegal     sta         ilegal     illegal
-
-      	dc.l opcode_a0,    opcode_a1, opcode_a2, opcode_a3
-	;      ldy         lda        ldx        lax
-
-      	dc.l opcode_a4, opcode_a5, opcode_a6, opcode_a7
-	;     ldy        lda        ldx         lax
-
-      	dc.l opcode_a8, opcode_a9,     opcode_aa, DIRECT
- 	;     tay         lda         tax          oal
-
-      	dc.l opcode_ac, opcode_ad, opcode_ae, opcode_af
-	;      ldy         lda        ldx        lax
-
-      	dc.l opcode_b0, opcode_b1, opcode_b2, opcode_b3
-	;      bcs       lda         illegal    lax
-
-      	dc.l opcode_b4, opcode_b5, opcode_b6, opcode_b7
-	;      ldy        lda         ldx       lax
-
-      	dc.l opcode_b8, opcode_b9, opcode_ba, opcode_bb
-	;      clv         lda        tsx        illegal
-
-      	dc.l opcode_bc, opcode_bd, opcode_be, opcode_bf
-	;       ldy        lda         ldx           lax
-
-      	dc.l opcode_c0, opcode_c1, opcode_c2, opcode_c3
-	;    cpy          cmp         nop       dcm
-
-      	dc.l opcode_c4, opcode_c5, opcode_c6, opcode_c7
-	;     cpy         cmp       dec         illegal
-
-      	dc.l opcode_c8, opcode_c9,  opcode_ca, opcode_cb
-	;      iny       cmp       dex         illegal
-
-      	dc.l opcode_cc, opcode_cd, opcode_ce, opcode_cf
-	;     cpy        cmp        dec        illegal
-
-      	dc.l opcode_d0, opcode_d1, opcode_d2, opcode_d3
-	;      bne       cmp         escrts      illegal
-
-      	dc.l opcode_d4, opcode_d5, opcode_d6, opcode_d7
-	;     nop         cmp      dec         illegal
-
-      	dc.l opcode_d8, opcode_d9, opcode_da, opcode_db
-	;     cld         cmp          nop     illegal
-
-      	dc.l opcode_dc, opcode_dd, opcode_de, opcode_df
-	;      nop         cmp        dec       illegal
-
-      	dc.l opcode_e0, opcode_e1, opcode_e2, opcode_e3
- 	;     cpx         sbc        nop         nop
-
-      	dc.l opcode_e4, opcode_e5, opcode_e6, opcode_e7
-	;     cpx        sbc          inc        illegal
-
-      	dc.l opcode_e8, opcode_e9,opcode_ea,  opcode_eb
-	;      inx       sbc           nop      illegal
-
-      	dc.l opcode_ec, opcode_ed, opcode_ee, opcode_ef
-	;       cpx      sbc          inc         illegal
-
-	dc.l opcode_f0, opcode_f1, opcode_f2, opcode_f3
-	;     beq          sbc        esc#ab     illegal
-
-      	dc.l opcode_f4, opcode_f5, opcode_f6, opcode_f7
-	;     nop          sbc        inc       illegal
-
-      	dc.l opcode_f8, opcode_f9, opcode_fa, opcode_fb
-	;     sed         sbc         nop         illegal
-
-      	dc.l opcode_fc, opcode_fd, opcode_fe, opcode_ff
-	;     nop         sbc          inc        esc#ab
-
-
-
-MODE_TABLE2:
-	dc.l opcode_00, INDIRECT_X, opcode_02, INDIRECT_X
-	;     brk         ora        illegal     aso
-
-	dc.l opcode_04,  ZPAGE,      ZPAGE,      ZPAGE
-	;     nop         ora          asl       aso
-
-	dc.l opcode_08,  DIRECT,   opcode_0a,   DIRECT
-	;     php         ora          asla      aso
-
-	dc.l opcode_0c, ABSOLUTE,   ABSOLUTE,  ABSOLUTE
-	;     nop 3       ora          asl      aso
-
-	dc.l opcode_10, INDIRECT_Y, opcode_12, INDIRECT_Y
-	;     bpl         ora        illegal     aso
-
-	dc.l opcode_14,   ZPAGE_X,   ZPAGE_X,  ZPAGE_X
-	;     nop         ora         asl       aso
-
-	dc.l opcode_18, ABSOLUTE_Y, opcode_1a, ABSOLUTE_Y
-	;     clc         ora         nop       aso
-
-      	dc.l opcode_1c, ABSOLUTE_X,ABSOLUTE_X, ABSOLUTE_X
-	;     nop         ora        asl        aso
-
-      	dc.l opcode_20, INDIRECT_X,opcode_22,  INDIRECT_X
-	;     jsr         and       illegal     rla
-
-      	dc.l ZPAGE,      ZPAGE,    ZPAGE,      ZPAGE
-	;     bit         and        rol         rla
-
-      	dc.l opcode_28, DIRECT,    opcode_2a,  DIRECT
-	;     plp        and         rolA       rla
-
-       	dc.l ABSOLUTE, ABSOLUTE,   ABSOLUTE,   ABSOLUTE
-	;      bit       and         rol        rla
-
-      	dc.l opcode_30, INDIRECT_Y, opcode_32, INDIRECT_Y
-	;      bmi       and        illegal     rla
-
-      	dc.l opcode_34, ZPAGE_X,    ZPAGE_X,   ZPAGE_X
-	;     nop        and         rol        rla
-
-      	dc.l opcode_38, ABSOLUTE_Y, opcode_3a, ABSOLUTE_Y
-	;      sec        and        nop        rla
-
-      	dc.l opcode_3c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
-	;      nop         and       rol         rla
-
-      	dc.l opcode_40, INDIRECT_X, opcode_42, INDIRECT_X
-            ;      rti        eor        illegal    lse
-
-      	dc.l opcode_44,  ZPAGE,    ZPAGE,      ZPAGE
-	;      nop        eor        lsr       lse
-
-      	dc.l opcode_48, DIRECT,     opcode_4a, DIRECT
-      	;      pha        eor        lsrA       alr
-
-	dc.l opcode_4c, ABSOLUTE, ABSOLUTE,    ABSOLUTE
-	;      jmp        eor        lsr        lse
-
-      	dc.l opcode_50, INDIRECT_Y,  opcode_52, INDIRECT_Y
-	;      bvc       eor        illegal     lse
-
-      	dc.l opcode_54, ZPAGE_X,  ZPAGE_X,  ZPAGE_X
-	;      nop        eor      lsr        lse
-
-      	dc.l opcode_58, ABSOLUTE_Y, opcode_5a, ABSOLUTE_Y
-	;      cli        eor      nop         lse
-
-      	dc.l opcode_5c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
-	;      nop        eor        lsr         lse
-
-      	dc.l opcode_60, INDIRECT_X, opcode_62, INDIRECT_X
-	;      rts        adc        illegal     rra
-
-      	dc.l opcode_64, ZPAGE,      ZPAGE,     ZPAGE
-	;      nop        adc        ror         rra
-
-      	dc.l opcode_68, DIRECT,   opcode_6a,  DIRECT
-	;      pla       adc         rorA      arr
-
-      	dc.l opcode_6c, ABSOLUTE, ABSOLUTE,   ABSOLUTE
-	;    jmp (abcd)   adc      ror          rra
-
-      	dc.l opcode_70, INDIRECT_Y, opcode_72, INDIRECT_Y
-	;      bvs        adc      illegal     rra
-
-      	dc.l opcode_74,  ZPAGE_X,   ZPAGE_X,   ZPAGE_X
-	;      nop         adc       ror       rra
-
-      	dc.l opcode_78, ABSOLUTE_Y, opcode_7a, ABSOLUTE_Y
-	;     SEI          adc        illegal   rra
-
-      	dc.l opcode_7c, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
-	;     nop          adc       ror        rra
-
-      	dc.l opcode_80, INDIRECT_X, opcode_82, INDIRECT_X
-	;     nop          sta       nop        axs
-
-      	dc.l ZPAGE,     ZPAGE,      ZPAGE,     ZPAGE
-	;     sty	       sta       stx        axs
-
-      	dc.l opcode_88, opcode_89, opcode_8a, DIRECT
-	;     dey          nop        txa       xaa
-
-      	dc.l ABSOLUTE,  ABSOLUTE,  ABSOLUTE, ABSOLUTE
-	;     sty	       sta       stx        axs
-
-      	dc.l opcode_90, INDIRECT_Y, opcode_92, INDIRECT_Y
-	;      bcc         sta       illegal    axs
-
-      	dc.l ZPAGE_X,   ZPAGE_X,   ZPAGE_Y, ZPAGE_Y
-	;      sty       sta         stx        axs
-
-
-      	dc.l opcode_98, ABSOLUTE_Y, opcode_9a, ABSOLUTE_Y
-	;     tya        sta         txs         xaa
-
-      	dc.l opcode_9c, ABSOLUTE_X, ABSOLUTE, ABSOLUTE
-	;     illegal     sta        mkx     mka
-
-      	dc.l DIRECT,    INDIRECT_X, DIRECT,    INDIRECT_X
-	;      ldy         lda        ldx        lax
-
-      	dc.l ZPAGE,     ZPAGE,     ZPAGE,      ZPAGE
-	;     ldy        lda        ldx         lax
-
-      	dc.l opcode_a8, DIRECT,     opcode_aa, opcode_ab
- 	;     tay         lda         tax      illegal
-
-      	dc.l ABSOLUTE, ABSOLUTE,   ABSOLUTE,   ABSOLUTE
-	;      ldy         lda        ldx        lax
-
-      	dc.l opcode_b0, INDIRECT_Y, opcode_b2, INDIRECT_Y
-	;      bcs       lda         illegal    lax
-
-      	dc.l ZPAGE_X,  ZPAGE_X,    ZPAGE_Y,    ZPAGE_Y
-	;      ldy        lda         ldx       lax
-
-      	dc.l opcode_b8, ABSOLUTE_Y, opcode_ba, ABSOLUTE_Y
-	;      clv         lda        tsx        axa
-
-      	dc.l ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_Y,  ABSOLUTE_Y
-	;       ldy        lda         ldx           lax
-
-      	dc.l DIRECT,    INDIRECT_X, opcode_c2, INDIRECT_X
-	;    cpy          cmp         nop        dcm
-
-      	dc.l ZPAGE,       ZPAGE,    ZPAGE,     ZPAGE
-	;     cpy         cmp       dec         dcm
-
-      	dc.l opcode_c8, DIRECT,  opcode_ca,    DIRECT
-	;      iny       cmp       dex          sax
-
-      	dc.l ABSOLUTE,  ABSOLUTE, ABSOLUTE, ABSOLUTE
-	;     cpy        cmp        dec       dcm
-
-      	dc.l opcode_d0, INDIRECT_Y, opcode_d2, INDIRECT_Y
-	;      bne       cmp         escrts      dcm
-
-      	dc.l opcode_d4, ZPAGE_X,    ZPAGE_X,   ZPAGE_X
-	;     nop         cmp      dec          dcm
-
-      	dc.l opcode_d8, ABSOLUTE_Y, opcode_da, ABSOLUTE_Y
-	;     cld         cmp          nop      dcm
-
-      	dc.l opcode_dc, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
-	;      nop         cmp        dec        dcm
-
-      	dc.l DIRECT,    INDIRECT_X, opcode_e2, INDIRECT_X
- 	;     cpx         sbc        nop         ins
-
-      	dc.l ZPAGE,    ZPAGE,       ZPAGE,       ZPAGE
-	;     cpx        sbc          inc         ins
-
-      	dc.l opcode_e8, DIRECT,     opcode_ea, DIRECT
-	;      inx       sbc           nop      sbc
-
-      	dc.l ABSOLUTE,  ABSOLUTE,   ABSOLUTE, ABSOLUTE
-	;       cpx      sbc          inc       ins
-
-	dc.l opcode_f0, INDIRECT_Y, opcode_f2, INDIRECT_Y
-	;     beq          sbc        esc#ab     illegal
-
-      	dc.l opcode_f4, ZPAGE_X,     ZPAGE_X,  ZPAGE_X
-	;     nop          sbc        inc        ins
-
-      	dc.l opcode_f8, ABSOLUTE_Y, opcode_fa, ABSOLUTE_Y
-	;     sed         sbc         nop        ins
-
-      	dc.l opcode_fc, ABSOLUTE_X, ABSOLUTE_X, ABSOLUTE_X
-	;     nop         sbc          inc        ins
-
-
-
-	section text
-
-FIELDS_POINTERS:	ds.l 3
+  lea    _memory,a0
+  lea    $100(a0),a1
+  clr.l  d1
+  move.b _regS,d1
+  move.b _regPC,(a1,d1)
+  subq.b #1,d1
+  move.b _regPC+1,(a1,d1)
+  subq.b #1,d1
+  move.b _regP,(a1,d1) ;put P onto stack
+  subq.b #1,d1
+  move.b d1,_regS
+  SetI
+  ;put regPC & Stack pointer adress on its place
+  move.w (a0,$fffa.l),d1
+  ror.w #8,d1
+  move.w d1,_regPC
+  rts
+
+  section data
+_cycles:   ; dc.l for the world outside, equ for internal use
+cy_CIM equ 2
+cy_NOP equ 2
+cy_SKB equ 3
+cy_SKW equ 4
+cy_Bcc equ 2
+cy_Bcc1 equ 3
+cy_Bcc2 equ 4
+cy_00 equ 7
+cy_01 equ 6
+cy_03 equ 8
+cy_05 equ 3
+cy_06 equ 5
+cy_07 equ 5
+cy_08 equ 3
+cy_09 equ 2
+cy_0a equ 2
+cy_0d equ 4
+cy_0e equ 6
+cy_0f equ 6
+cy_11 equ 5
+cy_13 equ 8
+cy_14 equ 4
+cy_15 equ 4
+cy_16 equ 6
+cy_17 equ 6
+cy_18 equ 2
+cy_19 equ 4
+cy_1b equ 7
+cy_1d equ 4
+cy_1e equ 7
+cy_1f equ 7
+cy_20 equ 6
+cy_21 equ 6
+cy_23 equ 8
+cy_24 equ 3
+cy_25 equ 3
+cy_26 equ 5
+cy_27 equ 5
+cy_28 equ 4
+cy_29 equ 2
+cy_2a equ 2
+cy_2c equ 4
+cy_2d equ 4
+cy_2e equ 6
+cy_2f equ 6
+cy_31 equ 5
+cy_33 equ 8
+cy_34 equ 4
+cy_35 equ 4
+cy_36 equ 6
+cy_37 equ 6
+cy_38 equ 2
+cy_39 equ 4
+cy_3b equ 7
+cy_3d equ 4
+cy_3e equ 7
+cy_3f equ 7
+cy_40 equ 6
+cy_41 equ 6
+cy_43 equ 8
+cy_45 equ 3
+cy_46 equ 5
+cy_47 equ 5
+cy_48 equ 3
+cy_49 equ 2
+cy_4a equ 2
+cy_4b equ 2
+cy_4c equ 3
+cy_4d equ 4
+cy_4e equ 6
+cy_4f equ 6
+cy_51 equ 5
+cy_53 equ 8
+cy_54 equ 4
+cy_55 equ 4
+cy_56 equ 6
+cy_57 equ 6
+cy_58 equ 2
+cy_59 equ 4
+cy_5b equ 7
+cy_5d equ 4
+cy_5e equ 7
+cy_5f equ 7
+cy_60 equ 6
+cy_61 equ 6
+cy_63 equ 8
+cy_65 equ 3
+cy_66 equ 5
+cy_67 equ 5
+cy_68 equ 4
+cy_69 equ 2
+cy_6a equ 2
+cy_6b equ 2
+cy_6c equ 5
+cy_6d equ 4
+cy_6e equ 6
+cy_6f equ 6
+cy_71 equ 5
+cy_73 equ 8
+cy_74 equ 4
+cy_75 equ 4
+cy_76 equ 6
+cy_77 equ 6
+cy_78 equ 2
+cy_79 equ 4
+cy_7b equ 7
+cy_7d equ 4
+cy_7e equ 7
+cy_7f equ 7
+cy_80 equ 2
+cy_81 equ 6
+cy_82 equ 2
+cy_83 equ 6
+cy_84 equ 3
+cy_85 equ 3
+cy_86 equ 3
+cy_87 equ 3
+cy_88 equ 2
+cy_89 equ 2
+cy_8a equ 2
+cy_8c equ 4
+cy_8d equ 4
+cy_8e equ 4
+cy_8f equ 4
+cy_91 equ 6
+cy_93 equ 6
+cy_94 equ 4
+cy_95 equ 4
+cy_96 equ 4
+cy_97 equ 4
+cy_98 equ 2
+cy_99 equ 5
+cy_9a equ 2
+cy_9b equ 5
+cy_9c equ 5
+cy_9d equ 5
+cy_a0 equ 2
+cy_a1 equ 6
+cy_a2 equ 2
+cy_a3 equ 6
+cy_a4 equ 3
+cy_a5 equ 3
+cy_a6 equ 3
+cy_a7 equ 3
+cy_a8 equ 2
+cy_a9 equ 2
+cy_aa equ 2
+cy_ab equ 2
+cy_ac equ 4
+cy_ad equ 4
+cy_ae equ 4
+cy_af equ 4
+cy_b1 equ 5
+cy_b3 equ 5
+cy_b4 equ 4
+cy_b5 equ 4
+cy_b6 equ 4
+cy_b7 equ 4
+cy_b8 equ 2
+cy_b9 equ 4
+cy_ba equ 2
+cy_bb equ 4
+cy_bc equ 4
+cy_bd equ 4
+cy_be equ 4
+cy_bf equ 4
+cy_c0 equ 2
+cy_c1 equ 6
+cy_c2 equ 2
+cy_c3 equ 8
+cy_c4 equ 3
+cy_c5 equ 3
+cy_c6 equ 5
+cy_c7 equ 5
+cy_c8 equ 2
+cy_c9 equ 2
+cy_ca equ 2
+cy_cb equ 2
+cy_cc equ 4
+cy_cd equ 4
+cy_ce equ 6
+cy_cf equ 6
+cy_d1 equ 5
+cy_d2 equ 2
+cy_d3 equ 8
+cy_d4 equ 4
+cy_d5 equ 4
+cy_d6 equ 6
+cy_d7 equ 6
+cy_d8 equ 2
+cy_d9 equ 4
+cy_db equ 7
+cy_dd equ 4
+cy_de equ 7
+cy_df equ 7
+cy_e0 equ 2
+cy_e1 equ 6
+cy_e2 equ 2
+cy_e3 equ 8
+cy_e4 equ 3
+cy_e5 equ 3
+cy_e6 equ 5
+cy_e7 equ 5
+cy_e8 equ 2
+cy_e9 equ 2
+cy_ec equ 4
+cy_ed equ 4
+cy_ee equ 6
+cy_ef equ 6
+cy_f1 equ 5
+cy_f2 equ 2
+cy_f3 equ 8
+cy_f4 equ 4
+cy_f5 equ 4
+cy_f6 equ 6
+cy_f7 equ 6
+cy_f8 equ 2
+cy_f9 equ 4
+cy_fb equ 7
+cy_fd equ 4
+cy_fe equ 7
+cy_ff equ 7
+    dc.l cy_00,cy_01,cy_CIM,cy_03,cy_SKB,cy_05,cy_06,cy_07
+    dc.l cy_08,cy_09,cy_0a,cy_29,cy_SKW,cy_0d,cy_0e,cy_0f
+    dc.l cy_Bcc,cy_11,cy_CIM,cy_13,cy_14,cy_15,cy_16,cy_17
+    dc.l cy_18,cy_19,cy_NOP,cy_1b,cy_SKW,cy_1d,cy_1e,cy_1f
+    dc.l cy_20,cy_21,cy_CIM,cy_23,cy_24,cy_25,cy_26,cy_27
+    dc.l cy_28,cy_29,cy_2a,cy_29,cy_2c,cy_2d,cy_2e,cy_2f
+    dc.l cy_Bcc,cy_31,cy_CIM,cy_33,cy_34,cy_35,cy_36,cy_37
+    dc.l cy_38,cy_39,cy_NOP,cy_3b,cy_SKW,cy_3d,cy_3e,cy_3f
+    dc.l cy_40,cy_41,cy_CIM,cy_43,cy_SKB,cy_45,cy_46,cy_47
+    dc.l cy_48,cy_49,cy_4a,cy_4b,cy_4c,cy_4d,cy_4e,cy_4f
+    dc.l cy_Bcc,cy_51,cy_CIM,cy_53,cy_54,cy_55,cy_56,cy_57
+    dc.l cy_58,cy_59,cy_NOP,cy_5b,cy_SKW,cy_5d,cy_5e,cy_5f
+    dc.l cy_60,cy_61,cy_CIM,cy_63,cy_SKB,cy_65,cy_66,cy_67
+    dc.l cy_68,cy_69,cy_6a,cy_6b,cy_6c,cy_6d,cy_6e,cy_6f
+    dc.l cy_Bcc,cy_71,cy_CIM,cy_73,cy_74,cy_75,cy_76,cy_77
+    dc.l cy_78,cy_79,cy_NOP,cy_7b,cy_SKW,cy_7d,cy_7e,cy_7f
+    dc.l cy_80,cy_81,cy_82,cy_83,cy_84,cy_85,cy_86,cy_87
+    dc.l cy_88,cy_89,cy_8a,cy_29,cy_8c,cy_8d,cy_8e,cy_8f
+    dc.l cy_Bcc,cy_91,cy_CIM,cy_93,cy_94,cy_95,cy_96,cy_97
+    dc.l cy_98,cy_99,cy_9a,cy_9b,cy_9c,cy_9d,cy_9b,cy_9b
+    dc.l cy_a0,cy_a1,cy_a2,cy_a3,cy_a4,cy_a5,cy_a6,cy_a7
+    dc.l cy_a8,cy_a9,cy_aa,cy_ab,cy_ac,cy_ad,cy_ae,cy_af
+    dc.l cy_Bcc,cy_b1,cy_CIM,cy_b3,cy_b4,cy_b5,cy_b6,cy_b7
+    dc.l cy_b8,cy_b9,cy_ba,cy_bb,cy_bc,cy_bd,cy_be,cy_bf
+    dc.l cy_c0,cy_c1,cy_c2,cy_c3,cy_c4,cy_c5,cy_c6,cy_c7
+    dc.l cy_c8,cy_c9,cy_ca,cy_cb,cy_cc,cy_cd,cy_ce,cy_cf
+    dc.l cy_Bcc,cy_d1,cy_d2,cy_d3,cy_d4,cy_d5,cy_d6,cy_d7
+    dc.l cy_d8,cy_d9,cy_NOP,cy_db,cy_SKW,cy_dd,cy_de,cy_df
+    dc.l cy_e0,cy_e1,cy_e2,cy_e3,cy_e4,cy_e5,cy_e6,cy_e7
+    dc.l cy_e8,cy_e9,cy_NOP,cy_e9,cy_ec,cy_ed,cy_ee,cy_ef
+    dc.l cy_Bcc,cy_f1,cy_f2,cy_f3,cy_f4,cy_f5,cy_f6,cy_f7
+    dc.l cy_f8,cy_f9,cy_NOP,cy_fb,cy_SKW,cy_fd,cy_fe,cy_ff
+
+OPMODE_TABLE:
+
+  dc.l opcode_00,opcode_01,instr_CIM,opcode_03
+  ;       brk       ora     illegal   illegal
+
+  dc.l instr_SKB,opcode_05,opcode_06,opcode_07
+  ;       nop       ora       asl       nop
+
+  dc.l opcode_08,opcode_09,opcode_0a,opcode_29
+  ;       php       ora       asla    illegal
+
+  dc.l instr_SKW,opcode_0d,opcode_0e,opcode_0f
+  ;      nop 3      ora       asl     illegal
+
+  dc.l opcode_10,opcode_11,instr_CIM,opcode_13
+  ;       bpl       ora     illegal   illegal
+
+  dc.l opcode_14,opcode_15,opcode_16,opcode_17
+  ;       nop       ora       asl     illegal
+
+  dc.l opcode_18,opcode_19,instr_NOP,opcode_1b
+  ;       clc       ora       nop     illegal
+
+  dc.l instr_SKW,opcode_1d,opcode_1e,opcode_1f
+  ;       nop       ora       asl     illegal
+
+  dc.l opcode_20,opcode_21,instr_CIM,opcode_23
+  ;       jsr       and     illegal   illegal
+
+  dc.l opcode_24,opcode_25,opcode_26,opcode_27
+  ;       bit       and       rol     illegal
+
+  dc.l opcode_28,opcode_29,opcode_2a,opcode_29
+  ;       plp       and       rolA    illegal
+
+  dc.l opcode_2c,opcode_2d,opcode_2e,opcode_2f
+  ;       bit       and       rol     illegal
+
+  dc.l opcode_30,opcode_31,instr_CIM,opcode_33
+  ;       bmi       and     illegal   illegal
+
+  dc.l opcode_34,opcode_35,opcode_36,opcode_37
+  ;       nop       and       rol     illegal
+
+  dc.l opcode_38,opcode_39,instr_NOP,opcode_3b
+  ;       sec       and       nop     illegal
+
+  dc.l instr_SKW,opcode_3d,opcode_3e,opcode_3f
+  ;       nop       and       rol     illegal
+
+  dc.l opcode_40,opcode_41,instr_CIM,opcode_43
+  ;       rti       eor     illegal   illegal
+
+  dc.l instr_SKB,opcode_45,opcode_46,opcode_47
+  ;       nop       eor       lsr     illegal
+
+  dc.l opcode_48,opcode_49,opcode_4a,opcode_4b
+  ;       pha       eor       lsrA    illegal
+
+  dc.l opcode_4c,opcode_4d,opcode_4e,opcode_4f
+  ;       jmp       eor       lsr     illegal
+
+  dc.l opcode_50,opcode_51,instr_CIM,opcode_53
+  ;       bvc       eor     illegal   illegal
+
+  dc.l opcode_54,opcode_55,opcode_56,opcode_57
+  ;       nop       eor       lsr     illegal
+
+  dc.l opcode_58,opcode_59,instr_NOP,opcode_5b
+  ;       cli       eor       nop     illegal
+
+  dc.l instr_SKW,opcode_5d,opcode_5e,opcode_5f
+  ;       nop       eor       lsr     illegal
+
+  dc.l opcode_60,opcode_61,instr_CIM,opcode_63
+  ;       rts       adc     illegal   illegal
+
+  dc.l instr_SKB,opcode_65,opcode_66,opcode_67
+  ;       nop       adc       ror     illegal
+
+  dc.l opcode_68,opcode_69,opcode_6a,opcode_6b
+  ;       pla       adc       rorA    illegal
+
+  dc.l opcode_6c,opcode_6d,opcode_6e,opcode_6f
+  ;    jmp (abcd)   adc       ror     illegal
+
+  dc.l opcode_70,opcode_71,instr_CIM,opcode_73
+  ;       bvs       adc     illegal   illegal
+
+  dc.l opcode_74,opcode_75,opcode_76,opcode_77
+  ;       nop       adc       ror     illegal
+
+  dc.l opcode_78,opcode_79,instr_NOP,opcode_7b
+  ;       SEI       adc     illegal   illegal
+
+  dc.l instr_SKW,opcode_7d,opcode_7e,opcode_7f
+  ;       nop       adc       ror     illegal
+
+  dc.l opcode_80,opcode_81,opcode_82,opcode_83
+  ;       nop       sta       nop     illegal
+
+  dc.l opcode_84,opcode_85,opcode_86,opcode_87
+  ;       sty       sta       stx     illegal
+
+  dc.l opcode_88,opcode_89,opcode_8a,opcode_29
+  ;       dey       nop       txa     illegal
+
+  dc.l opcode_8c,opcode_8d,opcode_8e,opcode_8f
+  ;       sty       sta       stx     illegal
+
+  dc.l opcode_90,opcode_91,instr_CIM,opcode_93
+  ;       bcc       sta     illegal   illegal
+
+  dc.l opcode_94,opcode_95,opcode_96,opcode_97
+  ;       sty       sta       stx     illegal
+
+  dc.l opcode_98,opcode_99,opcode_9a,opcode_9b
+  ;       tya       sta       txs     illegal
+
+  dc.l opcode_9c,opcode_9d,opcode_9b,opcode_9b
+  ;     illegal     sta     illegal   illegal
+
+  dc.l opcode_a0,opcode_a1,opcode_a2,opcode_a3
+  ;       ldy       lda       ldx       lax
+
+  dc.l opcode_a4,opcode_a5,opcode_a6,opcode_a7
+  ;       ldy       lda       ldx       lax
+
+  dc.l opcode_a8,opcode_a9,opcode_aa,opcode_ab
+  ;       tay       lda       tax       oal
+
+  dc.l opcode_ac,opcode_ad,opcode_ae,opcode_af
+  ;       ldy       lda       ldx       lax
+
+  dc.l opcode_b0,opcode_b1,instr_CIM,opcode_b3
+  ;       bcs       lda     illegal     lax
+
+  dc.l opcode_b4,opcode_b5,opcode_b6,opcode_b7
+  ;       ldy        lda        ldx       lax
+
+  dc.l opcode_b8,opcode_b9,opcode_ba,opcode_bb
+  ;       clv       lda       tsx     illegal
+
+  dc.l opcode_bc,opcode_bd,opcode_be,opcode_bf
+  ;       ldy       lda       ldx       lax
+
+  dc.l opcode_c0,opcode_c1,opcode_c2,opcode_c3
+  ;       cpy       cmp       nop       dcm
+
+  dc.l opcode_c4,opcode_c5,opcode_c6,opcode_c7
+  ;       cpy       cmp       dec     illegal
+
+  dc.l opcode_c8,opcode_c9,opcode_ca,opcode_cb
+  ;       iny       cmp       dex     illegal
+
+  dc.l opcode_cc,opcode_cd,opcode_ce,opcode_cf
+  ;       cpy       cmp       dec     illegal
+
+  dc.l opcode_d0,opcode_d1,opcode_d2,opcode_d3
+  ;       bne       cmp      escrts   illegal
+
+  dc.l opcode_d4,opcode_d5,opcode_d6,opcode_d7
+  ;       nop       cmp       dec     illegal
+
+  dc.l opcode_d8,opcode_d9,instr_NOP,opcode_db
+  ;       cld       cmp       nop     illegal
+
+  dc.l instr_SKW,opcode_dd,opcode_de,opcode_df
+  ;       nop       cmp       dec     illegal
+
+  dc.l opcode_e0,opcode_e1,opcode_e2,opcode_e3
+  ;       cpx       sbc       nop       nop
+
+  dc.l opcode_e4,opcode_e5,opcode_e6,opcode_e7
+  ;       cpx       sbc       inc     illegal
+
+  dc.l opcode_e8,opcode_e9,instr_NOP,opcode_e9
+  ;       inx       sbc       nop     illegal
+
+  dc.l opcode_ec,opcode_ed,opcode_ee,opcode_ef
+  ;       cpx       sbc       inc     illegal
+
+  dc.l opcode_f0,opcode_f1,opcode_f2,opcode_f3
+  ;       beq       sbc      esc#ab   illegal
+
+  dc.l opcode_f4,opcode_f5,opcode_f6,opcode_f7
+  ;       nop       sbc       inc     illegal
+
+  dc.l opcode_f8,opcode_f9,instr_NOP,opcode_fb
+  ;       sed       sbc       nop     illegal
+
+  dc.l instr_SKW,opcode_fd,opcode_fe,opcode_ff
+  ;       nop       sbc       inc      esc#ab
+
+
+  section text
 
 _GO: ;cycles (d0)
-
 
 ;  UWORD PC;
 ;  UBYTE S;
@@ -930,8 +1035,8 @@ _GO: ;cycles (d0)
 ;  UBYTE X;
 ;  UBYTE Y;
 ;
-;  UWORD	addr;
-;  UBYTE	data;
+;  UWORD  addr;
+;  UBYTE  data;
 
 ;/*
 ;   This used to be in the main loop but has been removed to improve
@@ -944,67 +1049,30 @@ _GO: ;cycles (d0)
 ;   2. The timing of the IRQs are not that critical.
 ;*/
 
-	move.l 4(a7),d0 ;write how many cycles
-	tst.w _wsync_halt+2
-	bne FAST_FINISH
-	movem.l d2-d7/a2-a6,-(a7)
-	move.l d0,a6 ;now really use it
-	lea _memory,memory_pointer
-	UPDATE_LOCAL_REGS
-	ConvertRegP_STATUS
-	lea OPMODE_TABLE,a0
-	lea _attrib,attrib_pointer
-	tst.b _IRQ
-	beq GET_FIRST_INSTRUCTION
-_PRERUSENI:
-	move.b _regP,d6
-	and.b #I_FLAG,d6 ;is interrupt active
-	bne GET_FIRST_INSTRUCTION ;yes, no other interrupt
-_AIRQ:	move.w _regPC,d7     ;UAAAA :)	;write back addr
-	LoHi
-	move.w d7,-(stack_pointer)
-	move.b _regP,-(stack_pointer)
-	SetI
-	clr.l d7
-	move.w (memory_pointer,$fffe.l),d7
-	LoHi
-	move.l d7,PC6502
-	add.l memory_pointer,PC6502
-	clr.b _IRQ ;clear interrupt.....
-	bra GET_FIRST_INSTRUCTION
-
-FAST_FINISH:
-	clr.l d0 ;returned value
-	rts
-
-END_OF_CYCLE:
-	ConvertSTATUS_RegP
- 	move.b d6,_regP
-	UPDATE_GLOBAL_REGS
-	move.l CD,d0 ;returned value
-UNUSUAL_END:
-	movem.l (a7)+,d2-d7/a2-a6
-	rts
-ADRESA:	dc.l 1
-
-  ;UPDATE_LOCAL_REGS
-
-  ;if (IRQ)
-  ;  {
-  ;    if (!(regP & I_FLAG))
-  ;	{
-  ;	  UWORD retadr = PC;
-
-  ;  memory[0x0100 + S--] = retadr >> 8;
-  ;  memory[0x0100 + S--] = retadr & 0xff;
-  ;  PHP;
-  ;  SetI;
-  ;  PC = (memory[0xffff] << 8) | memory[0xfffe];
-  ;  IRQ = 0;
-  ;	}
-  ;  }
-
-
+  movem.l d2-d7/a2-a5,-(a7)
+  move.l 44(a7),CD ; how many cycles ( d8=40 from movem )
+  lea _memory,memory_pointer
+  UPDATE_LOCAL_REGS
+  ConvertRegP_STATUS d0
+  lea OPMODE_TABLE,a1
+  lea _attrib,attrib_pointer
+  tst.b _IRQ       ; ~ CPUCHECKIRQ
+  beq NEXTCHANGE_WITHOUT
+  move.b _regP,d0
+  and.b #I_FLAG,d0 ;is interrupt active
+  bne NEXTCHANGE_WITHOUT ;yes, no other interrupt
+  move.w _regPC,d7
+  PHW d7,d0
+  move.b _regP,d7
+  PHB d7,d0
+  SetI
+  clr.l d7
+  move.w (memory_pointer,$fffe.l),d7
+  LoHi
+  move.l d7,PC6502
+  add.l memory_pointer,PC6502
+  clr.b _IRQ ;clear interrupt.....
+  bra NEXTCHANGE_WITHOUT
 
 ;/*
 ;   =====================================
@@ -1012,1328 +1080,2121 @@ ADRESA:	dc.l 1
 ;   =====================================
 ;*/
 
-;d6 contains final value for use in program
+;d0 contains final value for use in program
 
+; addressing macros
 
+NCYCLES_XY macro
+  cmp.b  \1,d7 ; if ( (UBYTE) addr < X,Y ) ncycles--;
+  bpl.s  .NCY_XY_NC\@
+  subq.l #1,CD
+.NCY_XY_NC\@:
+  endm
 
-ZPAGE_X
-	move.l 4(a0,d7.l*8),d6
-	move.b (PC6502)+,d7
-	add.b X,d7
-	subq.l #2,CD
-	bra.s TEST
+ABSOLUTE macro
+  move.w (PC6502)+,d7
+  ror.w  #8,d7 ;d7 contains reversed value
+  endm
 
+ABSOLUTE_X macro
+  ABSOLUTE
+  add.w  X,d7
+  endm
 
-ZPAGE_Y
-	move.l 4(a0,d7.l*8),d6
-	move.b (PC6502)+,d7
-	add.b Y,d7
-	subq.l #2,CD
-	bra.s TEST
+ABSOLUTE_X_NCY macro
+  ABSOLUTE_X \1
+  NCYCLES_XY X
+  endm
 
+ABSOLUTE_Y macro
+  ABSOLUTE
+  add.w  Y,d7
+  endm
 
-ABSOLUTE_Y
-	move.l 4(a0,d7.l*8),d6
-	move.w (PC6502)+,d7
-	ror.w #8,d7
-	add.w Y,d7
-	subq.l #2,CD
-	bra.s TEST
+ABSOLUTE_Y_NCY macro
+  ABSOLUTE_Y \1
+  subq.l #\1,CD
+  NCYCLES_XY Y
+  endm
 
-INDIRECT_Y
-	move.l 4(a0,d7.l*8),d6
-	move.b (PC6502)+,d7
-	move.w (memory_pointer,d7.l),d7
-	ror.w #8,d7 ;swap bytes
-	add.w Y,d7
-	subq.l #4,CD
-	bra.s TEST
+IMMEDIATE macro
+  move.b (PC6502)+,\1
+  endm
 
-ABSOLUTE_X
-	move.l 4(a0,d7.l*8),d6
-	move.w (PC6502)+,d7
-	ror.w #8,d7
-	add.w X,d7 ;add x to
-	subq.l #2,CD
-	bra.s TEST
+INDIRECT_X macro
+  move.b (PC6502)+,d7
+  add.b  X,d7
+  move.w (memory_pointer,d7.l),d7
+  ror.w  #8,d7
+  endm
 
-INDIRECT_X
-	move.l 4(a0,d7.l*8),d6
-	move.b (PC6502)+,d7
-	add.b X,d7
-	move.w (memory_pointer,d7.l),d7
-	ror.w #8,d7
-	subq.l #4,CD
-	bra.s TEST
+INDIRECT_Y macro
+  move.b (PC6502)+,d7
+  move.w (memory_pointer,d7.l),d7
+  ror.w  #8,d7 ;swap bytes
+  add.w  Y,d7
+  endm
 
-ABSOLUTE:
-	move.l 4(a0,d7.l*8),d6
-	move.w (PC6502)+,d7
-	ror.w #8,d7 ;d7 contains reversed value
-	subq.l #2,CD
-	bra.s TEST
+INDIRECT_Y_NCY macro
+  INDIRECT_Y
+  subq.l #\1,CD
+  NCYCLES_XY Y
+  endm
 
+ZPAGE macro
+  move.b (PC6502)+,d7
+  endm
 
-ZPAGE:
-	move.l 4(a0,d7.l*8),d6
-	move.b (PC6502)+,d7 ;d6 contains offset
-	subq.l #1,CD
-	bra.s TEST
+ZPAGE_X macro
+  move.b (PC6502)+,d7
+  add.b  X,d7
+  endm
 
-DIRECT:
-	move.l 4(a0,d7.l*8),a1
-	move.b (PC6502)+,d6
-	jmp (a1)
+ZPAGE_Y macro
+  move.b (PC6502)+,d7
+  add.b  Y,d7
+  endm
 
-TEST:	bclr #31,d6  ;get highest bit away
-	bne.s JUST_WRITE
-	move.l d6,a1
-GONEBYTE:	;get one byte from memory
-	tst.b (attrib_pointer,d7.l)
-	bne.s JGetbyte
-GZPAGEBYTE: ;get one byte from zero page
-	move.b (memory_pointer,d7.l),d6 ;get byte
-AFTER_READ:
+; branching macros
 
-JUMP_CODE:	jmp (a1)
-JUST_WRITE:	move.l d6,a1
-	jmp (a1) ;bra.s JUMP_CODE
-JGetbyte:
-	bra A800GETB
+NEXTCHANGE_REG macro
+  move.b \1,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
 
+DONT_BRA macro
+  addq.l #1,PC6502
+  subq.l #cy_Bcc,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
 
-PUTONEBYTE_FL:
-	move.b d6,NFLAG
-	move.b d6,ZFLAG
-PUTONEBYTE:	tst.b (attrib_pointer,d7.l)
-	bne.s .Putbyte
-	move.b d6,(memory_pointer,d7.l)
-           	goto NEXTCHANGE_WITHOUT
+JMP_C macro
+  move.w (PC6502)+,d7
+  LoHi ;(in d7 adress where we want to jump)
+  lea (memory_pointer,d7.l),PC6502
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
 
-.Putbyte
-	bra A800PUTB
+; get byte macros
 
+LOAD_IMMEDIATE macro
+  move.b (PC6502)+,\2
+  move.b \2,ZFLAG
+  ext.w  NFLAG
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
 
+LOAD_ZPAGE macro
+  move.b (PC6502)+,d7
+  move.b (memory_pointer,d7.l),\2 ;get byte
+  move.b \2,ZFLAG
+  ext.w  NFLAG
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
 
-;#define	ABSOLUTE	addr=(memory[PC+1]<<8)+memory[PC];PC+=2;
-;#define	ZPAGE	addr=memory[PC++];
-;#define	ABSOLUTE_X	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)X;PC+=2;
-;#define 	ABSOLUTE_Y	addr=((memory[PC+1]<<8)+memory[PC])+(UWORD)Y;PC+=2;
-;#define	INDIRECT_X	addr=(UWORD)memory[PC++]+(UWORD)X;addr=(memory[addr+1]<<8)+memory[addr];
-;#define	INDIRECT_Y	addr=memory[PC++];addr=(memory[addr+1]<<8)+memory[addr]+(UWORD)Y;
-;#define	ZPAGE_X	addr=(memory[PC++]+X)&0xff;
-;#define	ZPAGE_Y	addr=(memory[PC++]+Y)&0xff;
-	
+GETZPBYTE macro
+  move.b (memory_pointer,d7.l),\1 ;get byte
+  endm
 
+GETANYBYTE macro
+  cmp.b  #isHARDWARE,(attrib_pointer,d7.l)
+  bne.s  .Getbyte_RAMROM\@
+  EXE_GETBYTE
+  move.b d0,\1
+  lea OPMODE_TABLE,a1
+  bra.s  .AFTER_READ\@
+.Getbyte_RAMROM\@
+  move.b (memory_pointer,d7.l),\1 ;get byte
+.AFTER_READ\@
+  endm
 
-opcode_8d: ;/* STA abcd */
-opcode_85: ;/* STA ab */
-opcode_81: ;/* STA (ab,x) */
-opcode_91: ;/* STA (ab),y */
-opcode_95: ;/* STA ab,x */
-opcode_99: ;/* STA abcd,y */
-opcode_9d: ;/* STA abcd,x */
-	move.b A,d6
-	bra.s PUTONEBYTE
-opcode_8e: ;/* STX abcd */
-opcode_86: ;/* STX ab */
-opcode_96: ;/* STX ab,y */
-	move.b X,d6
-	bra.s PUTONEBYTE
-opcode_8c: ;/* STY abcd */
-opcode_84: ;/* STY ab */
-opcode_94: ;/* STY ab,x */
-	move.b Y,d6
-	bra.s PUTONEBYTE
+GETANYBYTE_d0 macro
+  cmp.b  #isHARDWARE,(attrib_pointer,d7.l)
+  bne.s  .Getbyte_RAMROM\@
+  EXE_GETBYTE
+  lea OPMODE_TABLE,a1
+  bra.s  .AFTER_READ\@
+.Getbyte_RAMROM\@
+  move.b (memory_pointer,d7.l),d0 ;get byte
+.AFTER_READ\@
+  endm
 
+LOADANYBYTE macro
+  cmp.b  #isHARDWARE,(attrib_pointer,d7.l)
+  beq.s  .LoadByte_HW\@
+  move.b (memory_pointer,d7.l),\1 ;get byte
+  NEXTCHANGE_REG \1
+.LoadByte_HW\@
+  EXE_GETBYTE
+  move.b d0,\1
+  lea OPMODE_TABLE,a1
+  NEXTCHANGE_REG \1
+  endm
 
-opcode_e6: ;/* INC ab */
-opcode_ee: ;/* INC abcd */
-opcode_f6: ;/* INC ab,x */
-opcode_fe: ;/* INC abcd,x */
-	addq.b #2,d6 ;again funny piece of code
+; put byte macros
 
-opcode_c6: ;/* DEC ab */
-opcode_ce: ;/* DEC abcd */
-opcode_d6: ;/* DEC ab,x */
-opcode_de: ;/* DEC abcd,x */
-	subq.b #1,d6
-	bra.s PUTONEBYTE_FL ;put one byte with flags
+PUTZPBYTE macro
+  move.b \2,(memory_pointer,d7.l)
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
 
-opcode_0e: ;/* ASL abcd */
+PUTZPBYTE_Z macro
+  move.b ZFLAG,(memory_pointer,d7.l)
+  subq.l #\1,CD
+  bra.w  NEXTCHANGE_N
+  endm
+
+STOREANYBYTE macro
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .GO_PUTBYTE\@
+  move.b \2,(memory_pointer,d7.l)
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+.GO_PUTBYTE\@:
+  move.b \2,d0
+  subq.l #\1,CD
+  bra.w  A800PUTB
+  endm
+
+PUTANYBYTE_N macro
+  ext.w  NFLAG
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .GO_PUTBYTE\@
+  move.b ZFLAG,(memory_pointer,d7.l)
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+.GO_PUTBYTE\@:
+  subq.l #\1,CD
+  bra.w  A800PUTB_Ld0
+  endm
+
+PUTANYBYTE macro
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .GO_PUTBYTE\@
+  move.b d0,(memory_pointer,d7.l)
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+.GO_PUTBYTE\@:
+  subq.l #\1,CD
+  bra.w  A800PUTB
+  endm
+
+A800PUTB_Ld0:
+  move.b ZFLAG,d0
+A800PUTB:
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  beq.w  A800PUTBE
+  move.l d1,-(a7)
+  EXE_PUTBYTE_d0
+  move.l (a7)+,d1
+  lea OPMODE_TABLE,a1
+A800PUTBE:
+  bra.w  NEXTCHANGE_WITHOUT
+
+; command macros
+
+ROL_C macro
+  move.w CCR6502,CCR
+  addx.b \1,\1 ;left
+  move.w CCR,CCR6502
+  endm
+
+RPW_ROL_C macro
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .RPW_NO_RAM_ROL\@
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ROL_C ZFLAG
+  move.b ZFLAG,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_N
+.RPW_NO_RAM_ROL\@:
+  bra.w  RPW_HW_ROL
+  endm
+
+RPW_HW_ROL:
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  beq.s  RPW_ROM_ROL
+  EXE_GETBYTE
+  move.b d0,ZFLAG
+  ROL_C ZFLAG
+  ext.w  NFLAG
+  move.l ZFLAG,-(a7)
+  EXE_PUTBYTE ZFLAG
+  move.l (a7)+,ZFLAG
+  lea OPMODE_TABLE,a1
+  bra.w  NEXTCHANGE_WITHOUT
+RPW_ROM_ROL:
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ROL_C ZFLAG
+  bra.w  NEXTCHANGE_N
+
+ROR_C macro
+  move.w CCR6502,CCR
+  roxr.b #1,\1
+  move.w CCR,CCR6502
+  endm
+
+RPW_ROR_C macro
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .RPW_NO_RAM_ROR\@
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ROR_C ZFLAG
+  move.b ZFLAG,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_N
+.RPW_NO_RAM_ROR\@:
+  bra.w  RPW_HW_ROR
+  endm
+
+RPW_HW_ROR:
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  beq.s  RPW_ROM_ROR
+  EXE_GETBYTE
+  move.b d0,ZFLAG
+  ROR_C ZFLAG
+  ext.w  NFLAG
+  move.l ZFLAG,-(a7)
+  EXE_PUTBYTE ZFLAG
+  move.l (a7)+,ZFLAG
+  lea OPMODE_TABLE,a1
+  bra.w  NEXTCHANGE_WITHOUT
+RPW_ROM_ROR:
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ROR_C ZFLAG
+  bra.w  NEXTCHANGE_N
+
+ASL_C macro
+  add.b  \1,\1 ;left
+  move.w CCR,CCR6502
+  endm
+
+RPW_ASL_C macro
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .RPW_NO_RAM_ASL\@
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ASL_C ZFLAG
+  move.b ZFLAG,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_N
+.RPW_NO_RAM_ASL\@:
+  bra.w  RPW_HW_ASL
+  endm
+
+RPW_HW_ASL:
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  beq.s  RPW_ROM_ASL
+  EXE_GETBYTE
+  move.b d0,ZFLAG
+  ASL_C ZFLAG
+  ext.w  NFLAG
+  move.l ZFLAG,-(a7)
+  EXE_PUTBYTE ZFLAG
+  move.l (a7)+,ZFLAG
+  lea OPMODE_TABLE,a1
+  bra.w  NEXTCHANGE_WITHOUT
+RPW_ROM_ASL:
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  ASL_C ZFLAG
+  bra.w  NEXTCHANGE_N
+
+LSR_C macro
+  lsr.b  #1,\1
+  move.w CCR,CCR6502
+  endm
+
+RPW_LSR_C macro
+  clr.w  NFLAG
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .RPW_NO_RAM_LSR\@
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  LSR_C ZFLAG
+  move.b ZFLAG,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_WITHOUT
+.RPW_NO_RAM_LSR\@:
+  bra.w  RPW_HW_LSR
+  endm
+
+RPW_HW_LSR:
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  beq.s  RPW_ROM_LSR
+  EXE_GETBYTE
+  move.b d0,ZFLAG
+  LSR_C ZFLAG
+  move.l ZFLAG,-(a7)
+  EXE_PUTBYTE ZFLAG
+  move.l (a7)+,ZFLAG
+  lea OPMODE_TABLE,a1
+  bra.w  NEXTCHANGE_WITHOUT
+RPW_ROM_LSR:
+  move.b (memory_pointer,d7.l),ZFLAG ;get byte
+  LSR_C ZFLAG
+  bra.w  NEXTCHANGE_WITHOUT
+
+ASO_C_CONT macro   ;/* [unofficial - ASL Mem then ORA with Acc] */
+  ASL_C d0
+  or.b   d0,A
+  move.b A,ZFLAG
+  ext.w  NFLAG
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .ROM_OR_HW\@
+  move.b d0,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_WITHOUT
+.ROM_OR_HW\@
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  bne.w  A800PUTB
+  bra.w  NEXTCHANGE_WITHOUT
+  endm
+
+LSE_C_CONT macro   ;/* [unofficial - LSR Mem then EOR with A] */
+  LSR_C d0
+  eor.b  d0,A
+  move.b A,ZFLAG
+  ext.w  NFLAG
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .ROM_OR_HW\@
+  move.b d0,(memory_pointer,d7.l)
+  bra.w  NEXTCHANGE_WITHOUT
+.ROM_OR_HW\@
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  bne.w  A800PUTB
+  bra.w  NEXTCHANGE_WITHOUT
+  endm
+
+CIM_C_CONT macro   ;/* [unofficial - crash intermediate] */
+  subq.w #1,PC6502
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
+
+SKB_C_CONT macro   ;/* [unofficial - skip byte] */
+  addq.l #1,PC6502
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
+
+SKW_C_CONT macro   ;/* [unofficial - skip word] */
+  addq.l #2,PC6502
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
+
+XA1_C_CONT macro   ;/* [unofficial - X AND A AND 1 to Mem] */
+  move.b X,d0
+  and.b  A,d0
+  and.b  #1,d0
+  PUTANYBYTE \1
+  endm
+
+AXS_C_CONT macro   ;/* [unofficial - Store result A AND X] */
+  move.b X,ZFLAG
+  and.b  A,ZFLAG
+  PUTANYBYTE_N \1
+  endm
+
+RLA_C macro        ;/* [unofficial - ROL Mem, then AND with A] */
+  ROL_C d0
+  move.b d0,ZFLAG
+  and.b  A,ZFLAG
+  ext.w  NFLAG
+  endm
+
+RRA_C_CONT macro   ;/* [unofficial - ROR Mem, then ADC to Acc] */
+  ROR_C d0
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .ROM_OR_HW\@
+  move.b d0,(memory_pointer,d7.l)
+  bra.w  adc
+.ROM_OR_HW\@
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  bne.w  Putbyte_ADC
+  bra.w  adc
+  endm
+
+DCM_C_CONT macro   ;/* [unofficial - DEC Mem then CMP with Acc] */
+  subq.b #1,d0
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .ROM_OR_HW\@
+  move.b d0,(memory_pointer,d7.l)
+  bra.w  COMPARE_A
+.ROM_OR_HW\@
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  bne.w  Putbyte_CMP
+  bra.w  COMPARE_A
+  endm
+
+INS_C_CONT macro   ;/* [unofficial - INC Mem then SBC with Acc] */
+  addq.b #1,d0
+  tst.b  (attrib_pointer,d7.l)
+  bne.s  .ROM_OR_HW\@
+  move.b d0,(memory_pointer,d7.l)
+  bra.w  sbc
+.ROM_OR_HW\@
+  cmp.b  #isROM,(attrib_pointer,d7.l)
+  bne.w  Putbyte_SBC
+  bra.w  sbc
+  endm
+
+OR_IMMEDIATE macro
+  subq.l #\1,CD
+  or.b   (PC6502)+,A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+OR_ZPBYTE macro
+  or.b   (memory_pointer,d7.l),A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+OR_ANYBYTE macro
+  cmp.b  #isHARDWARE,(attrib_pointer,d7.l)
+  beq.s  .Getbyte_HW\@
+  or.b   (memory_pointer,d7.l),A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+.Getbyte_HW\@:
+  EXE_GETBYTE
+  or.b   d0,A
+  lea OPMODE_TABLE,a1
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+EOR_C_CONT macro
+  eor.b  d0,A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+AND_IMMEDIATE macro
+  subq.l #\1,CD
+  and.b  (PC6502)+,A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+AND_ZPBYTE macro
+  and.b  (memory_pointer,d7.l),A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+AND_ANYBYTE macro
+  cmp.b  #isHARDWARE,(attrib_pointer,d7.l)
+  beq.s  .Getbyte_HW\@
+  and.b  (memory_pointer,d7.l),A
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+.Getbyte_HW\@:
+  EXE_GETBYTE
+  and.b  d0,A
+  lea OPMODE_TABLE,a1
+  move.b A,ZFLAG
+  bra.w  NEXTCHANGE_N
+  endm
+
+BIT_C_CONT macro
+  btst   #V_FLAGB,ZFLAG
+  beq.s  .CLEAR_IT\@
+  bset   #16,VFLAG  ;exactly V_FLAGB,_regP
+  ext.w  NFLAG
+  and.b  A,ZFLAG
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+.CLEAR_IT\@:
+  bclr   #16,VFLAG  ;exactly V_FLAGB,_regP
+  ext.w  NFLAG
+  and.b  A,ZFLAG
+  subq.l #\1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+  endm
+
+; opcodes
+
+; inofficial opcodes
+
+;opcode_02:  ;/* CIM [unofficial] */
+instr_CIM:
+  CIM_C_CONT cy_CIM
+
+opcode_03:  ;/* ASO (ab,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_03,CD
+  GETANYBYTE_d0
+  ASO_C_CONT
+
+; opcode_04:  ;/* SKB [unofficial] */
+instr_SKB:
+  SKB_C_CONT cy_SKB
+
+opcode_07:  ;/* ASO ZPAGE [unofficial] */
+  subq.l #cy_07,CD
+  ZPAGE
+  GETZPBYTE d0
+  ASO_C_CONT
+
+;opcode_0b:  ;/* AND #ab [unofficial] ( at _29 ) */
+
+; opcode_0c: ;/* SKW [unofficial] */
+instr_SKW:
+  SKW_C_CONT cy_SKW
+
+opcode_0f:  ;/* ASO abcd [unofficial] */
+  ABSOLUTE
+  subq.l #cy_0f,CD
+  GETANYBYTE_d0
+  ASO_C_CONT
+
+; opcode_12:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_13:  ;/* ASO (ab),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_13,CD
+  GETANYBYTE_d0
+  ASO_C_CONT
+
+opcode_14:
+  SKB_C_CONT cy_14
+
+opcode_17:  ;/* ASO zpage,x [unofficial] */
+  subq.l #cy_17,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  ASO_C_CONT
+
+; opcode_1a:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_1b:  ;/* ASO abcd,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_1b,CD
+  GETANYBYTE_d0
+  ASO_C_CONT
+
+; opcode_1c:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_1f:  ;/* ASO abcd,x [unofficial] */
+  ABSOLUTE_X
+  subq.l #cy_1f,CD
+  GETANYBYTE_d0
+  ASO_C_CONT
+
+; opcode_22:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_23: ;/* RLA (ab,x) [unofficial] */
+  INDIRECT_X
+  GETANYBYTE_d0
+  RLA_C
+  PUTANYBYTE cy_23
+
+opcode_27: ;/* RLA ZPAGE [unofficial] */
+  ZPAGE
+  GETZPBYTE d0
+  RLA_C
+  PUTZPBYTE cy_27,d0
+
+;opcode_2b: ;/* AND #ab [unofficial] ( at _29 ) */
+
+opcode_2f: ;/* RLA abcd [unofficial] */
+  ABSOLUTE
+  GETANYBYTE_d0
+  RLA_C
+  PUTANYBYTE cy_2f
+
+; opcode_32:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_33: ;/* RLA (ab),y [unofficial] */
+  INDIRECT_Y
+  GETANYBYTE_d0
+  RLA_C
+  PUTANYBYTE cy_33
+
+opcode_34:
+  SKB_C_CONT cy_34
+
+opcode_37: ;/* RLA zpage,x [unofficial] */
+  ZPAGE_X
+  GETZPBYTE d0
+  RLA_C
+  PUTZPBYTE cy_37,d0
+
+; opcode_3a:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_3b: ;/* RLA abcd,y [unofficial] */
+  ABSOLUTE_Y
+  GETANYBYTE_d0
+  RLA_C
+  PUTANYBYTE cy_3b
+
+; opcode_3c:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_3f: ;/* RLA abcd,x [unofficial] */
+  ABSOLUTE_X
+  GETANYBYTE_d0
+  RLA_C
+  PUTANYBYTE cy_3f
+
+; opcode_42:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_43:  ;/* LSE (ab,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_43,CD
+  GETANYBYTE_d0
+  LSE_C_CONT
+
+; opcode_44:  ;/* SKB [unofficial] ( at _04 ) */
+
+opcode_47:  ;/* LSE ZPAGE [unofficial] */
+  subq.l #cy_47,CD
+  ZPAGE
+  GETZPBYTE d0
+  LSE_C_CONT
+
+opcode_4b:  ;/* ALR #ab [unofficial - Acc AND Data, LSR result] */
+  IMMEDIATE ZFLAG
+  subq.l #cy_4b,CD
+  and.b  A,ZFLAG
+  LSR_C ZFLAG
+  bra.w  NEXTCHANGE_N
+
+opcode_4f:  ;/* LSE abcd [unofficial] */
+  ABSOLUTE
+  subq.l #cy_4f,CD
+  GETANYBYTE_d0
+  LSE_C_CONT
+
+; opcode_52:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_53:  ;/* LSE (ab),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_53,CD
+  GETANYBYTE_d0
+  LSE_C_CONT
+
+opcode_54:
+  SKB_C_CONT cy_54
+
+opcode_57:  ;/* LSE zpage,x [unofficial] */
+  subq.l #cy_57,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  LSE_C_CONT
+
+; opcode_5a:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_5b:  ;/* LSE abcd,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_5b,CD
+  GETANYBYTE_d0
+  LSE_C_CONT
+
+; opcode_5c:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_5f:  ;/* LSE abcd,x [unofficial] */
+  ABSOLUTE_X
+  subq.l #cy_5f,CD
+  GETANYBYTE_d0
+  LSE_C_CONT
+
+; opcode_62:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_63:  ;/* RRA (ab,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_63,CD
+  GETANYBYTE_d0
+  RRA_C_CONT
+
+; opcode_64:  ;/* SKB [unofficial] ( at _04 ) */
+
+opcode_67:  ;/* RRA ZPAGE [unofficial] */
+  subq.l #cy_67,CD
+  ZPAGE
+  GETZPBYTE d0
+  RRA_C_CONT
+
+opcode_6b:  ;/* ARR #ab [unofficial - Acc AND Data, ROR result] */
+  IMMEDIATE ZFLAG
+  subq.l #cy_6b,CD
+  and.b  A,ZFLAG
+  ROR_C ZFLAG
+  bra.w  NEXTCHANGE_N
+
+opcode_6f:  ;/* RRA abcd [unofficial] */
+  ABSOLUTE
+  subq.l #cy_6f,CD
+  GETANYBYTE_d0
+  RRA_C_CONT
+
+; opcode_72:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_73:  ;/* RRA (ab),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_73,CD
+  GETANYBYTE_d0
+  RRA_C_CONT
+
+opcode_74:
+  SKB_C_CONT cy_74
+
+opcode_77:  ;/* RRA zpage,x [unofficial] */
+  subq.l #cy_77,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  RRA_C_CONT
+
+; opcode_7a:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_7b:  ;/* RRA abcd,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_7b,CD
+  GETANYBYTE_d0
+  RRA_C_CONT
+
+; opcode_7c:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_7f:  ;/* RRA abcd,x [unofficial] */
+  ABSOLUTE_X
+  subq.l #cy_7f,CD
+  GETANYBYTE_d0
+  RRA_C_CONT
+
+opcode_80:
+  SKB_C_CONT cy_80
+
+opcode_82:
+  SKB_C_CONT cy_82
+
+opcode_83:  ;/* AXS (ab,x) [unofficial] */
+  INDIRECT_X
+  AXS_C_CONT cy_83
+
+opcode_87:  ;/* AXS ZPAGE [unofficial] */
+  ZPAGE
+  move.b X,ZFLAG
+  and.b  A,ZFLAG
+  PUTZPBYTE_Z cy_87
+
+opcode_89:
+  SKB_C_CONT cy_89
+
+;opcode_8b:  ;/* AND #ab [unofficial] ( at _29 ) */
+
+opcode_8f:  ;/* AXS abcd [unofficial] */
+  ABSOLUTE
+  AXS_C_CONT cy_8f
+
+; opcode_92:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_93:  ;/* AXS (ab),y [unofficial] */
+  INDIRECT_Y
+  AXS_C_CONT cy_93
+
+opcode_97:  ;/* AXS zpage,y [unofficial] */
+  ZPAGE_Y
+  move.b X,ZFLAG
+  and.b  A,ZFLAG
+  PUTZPBYTE_Z cy_97
+
+opcode_9b:  ;/* XA1 abcd,y [unofficial] */
+  ABSOLUTE_Y
+  XA1_C_CONT cy_9b
+
+opcode_9c:
+  SKW_C_CONT cy_9c
+
+;opcode_9e:  ;/* XA1 abcd,y (_9b)[unofficial] */
+
+;opcode_9f:  ;/* XA1 abcd,y (_9b)[unofficial] */
+
+opcode_a3: ;/* LAX (ind,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_a3,CD
+  GETANYBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_a7: ;/* LAX ZPAGE [unofficial] */
+  subq.l #cy_a7,CD
+  ZPAGE
+  GETZPBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_ab:  ;/* ANX #ab [unofficial - AND #ab, TAX] */
+  IMMEDIATE d0
+  subq.l #cy_ab,CD
+  and.b  d0,A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_af: ;/* LAX absolute [unofficial] */
+  ABSOLUTE
+  subq.l #cy_af,CD
+  GETANYBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+; opcode_b2:  ;/* CIM [unofficial] ( at _02 ) */
+
+opcode_b3: ;/* LAX (ind),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_b3,CD
+  GETANYBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_b7: ;/* LAX zpage,y [unofficial] */
+  subq.l #cy_b7,CD
+  ZPAGE_Y
+  GETZPBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_bb:  ;/* AXA abcd,y [unofficial - Store Mem AND #$FD to Acc and X,
+            ;then set stackpoint to value (Acc - 4) */
+  ABSOLUTE_Y
+  GETANYBYTE_d0
+  and.b  #$fd,d0
+  clr.l  A
+  move.b d0,A
+  move.b d0,X
+  move.b d0,ZFLAG
+  ext.w  NFLAG
+  move.b A,d0
+  subq.b #4,d0
+  move.b d0,_regS
+  subq.l #cy_bb,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_bf: ;/* LAX absolute,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_bf,CD
+  GETANYBYTE A
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_c2:
+  SKB_C_CONT cy_c2
+
+opcode_c3:  ;/* DCM (ab,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_c3,CD
+  GETANYBYTE_d0
+  DCM_C_CONT
+
+opcode_c7:  ;/* DCM ZPAGE [unofficial] */
+  subq.l #cy_c7,CD
+  ZPAGE
+  GETZPBYTE d0
+  DCM_C_CONT
+
+opcode_cb:  ;/* SAX #ab [unofficial - A AND X, then SBC Mem, store to X] */
+  IMMEDIATE d0
+  subq.l #cy_cb,CD
+  and.b  A,X
+  btst   #D_FLAGB,_regP
+  bne.s  .BCD_SBC_X
+  not.w  CCR6502
+  move.w CCR6502,CCR
+  subx.b d0,X
+  move.w CCR,CCR6502
+  bvs.s  .SET_V
+  bclr   #16,VFLAG
+  not.w  CCR6502
+  NEXTCHANGE_REG X
+.SET_V:
+  bset   #16,VFLAG
+  not.w  CCR6502
+  NEXTCHANGE_REG X
+.BCD_SBC_X:
+  move.b X,ZFLAG
+  not.w  CCR6502
+  move.w CCR6502,CCR
+  subx.b d0,ZFLAG
+  bvs.s  .SET_V_X
+  bclr   #16,VFLAG
+  bra.s  .END_V_X
+.SET_V_X:
+  bset   #16,VFLAG
+.END_V_X:
+  ext.w  NFLAG
+  move.w CCR6502,CCR
+  sbcd   d0,X
+  move.w CCR,CCR6502
+  not.w  CCR6502
+  bra.w  NEXTCHANGE_WITHOUT
+
+opcode_cf:  ;/* DCM abcd [unofficial] */
+  ABSOLUTE
+  subq.l #cy_cf,CD
+  GETANYBYTE_d0
+  DCM_C_CONT
+
+opcode_d3:  ;/* DCM (ab),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_d3,CD
+  GETANYBYTE_d0
+  DCM_C_CONT
+
+opcode_d4:
+  SKB_C_CONT cy_d4
+
+opcode_d7:  ;/* DCM zpage,x [unofficial] */
+  subq.l #cy_d7,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  DCM_C_CONT
+
+; opcode_da:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_db:  ;/* DCM abcd,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_db,CD
+  GETANYBYTE_d0
+  DCM_C_CONT
+
+; opcode_dc:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_df:  ;/* DCM abcd,x [unofficial] */
+  ABSOLUTE_X
+  subq.l #cy_df,CD
+  GETANYBYTE_d0
+  DCM_C_CONT
+
+opcode_e2:
+  SKB_C_CONT cy_e2
+
+opcode_e3:  ;/* INS (ab,x) [unofficial] */
+  INDIRECT_X
+  subq.l #cy_e3,CD
+  GETANYBYTE_d0
+  INS_C_CONT
+
+opcode_e7:  ;/* INS ZPAGE [unofficial] */
+  subq.l #cy_e7,CD
+  ZPAGE
+  GETZPBYTE d0
+  addq.b #1,d0
+  move.b d0,(memory_pointer,d7.l)
+  bra sbc
+
+;opcode_eb: ;/* SBC #ab (_e9)[unofficial] */
+
+opcode_ef:  ;/* INS abcd [unofficial] */
+  ABSOLUTE
+  subq.l #cy_ef,CD
+  GETANYBYTE_d0
+  INS_C_CONT
+
+opcode_f3:  ;/* INS (ab),y [unofficial] */
+  INDIRECT_Y
+  subq.l #cy_f3,CD
+  GETANYBYTE_d0
+  INS_C_CONT
+
+opcode_f4:
+  SKB_C_CONT cy_f4
+
+opcode_f7:  ;/* INS zpage,x [unofficial] */
+  subq.l #cy_f7,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  addq.b #1,d0
+  move.b d0,(memory_pointer,d7.l)
+  bra sbc
+
+; opcode_fa:  ;/* NOP [unofficial] ( at _ea ) */
+
+opcode_fb:  ;/* INS abcd,y [unofficial] */
+  ABSOLUTE_Y
+  subq.l #cy_fb,CD
+  GETANYBYTE_d0
+  INS_C_CONT
+
+; opcode_fc:  ;/* SKW [unofficial] ( at _0c ) */
+
+opcode_ff:  ;/* INS abcd,x [unofficial] */
+  ABSOLUTE_X
+  subq.l #cy_ff,CD
+  GETANYBYTE_d0
+  INS_C_CONT
+
+; official opcodes
+
+opcode_00: ;/* BRK */
+  subq.l #cy_00,CD
+  btst   #I_FLAGB,_regP
+  bne.w  NEXTCHANGE_WITHOUT
+  SetB
+  move.l PC6502,d7
+  sub.l  memory_pointer,d7
+  addq.w #1,d7
+  PHW_AND_P d7,d0
+  SetI
+  move.w (memory_pointer,$fffe.l),d7
+  LoHi
+  move.l d7,PC6502
+  add.l  memory_pointer,PC6502
+  bra.w  NEXTCHANGE_WITHOUT
+
+opcode_01: ;/* ORA (ab,x) */
+  INDIRECT_X
+  subq.l #cy_01,CD
+  OR_ANYBYTE
+
+opcode_05: ;/* ORA ab */
+  subq.l #cy_05,CD
+  ZPAGE
+  OR_ZPBYTE
+
 opcode_06: ;/* ASL ab */
-opcode_16: ;/* ASL ab,x */
-opcode_1e: ;/* ASL abcd,x */
-	clr.w CCR6502
-opcode_2e: ;/* ROL abcd */
-opcode_36: ;/* ROL ab,x */
-opcode_26: ;/* ROL ab */
-opcode_3e: ;/* ROL abcd,x */
-	move.w CCR6502,CCR
-	addx.b d6,d6 ;left
-	move.w CCR,CCR6502
-	bra.s PUTONEBYTE_FL
+  ZPAGE
+  GETZPBYTE ZFLAG
+  ASL_C ZFLAG
+  PUTZPBYTE_Z cy_06
 
-opcode_46: ;/* LSR ab */
-opcode_4e: ;/* LSR abcd */
-opcode_56: ;/* LSR ab,x */
-opcode_5e: ;/* LSR abcd,x */
-	clr.w CCR6502
-
-opcode_6e: ;/* ROR abcd */
-opcode_66: ;/* ROR ab */
-opcode_76: ;/* ROR ab,x */
-opcode_7e: ;/* ROR abcd,x */
-	move.w CCR6502,CCR
-	roxr.b #1,d6
-	move.w CCR,CCR6502
-	bra.s PUTONEBYTE_FL
-
-opcode_a9: ;/* LDA #ab */
-opcode_a5: ;/* LDA ab */
-opcode_a1: ;/* LDA (ab,x) */
-opcode_ad: ;/* LDA abcd */
-opcode_b1: ;/* LDA (ab),y */
-opcode_b5: ;/* LDA ab,x */
-opcode_b9: ;/* LDA abcd,y */
-opcode_bd: ;/* LDA abcd,x */
-	move.b d6,A
-	bra.s NEXTCHANGE
-
-
-opcode_a2: ;/* LDX #ab */
-opcode_a6: ;/* LDX ab */
-opcode_ae: ;/* LDX abcd */
-opcode_b6: ;/* LDX ab,y */
-opcode_be: ;/* LDX abcd,y */
-	move.b d6,X
-	bra.s NEXTCHANGE
-
-opcode_a0: ;/* LDY #ab */
-opcode_a4: ;/* LDY ab */
-opcode_ac: ;/* LDY abcd */
-opcode_b4: ;/* LDY ab,x */
-opcode_bc: ;/* LDY abcd,x */
-	move.b d6,Y
-	bra.s NEXTCHANGE
-
-
-opcode_e0: ;/* CPX #ab */
-opcode_e4: ;/* CPX ab */
-opcode_ec: ;/* CPX abcd */
-	move.b X,NFLAG
-	bra.s COMPARE
-
-opcode_c0: ;/* CPY #ab */
-opcode_c4: ;/* CPY ab */
-opcode_cc: ;/* CPY abcd */
-	move.b Y,NFLAG
-	bra.s COMPARE
-
-instruction_cmp:
-opcode_c1: ;/* CMP (ab,x) */
-opcode_c5: ;/* CMP ab */
-opcode_c9: ;/* CMP #ab */
-opcode_cd: ;/* CMP abcd */
-opcode_d1: ;/* CMP (ab),y */
-opcode_d5: ;/* CMP ab,x */
-opcode_d9: ;/* CMP abcd,y */
-opcode_dd: ;/* CMP abcd,x */
-	move.b A,NFLAG
-
-COMPARE:	sub.b d6,NFLAG
-	move.w CCR,CCR6502
-	not.w CCR6502
-	move.b NFLAG,ZFLAG
-	bra.s NEXTCHANGE_WITHOUT ;without flags
-
-
-opcode_29: ;/* AND #ab */
-opcode_21: ;/* AND (ab,x) */
-opcode_25: ;/* AND ab */
-opcode_2d: ;/* AND abcd */
-opcode_31: ;/* AND (ab),y */
-opcode_35: ;/* AND ab,x */
-opcode_39: ;/* AND abcd,y */
-opcode_3d: ;/* AND abcd,x */
-	and.b d6,A
-	bra.s NEXTCHANGE_A ;change flags as A is set
-
-opcode_49: ;/* EOR #ab */
-opcode_41: ;/* EOR (ab,x) */
-opcode_45: ;/* EOR ab */
-opcode_4d: ;/* EOR abcd */
-opcode_51: ;/* EOR (ab),y */
-opcode_55: ;/* EOR ab,x */
-opcode_59: ;/* EOR abcd,y */
-opcode_5d: ;/* EOR abcd,x */
-	eor.b d6,A
-	bra.s NEXTCHANGE_A
+opcode_08: ;/* PHP */
+  PHP d7,d0
+  subq.l #cy_08,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
 
 opcode_09: ;/* ORA #ab */
-opcode_01: ;/* ORA (ab,x) */
-opcode_05: ;/* ORA ab */
-opcode_0d: ;/* ORA abcd */
-opcode_11: ;/* ORA (ab),y */
-opcode_15: ;/* ORA ab,x */
-opcode_19: ;/* ORA abcd,y */
-opcode_1d: ;/* ORA abcd,x */
-	or.b d6,A
-
-
-
-;MAIN LOOP , where we are counting cycles and working with other STUFF
-
-
-NEXTCHANGE_A: move.b A,d6
-NEXTCHANGE:	move.b d6,ZFLAG
-	move.b d6,NFLAG
-NEXTCHANGE_WITHOUT:
-
-	ifd C_BUGGING
-	tst.l CD
-	ble ENDGO ;should be .S
-	endc
-
-	ifd C_BUGGING
-	move.l PC6502,A1
-	sub.l a5,a1
-	cmp.l _CEKEJ,a1
-	bne.s CONT
-_ADRESA:	nop
-	ifd DEBUG
-	illegal
-	endc
-	endc
-
-CONT:	
-            subq.l #2,CD
-	tst.l CD
-	ble.s ENDGO
-
-GET_FIRST_INSTRUCTION:
-****************************************
-	ifd MONITOR_BREAK	following block of code allows you to enter
-	move ccr,-(sp)		a break address in monitor
-	move.l PC6502,d7
-	sub.l memory_pointer,d7
-	cmp.w _break_addr,d7
-	bne.s   .get_first
-	move.b #$ff,d7
-	move (sp)+,ccr
-	bsr odskoc_si		on break monitor is invoked
-	move ccr,-(sp)
-
-.get_first
-	move (sp)+,ccr
-	endc
-****************************************
-	clr.l d7
-	move.b (PC6502)+,d7
-JUMPMODE:	jmp ([a0,d7.l*8])
-ENDGO: 	bra END_OF_CYCLE  ;the end of cycle
+  OR_IMMEDIATE cy_09
 
 opcode_0a: ;/* ASLA */
-	clr.w CCR6502
+  subq.l #cy_0a,CD
+  ASL_C A
+  NEXTCHANGE_REG A
 
-opcode_2a: ;/* ROLA */
-	move.w CCR6502,CCR
-	addx.b A,A  ;rolx #1,A
-	move.w CCR,CCR6502
-	bra NEXTCHANGE_A
+opcode_0d: ;/* ORA abcd */
+  ABSOLUTE
+  subq.l #cy_0d,CD
+  OR_ANYBYTE
 
-opcode_4a: ;/* LSRA */
-	clr.w CCR6502
-
-opcode_6a: ;/* RORA */
-	move.w CCR6502,CCR
-	roxr.b #1,A
-	move.w CCR,CCR6502
-	bra NEXTCHANGE_A
-
-
-opcode_90: ;/* BCC */
-	btst #EB68,CCR6502
-	beq.s SOLVE
-	bra.s NOTHING
-
-opcode_b0: ;/* BCS */
-	btst #EB68,CCR6502
-	bne.s SOLVE
-	bra.s NOTHING
-
-
-opcode_f0: ;/* BEQ */
-	tst.b ZFLAG
-	beq.s SOLVE
-	bra.s NOTHING
-
-opcode_d0: ;/* BNE */
-	tst.b ZFLAG
-	beq.s NOTHING
-
-SOLVE:
-	move.b (PC6502)+,d7
-      	extb.l d7
-      	add.l d7,PC6502
-      	;lea (PC6502,d7.l),PC6502
-      	bra NEXTCHANGE_WITHOUT
-NOTHING:	addq.l #1,PC6502
-	bra NEXTCHANGE_WITHOUT
-
-
-opcode_ca: ;/* DEX */  ;funny code DEX(-2)+1
-	subq.b #2,X
-
-opcode_e8: ;/* INX */
-	addq.b #1,X
-	move.b X,d6
-	bra NEXTCHANGE
-
-opcode_88: ;/* DEY */ ;funny code (DEY(-2)+1
-	subq.b #2,Y
-
-opcode_c8: ;/* INY */
-	addq.b #1,Y
-	move.b Y,d6
-	bra NEXTCHANGE
-
-opcode_a8: ;/* TAY */
-      move.b A,Y
-opcode_98: ;/* TYA */
-      move.b Y,A
-      bra NEXTCHANGE_A
-
-opcode_aa: ;/* TAX */
-      move.b A,X
-opcode_8a: ;/* TXA */
-      move.b X,A
-      bra NEXTCHANGE_A
-
-opcode_20: ;/* JSR abcd */
-      move.l PC6502,d7 ;current pointer
-      sub.l memory_pointer,d7
-      addq.l #1,d7 ;back addres
-      LoHi ;(it puts result into d6)
-      move.w d7,-(stack_pointer)
-opcode_4c: ;/* JMP abcd */
-      move.w (PC6502)+,d7
-      LoHi ;(in d7 adress where we want to jump)
-      lea (memory_pointer,d7.l),PC6502
-      ;add.l d7,PC6502
-      subq.l #4,CD
-      goto NEXTCHANGE_WITHOUT
-
-
-opcode_60: ;/* RTS */
-      move.w (stack_pointer)+,d7
-      LoHi
-      lea 1(memory_pointer,d7.l),PC6502
-      subq.l #4,CD
-      goto NEXTCHANGE_WITHOUT
-
-opcode_50: ;/* BVC */
-	btst #16,ZFLAG ;V_FLAGB,_regP - exactly
-	beq.s SOLVE
-	bra.s NOTHING
-
-opcode_70: ;/* BVS */
-	btst #16,ZFLAG ;V_FLAGB,_regP - exactly
-	bne.s SOLVE
-	bra.s NOTHING
+opcode_0e: ;/* ASL abcd */
+  ABSOLUTE
+  subq.l #cy_0e,CD
+  RPW_ASL_C
 
 opcode_10: ;/* BPL */
-	and.b #N_FLAG,NFLAG
-	beq.s SOLVE
-	bra.s NOTHING
+  tst.w  NFLAG
+  bpl    SOLVE
+  DONT_BRA
 
-opcode_30: ;/* BMI */
-	and.b #N_FLAG,NFLAG
-	bne.s SOLVE
-	bra.s NOTHING
+opcode_11: ;/* ORA (ab),y */
+  INDIRECT_Y_NCY cy_11
+  OR_ANYBYTE
 
+opcode_15: ;/* ORA ab,x */
+  subq.l #cy_15,CD
+  ZPAGE_X
+  OR_ZPBYTE
+
+opcode_16: ;/* ASL ab,x */
+  ZPAGE_X
+  GETZPBYTE ZFLAG
+  ASL_C ZFLAG
+  PUTZPBYTE_Z cy_16
+
+opcode_18: ;/* CLC */
+  clr.w  CCR6502
+  subq.l #cy_18,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_19: ;/* ORA abcd,y */
+  ABSOLUTE_Y_NCY cy_19
+  OR_ANYBYTE
+
+opcode_1d: ;/* ORA abcd,x */
+  ABSOLUTE_X_NCY cy_1d
+  OR_ANYBYTE
+
+opcode_1e: ;/* ASL abcd,x */
+  ABSOLUTE_X
+  subq.l #cy_1e,CD
+  RPW_ASL_C
+
+opcode_20: ;/* JSR abcd */
+  move.l PC6502,d7 ;current pointer
+  sub.l memory_pointer,d7
+  addq.l #1,d7 ;back addres
+  PHW d7,d0
+  JMP_C cy_20
+
+opcode_21: ;/* AND (ab,x) */
+  INDIRECT_X
+  subq.l #cy_21,CD
+  AND_ANYBYTE
 
 opcode_24: ;/* BIT ab */
+  ZPAGE
+  GETZPBYTE ZFLAG
+  BIT_C_CONT cy_24
+
+opcode_25: ;/* AND ab */
+  subq.l #cy_25,CD
+  ZPAGE
+  AND_ZPBYTE
+
+opcode_26: ;/* ROL ab */
+  ZPAGE
+  GETZPBYTE ZFLAG
+  ROL_C ZFLAG
+  PUTZPBYTE_Z cy_26
+
+opcode_28: ;/* PLP */
+  subq.l #cy_28,CD
+  PLP d7,d0
+  CPUCHECKIRQ
+
+opcode_29: ;/* AND #ab */
+  AND_IMMEDIATE cy_29
+
+opcode_2a: ;/* ROLA */
+  subq.l #cy_2a,CD
+  ROL_C A
+  NEXTCHANGE_REG A
+
 opcode_2c: ;/* BIT abcd */
-	move.b d6,NFLAG
-	btst #V_FLAGB,d6
-	beq.s .UNSET
-	bset #16,ZFLAG
-	move.b A,ZFLAG
-	and.b NFLAG,ZFLAG
-	bra NEXTCHANGE_WITHOUT
-.UNSET:
-	bclr #16,ZFLAG ;exactly V_FLAGB,_regP
-	move.b A,ZFLAG
-	and.b NFLAG,ZFLAG
-	bra NEXTCHANGE_WITHOUT
+  ABSOLUTE
+  GETANYBYTE ZFLAG
+  BIT_C_CONT cy_2c
+
+opcode_2d: ;/* AND abcd */
+  ABSOLUTE
+  subq.l #cy_2d,CD
+  AND_ANYBYTE
+
+opcode_2e: ;/* ROL abcd */
+  ABSOLUTE
+  subq.l #cy_2e,CD
+  RPW_ROL_C
+
+opcode_30: ;/* BMI */
+  tst.w  NFLAG
+  bmi    SOLVE
+  DONT_BRA
+
+opcode_31: ;/* AND (ab),y */
+  INDIRECT_Y_NCY cy_31
+  AND_ANYBYTE
+
+opcode_35: ;/* AND ab,x */
+  subq.l #cy_35,CD
+  ZPAGE_X
+  AND_ZPBYTE
+
+opcode_36: ;/* ROL ab,x */
+  ZPAGE_X
+  GETZPBYTE ZFLAG
+  ROL_C ZFLAG
+  PUTZPBYTE_Z cy_36
+
+opcode_38: ;/* SEC */
+  clr.w  CCR6502
+  not.w  CCR6502
+  subq.l #cy_38,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_39: ;/* AND abcd,y */
+  ABSOLUTE_Y_NCY cy_39
+  AND_ANYBYTE
+
+opcode_3d: ;/* AND abcd,x */
+  ABSOLUTE_X_NCY cy_3d
+  AND_ANYBYTE
+
+opcode_3e: ;/* ROL abcd,x */
+  ABSOLUTE_X
+  subq.l #cy_3e,CD
+  RPW_ROL_C
 
 opcode_40: ;/* RTI */
 _RTI:
-      PLP
-      move.w (stack_pointer)+,d7
-      LoHi
-      lea (memory_pointer,d7.l),PC6502
-      subq.l #4,CD
-      goto NEXTCHANGE_WITHOUT
+  subq.l #cy_40,CD
+  PLP_AND_W d7,d0
+  lea    (memory_pointer,d7.l),PC6502
+  CPUCHECKIRQ
 
+opcode_41: ;/* EOR (ab,x) */
+  INDIRECT_X
+  subq.l #cy_41,CD
+  GETANYBYTE_d0
+  EOR_C_CONT
 
-opcode_61: ;/* ADC (ab,x) */
-opcode_65: ;/* ADC ab */
-opcode_69: ;/* ADC #ab */
-opcode_6d: ;/* ADC abcd */
-opcode_71: ;/* ADC (ab),y */
-opcode_75: ;/* ADC ab,x */
-opcode_79: ;/* ADC abcd,y */
-opcode_7d: ;/* ADC abcd,x */
-adc:
+opcode_45: ;/* EOR ab */
+  subq.l #cy_45,CD
+  ZPAGE
+  GETZPBYTE d0
+  EOR_C_CONT
 
-;/* ADC */
-;    unsigned int temp = src + AC + (IF_CARRY() ? 1 : 0);
-;    SET_ZERO(temp & 0xff);	/* This is not valid in decimal mode */
-;    if (IF_DECIMAL()) {
-;        if (((AC & 0xf) + (src & 0xf) + (IF_CARRY() ? 1 : 0)) > 9) temp += 6;
-;	SET_SIGN(temp);
-;	SET_OVERFLOW(!((AC ^ src) & 0x80) && ((AC ^ temp) & 0x80));
-;	if (temp > 0x99) temp += 96;
-;	SET_CARRY(temp > 0x99);
-;    } else {
-;	SET_SIGN(temp);
-;	SET_OVERFLOW(!((AC ^ src) & 0x80) && ((AC ^ temp) & 0x80));
-;	SET_CARRY(temp > 0xff);
-;    }
-;    AC = ((BYTE) temp);
-
-	;addq.l #1,AAAAA
-     	btst #D_FLAGB,_regP
-	bne.s BDC_ADC
-
-	move.w CCR6502,CCR
-	addx.b d6,A ;data are added with carry (in 68000 Extended bit in this case)
-	move.w CCR,CCR6502
-	svs ZFLAG
-	swap ZFLAG
-	;and.b #V_FLAG,d6
-	;*	and.b #-V_FLAG,_regP
-	;and.b #~V_FLAG,_regP
-	;or.b d6,_regP
-	bra NEXTCHANGE_A
-
-
-	;if (!(regP & D_FLAG))
-	;{
-	;  UWORD	temp;
-            ;  UWORD t_data;
-
-            ;t_data = (UWORD)data + (UWORD)C;
-	;Z = N = temp = (UWORD)A + t_data;
-            ;V = (~(A ^ t_data)) & (Z ^ A) & 0x80; ;cruel construction :((
-
-	;C = temp >> 8;
-	;A = Z;
-	;}
-BDC_ADC:
-	move.b CCR6502,CCR
-	ori.b #4,CCR ; set zero flag
-	abcd d6,A
-	move.b CCR,CCR6502  ;V flag isn't soluted
-	bra NEXTCHANGE_A
-
-
-      	;else
-	;{
-	; int	bcd1, bcd2;
-
-	; bcd1 = BCDtoDEC[A];
-	; bcd2 = BCDtoDEC[data];
-
-	; bcd1 += bcd2 + C;
-
-	; Z = N = DECtoBCD[bcd1];
-
-	; V = (Z ^ A) & 0x80;
-	; C = (bcd1 > 99);
-	; A = Z;
-	;}
-	;goto next;
-
-
-opcode_e1: ;/* SBC (ab,x) */
-opcode_e5: ;/* SBC ab */
-opcode_eb: ;/* SBC #ab [unofficial] */
-opcode_e9: ;/* SBC #ab */
-opcode_ed: ;/* SBC abcd */
-opcode_f1: ;/* SBC (ab),y */
-opcode_f5: ;/* SBC ab,x */
-opcode_f9: ;/* SBC abcd,y */
-opcode_fd: ;/* SBC abcd,x */
-
-sbc:
-;/* SBC */
-;    unsigned int temp = AC - src - (IF_CARRY() ? 0 : 1);
-;    SET_SIGN(temp);
-;    SET_ZERO(temp & 0xff);	/* Sign and Zero are invalid in decimal mode */
-;    SET_OVERFLOW(((AC ^ temp) & 0x80) && ((AC ^ src) & 0x80));
-;    if (IF_DECIMAL()) {
-;	if ( ((AC & 0xf) - (IF_CARRY() ? 0 : 1)) < (src & 0xf)) /* EP */ temp -= 6;
-;	if (temp > 0x99) temp -= 0x60;
-;    }
-;    SET_CARRY(temp < 0x100);
-;    AC = (temp & 0xff);
-
-
-
- 	;addq.l #1,AAAAA
-	btst #D_FLAGB,_regP
-	bne.s BDC_SBC
-
-	not.w CCR6502 ;change it????
-	move.w CCR6502,CCR
-	subx.b d6,A
-	move.w CCR,CCR6502
-	svs ZFLAG
-	swap ZFLAG
-	not.w CCR6502
-	;and.b #V_FLAG,d6
-	;*	and.b #-V_FLAG,_regP
-	;and.b #~V_FLAG,_regP
-	;or.b d6,_regP
-	bra NEXTCHANGE_A
-
-
-      	;if (!(regP & D_FLAG))
-	;{
-	; UWORD	temp;
-            ; UWORD t_data;
-
-            ;t_data = (UWORD)data + (UWORD)!C;
-	;temp = (UWORD)A - t_data;
-
-	;Z = N = temp & 0xff;
-
-
-;/*
-; * This was the old code that I have been using upto version 0.5.2
-; *  C = (A < ((UWORD)data + (UWORD)!C)) ? 0 : 1;
-; */
-;	  V = (~(A ^ t_data)) & (Z ^ A) & 0x80;
-;	  C = (temp > 255) ? 0 : 1;
-;	  A = Z;
-;	}
-
-BDC_SBC:
-	not.w CCR6502 ;change it ?????
-	move.b CCR6502,CCR
-	ori.b #4,CCR ; set zero flag
-	sbcd d6,A
-	move.b CCR,CCR6502  ;V flag isn't soluted
-	not.w CCR6502
-	goto NEXTCHANGE_A
-
-
-      	;else
-	;{
-	;  int	bcd1, bcd2;
-	;
-	;  bcd1 = BCDtoDEC[A];
-	;  bcd2 = BCDtoDEC[data];
-
-	;  bcd1 = bcd1 - bcd2 - !C;
-
-	;  if (bcd1 < 0) bcd1 = 100 - (-bcd1);
-	;  Z = N = DECtoBCD[bcd1];
-
-	;  C = (A < (data + !C)) ? 0 : 1;
-	;  V = (Z ^ A) & 0x80;
-	;  A = Z;
-	;}
-      	;goto next;
-
-
-opcode_68: ;/* PLA */
-      move.b (stack_pointer)+,A
-      subq.l #1,CD
-      bra NEXTCHANGE_A
-
-
-opcode_08: ;/* PHP */
-      PHP
-      subq.l #1,CD
-      bra NEXTCHANGE_WITHOUT
-
+opcode_46: ;/* LSR ab */
+  ZPAGE
+  clr.w  NFLAG
+  GETZPBYTE ZFLAG
+  LSR_C ZFLAG
+  PUTZPBYTE cy_46,ZFLAG
 
 opcode_48: ;/* PHA */
-      move.b A,-(stack_pointer)
-      subq.l #1,CD
-      bra NEXTCHANGE_WITHOUT
+  PHB A,d0
+  subq.l #cy_48,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
 
+opcode_49: ;/* EOR #ab */
+  IMMEDIATE d0
+  subq.l #cy_49,CD
+  EOR_C_CONT
 
+opcode_4a: ;/* LSRA */
+  clr.w  NFLAG
+  LSR_C A
+  move.b A,ZFLAG
+  subq.l #cy_4a,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
 
-opcode_28: ;/* PLP */
-      PLP
-      subq.l #1,CD
-	bra NEXTCHANGE_WITHOUT
+opcode_4c: ;/* JMP abcd */
+  JMP_C cy_4c
 
-opcode_18: ;/* CLC */
-      	clr.w CCR6502
-	bra NEXTCHANGE_WITHOUT
+opcode_4d: ;/* EOR abcd */
+  ABSOLUTE
+  subq.l #cy_4d,CD
+  GETANYBYTE_d0
+  EOR_C_CONT
 
-opcode_38: ;/* SEC */
-	moveq.w #-1,CCR6502
-	bra NEXTCHANGE_WITHOUT
+opcode_4e: ;/* LSR abcd */
+  ABSOLUTE
+  subq.l #cy_4e,CD
+  RPW_LSR_C
 
+opcode_50: ;/* BVC */
+  btst   #16,VFLAG ;V_FLAGB,_regP - exactly
+  beq SOLVE
+  DONT_BRA
 
+opcode_51: ;/* EOR (ab),y */
+  INDIRECT_Y_NCY cy_51
+  GETANYBYTE_d0
+  EOR_C_CONT
 
-opcode_d8: ;/* CLD */
-	ClrD
-	bra NEXTCHANGE_WITHOUT
+opcode_55: ;/* EOR ab,x */
+  subq.l #cy_55,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  EOR_C_CONT
 
-opcode_b8: ;/* CLV */
-	bclr #16,ZFLAG ;exactly - V_FLAGB,_regP
-	bra NEXTCHANGE_WITHOUT
-
-opcode_6c: ;/* JMP (abcd) */
-_SKOK:
-      	subq.l #5,CD ;this jump takes five cycles
-      	move.w (PC6502)+,d7
-      	LoHi
-	ifd P65C02
-      	move.w (memory_pointer,d7.l),d7
-      	LoHi
-      	lea (memory_pointer,d7.l),PC6502
-	else
-	;/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
-      	cmp.b #$ff,d7
-      	beq.s .PROBLEM_FOUND ;when problematic jump is found
-     	move.w (memory_pointer,d7.l),d7
-      	LoHi
-      	lea (memory_pointer,d7.l),PC6502
-	bra NEXTCHANGE_WITHOUT
-.PROBLEM_FOUND:
-	move.l d7,d6 ;we have to use both of them
-	clr.b d7 ;instead of reading right this adress, we read adress at this start of page
-	move.b (memory_pointer,d7.l),d7
-	LoHi
-	move.b (memory_pointer,d6.l),d7
-      	lea (memory_pointer,d7.l),PC6502
-	endc
-	bra NEXTCHANGE_WITHOUT
-
-opcode_78: ;/* SEI */
-      	SetI
-	bra NEXTCHANGE_WITHOUT
-
-opcode_f8: ;/* SED */
-      	SetD
-	bra NEXTCHANGE_WITHOUT
-
-opcode_9a: ;/* TXS */
-      	lea (memory_pointer,X.w),stack_pointer
-      	lea $101(stack_pointer),stack_pointer
-	bra NEXTCHANGE_WITHOUT
-
-opcode_ba: ;/* TSX */
-      	move.l stack_pointer,X
-      	sub.l memory_pointer,X
-      	sub.l #$101,X ;HIHIHI :) 3rd discovered error in last 30 hours....
-      	       ;this one is because logic of STACK on 6502 4th error in 32 hours :)
-	move.b X,d6
-      	bra NEXTCHANGE
-
+opcode_56: ;/* LSR ab,x */
+  ZPAGE_X
+  clr.w  NFLAG
+  GETZPBYTE ZFLAG
+  LSR_C ZFLAG
+  PUTZPBYTE cy_56,ZFLAG
 
 opcode_58: ;/* CLI */
-	ClrI
-	tst.b _IRQ  ;no IRQ continue, some routine comes, it should help in Lucasfilm Games or what
-	beq NEXTCHANGE_WITHOUT
-	move.l PC6502,d7
-_ZASTAV:	sub.l memory_pointer,d7
-	LoHi
-      	move.w d7,-(stack_pointer)
-      	PHP
-      	SetI
-      	move.w (memory_pointer,$fffe.l),d7
-      	LoHi
-      	move.l d7,PC6502
-      	add.l memory_pointer,PC6502
-      	clr.b _IRQ
-      	bra NEXTCHANGE_WITHOUT
-
-opcode_00: ;/* BRK */
-      btst #I_FLAGB,_regP
-      bne NEXTCHANGE_WITHOUT
-      move.l PC6502,d7
-      sub.l memory_pointer,d7
-      addq.w #1,d7
-      LoHi
-      move.w d7,-(stack_pointer)
-      SetB
-      PHP
-      SetI
-      move.w (memory_pointer,$fffe.l),d7
-      LoHi
-      move.l d7,PC6502
-      add.l memory_pointer,PC6502
-      subq.l #5,CD
-      bra NEXTCHANGE_WITHOUT
-
-opcode_0c: ;/* NOP (3 bytes) [unofficial] */ !RS! call it SKW (skip word)
-opcode_1c:
-opcode_3c: 
-opcode_5c:
-opcode_7c:
-opcode_9c: ;/* SKW [unofficial - skip word] */
-opcode_dc:
-opcode_fc:
-
-      addq.l #1,PC6502
-      subq.l #3,CD
-
-
-
-opcode_04: ;/* NOP (2 bytes) [unofficial] */ !RS! call it SKB (skip byte)
-opcode_14:
-opcode_34:
-opcode_44:
-opcode_54:
-opcode_64:
-opcode_74:
-opcode_80:
-opcode_82:
-opcode_89:	;/* SKB [unofficial - skip byte] */
-opcode_c2:
-opcode_d4:
-opcode_e2:
-opcode_f4:
-
-      addq.l #1,PC6502
-      subq.l #3,CD
-
-opcode_1a: ;/* NOP (1 byte) [unofficial] */
-opcode_3a:
-opcode_5a:
-opcode_7a:
-opcode_da:
-opcode_fa:
-opcode_ea: ;/* NOP */ ;oficial
-	goto NEXTCHANGE_WITHOUT
-
-opcode_d2: ;/* ESCRTS #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
-      move.b (PC6502)+,d7
-      movem.l a0-a6,-(a7)
-      move.l d7,-(a7)
-      UPDATE_GLOBAL_REGS ;we need d7 in update global
-      CPU_GetStatus
-      jsr _AtariEscape /*in atari c*/
-      addq.l #4,a7
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-      UPDATE_LOCAL_REGS
-      move.w (stack_pointer)+,d7
-      LoHi
-      lea (memory_pointer,d7.l),PC6502
-      addq.l #1,PC6502
-      bra GET_FIRST_INSTRUCTION
-
-opcode_f2:	;/* ESC #ab (JAM) - on Atari is here instruction CIM [unofficial] !RS! */
-	;/* opcode_ff: ESC #ab - opcode FF is now used for INS [unofficial] instruction !RS! */
-      move.b (PC6502)+,d7
-      movem.l a0-a6,-(a7)
-      move.l d7,-(a7) ;we need d7 for movem in UPDATE_GLOBAL
-      UPDATE_GLOBAL_REGS
-      CPU_GetStatus
-      jsr _AtariEscape
-      addq.l #4,a7
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-      UPDATE_LOCAL_REGS
-      bra GET_FIRST_INSTRUCTION
-
-opcode_a7: ;/* LAX zpage [unofficial] */
-opcode_a3: ;/* LAX (ind,x) [unofficial] */
-opcode_af: ;/* LAX absolute [unofficial] */
-opcode_b3: ;/* LAX (ind),y [unofficial] */
-opcode_b7: ;/* LAX zpage,y [unofficial] */
-opcode_bf: ;/* LAX absolute,y [unofficial] */
-      move.b d6,X
-      move.b d6,A
-      bra NEXTCHANGE
-
-
-
-;/* R.S.980113
-;   My changes of original code is marked !RS!
-;   UNDOCUMENTED INSTRUCTIONS
-;   NOP (2 bytes) => SKB [unofficial - skip byte]
-;   NOP (3 bytes) => SKW [unofficial - skip word]
-;   CIM [unoficial - crash intermediate] => implemented as "PC--;"
-;   AXS [unofficial - Store result A AND X]
-;   ASO [unofficial - ASL then ORA with Acc]
-;   XAA [unofficial - X AND Mem to Acc]
-;   MKA [unofficial - Acc AND #$40 to Acc]
-;   MKX [unofficial - X AND #$40 to X]
-; */
-
-opcode_02:				;/* CIM [unofficial - crash intermediate] */
-opcode_12:
-opcode_22:
-opcode_32:
-opcode_42:
-opcode_52:
-opcode_62:
-opcode_72:
-opcode_92:
-opcode_b2:
-;/* opcode_d2: Used for ESCRTS #ab (JAM) */
-;/* opcode_f2: Used for ESC #ab (JAM) */
-	subq.w #1,PC6502
-	bra NEXTCHANGE_WITHOUT
-
-
-
-opcode_83:	;/* AXS (ab,x) [unofficial - Store result A AND X] */
-opcode_87:	;/* AXS zpage [unofficial - Store result A AND X] */
-opcode_8f:	;/* AXS abcd [unofficial - Store result A AND X] */
-opcode_93:	;/* AXS (ab),y [unofficial - Store result A AND X] */
-opcode_97:	;/* AXS zpage,y [unofficial - Store result A AND X] */
-	move.b X,d6
-	and.b A,d6
-	bra PUTONEBYTE_FL
-
-opcode_03:	;/* ASO (ab,x) [unofficial - ASL then ORA with Acc] */
-opcode_07:	;/* ASO zpage [unofficial - ASL then ORA with Acc] */
-opcode_0b:	;/* ASO #ab [unofficial - ASL then ORA with Acc] */
-opcode_0f:	;/* ASO abcd [unofficial - ASL then ORA with Acc] */
-opcode_13:	;/* ASO (ab),y [unofficial - ASL then ORA with Acc] */
-opcode_17:	;/* ASO zpage,x [unofficial - ASL then ORA with Acc] */
-opcode_1b:	;/* ASO abcd,y [unofficial - ASL then ORA with Acc] */
-opcode_1f:	;/* ASO abcd,x [unofficial - ASL then ORA with Acc] */
-	add.b d6,d6 ;left
-	move.w CCR,CCR6502
-	or.b A,d6
-	bra NEXTCHANGE
-
-opcode_8b:	;/* XAA #ab [unofficial - X AND Mem to Acc] */
-opcode_9b:	;/* XAA abcd,y [unofficial - X AND Mem to Acc] */
-	move.b X,A
-	and.b d6,A
-	bra NEXTCHANGE_A
-	
-	
-opcode_9f:	;/* MKA abcd [unofficial - Acc AND #$40 to Acc] */
-	and.b #$40,A
-	bra NEXTCHANGE_A
-
-opcode_9e:	;/* MKX abcd [unofficial - X AND #$40 to X] */
-	and.b #$40,X
-	move.b X,d6
-	bra NEXTCHANGE
-
-
-;/* UNDOCUMENTED INSTRUCTIONS (Part II)
-;   LSE [unofficial - LSR then EOR result with A]
-;   ALR [unofficial - Acc AND Data, LSR result]
-;   ARR [unofficial - Acc AND Data, ROR result]
-; */
-
-opcode_43:	;/* LSE (ab,x) [unofficial - LSR then EOR result with A] */
-opcode_47:	;/* LSE zpage [unofficial - LSR then EOR result with A] */
-opcode_4f:	;/* LSE abcd [unofficial - LSR then EOR result with A] */
-opcode_53:	;/* LSE (ab),y [unofficial - LSR then EOR result with A] */
-opcode_57:	;/* LSE zpage,x [unofficial - LSR then EOR result with A] */
-opcode_5b:	;/* LSE abcd,y [unofficial - LSR then EOR result with A] */
-opcode_5f:	;/* LSE abcd,x [unofficial - LSR then EOR result with A] */
-	lsr.b #1,d6
-	move.w CCR,CCR6502
-	eor.b A,d6
-	bra NEXTCHANGE			
-
-opcode_4b:	;/* ALR #ab [unofficial - Acc AND Data, LSR result] */
-	clr.w CCR6502
-	
-opcode_6b:	;/* ARR #ab [unofficial - Acc AND Data, ROR result] */
-	and.b A,d6
-	move.w CCR6502,CCR
-	roxr.b #1,d6
-	move.w CCR,CCR6502
-	bra NEXTCHANGE
-
-
-
-;/* UNDOCUMENTED INSTRUCTIONS (Part III)
-;   RLA [unofficial - ROL Mem, then AND with A]
-; */
-opcode_2b: ;/* RLA #ab [unofficial - ROL Mem, then AND with A] */
-	move.w CCR6502,CCR
-	addx.b d6,d6 ;left
-	move.w CCR,CCR6502
-	move.b d6,ZFLAG
-	and.b A,ZFLAG
-	move.b ZFLAG,NFLAG
-	bra NEXTCHANGE_WITHOUT
-
-opcode_23: ;/* RLA (ab,x) [unofficial - ROL Mem, then AND with A] */
-opcode_27: ;/* RLA zpage [unofficial - ROL Mem, then AND with A] */
-opcode_2f: ;/* RLA abcd [unofficial - ROL Mem, then AND with A] */
-opcode_33: ;/* RLA (ab),y [unofficial - ROL Mem, then AND with A] */
-opcode_37: ;/* RLA zpage,x [unofficial - ROL Mem, then AND with A] */
-opcode_3b: ;/* RLA abcd,y [unofficial - ROL Mem, then AND with A] */
-opcode_3f: ;/* RLA abcd,x [unofficial - ROL Mem, then AND with A] */
-	move.w CCR6502,CCR
-	addx.b d6,d6 ;left
-	move.w CCR,CCR6502
-	move.b d6,ZFLAG
-	and.b A,ZFLAG
-	move.b ZFLAG,NFLAG
-	bra PUTONEBYTE
-
-
-;/* R.S.980113<<<
-;   R.S.980114>>>
-;   RRA [unofficial - ROR Mem, then ADC to Acc]
-; */
-opcode_63:	;/* RRA (ab,x) [unofficial - ROR Mem, then ADC to Acc] */
-opcode_67:	;/* RRA zpage [unofficial - ROR Mem, then ADC to Acc] */
-opcode_6f:	;/* RRA abcd [unofficial - ROR Mem, then ADC to Acc] */
-opcode_73:	;/* RRA (ab),y [unofficial - ROR Mem, then ADC to Acc] */
-opcode_77:	;/* RRA zpage,x [unofficial - ROR Mem, then ADC to Acc] */
-opcode_7b:	;/* RRA abcd,y [unofficial - ROR Mem, then ADC to Acc] */
-opcode_7f:	;/* RRA abcd,x [unofficial - ROR Mem, then ADC to Acc] */
-	move.w CCR6502,CCR
-	roxr.b #1,d6
-	move.w CCR,CCR6502
-
-	tst.b (attrib_pointer,d7.l)
-	bne.s .Putbyte
-	move.b d6,(memory_pointer,d7.l)
-           	goto adc
-
-.Putbyte
-	cmp.b #1,(attrib_pointer,d7.l)
-	beq.s .DONT_WRITE_TO_ROM
-
-	move.l a0,-(a7)
-	move.w d0,-(a7)
-	move.w d1,-(a7)
-	move.l a6,-(a7)
-	move.w d6,-(a7)
-	clr.l -(a7)
-	move.b d6,3(a7) ;byte
-	move.l d7,-(a7) ;adress
-	jsr _PUTBYTE
-	move.w d0,d7 ;put value onto right place
-	addq.l #8,a7
-	move.w (a7)+,d6
-	move.l (a7)+,a6
-	move.w (a7)+,d1
-	move.w (a7)+,d0
-	move.l (a7)+,a0
-	tst.w d7
-	bne ENDGO
-	bra adc
-
-.DONT_WRITE_TO_ROM:
-	bra adc
-	
-
-
-;/* OAL [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
-opcode_ab:	;/* OAL #ab [unofficial - ORA Acc with #$EE, then AND with data, then TAX] */
-	or.b #$ee,A
-	and d6,A
-	move A,X
-	bra NEXTCHANGE_A
-
-;/* DCM [unofficial - DEC Mem then CMP with Acc] */
-opcode_c3:	;/* DCM (ab,x) [unofficial - DEC Mem then CMP with Acc] */
-opcode_c7:	;/* DCM zpage [unofficial - DEC Mem then CMP with Acc] */
-opcode_cf:	;/* DCM abcd [unofficial - DEC Mem then CMP with Acc] */
-opcode_d3:	;/* DCM (ab),y [unofficial - DEC Mem then CMP with Acc] */
-opcode_d7:	;/* DCM zpage,x [unofficial - DEC Mem then CMP with Acc] */
-opcode_db:	;/* DCM abcd,y [unofficial - DEC Mem then CMP with Acc] */
-opcode_df:	;/* DCM abcd,x [unofficial - DEC Mem then CMP with Acc] */
-	subq.b #1,d6
-	tst.b (attrib_pointer,d7.l)
-	bne.s .Putbyte
-	move.b d6,(memory_pointer,d7.l)
-           	goto instruction_cmp
-
-.Putbyte
-	cmp.b #1,(attrib_pointer,d7.l)
-	beq.s .DONT_WRITE_TO_ROM
-
-	move.l a0,-(a7)
-	move.w d0,-(a7)
-	move.w d1,-(a7)
-	move.l a6,-(a7)
-	move.w d6,-(a7)
-	clr.l -(a7)
-	move.b d6,3(a7) ;byte
-	move.l d7,-(a7) ;adress
-	jsr _PUTBYTE
-	move.w d0,d7 ;put value onto right place
-	addq.l #8,a7
-	move.w (a7)+,d6
-	move.l (a7)+,a6
-	move.w (a7)+,d1
-	move.w (a7)+,d0
-	move.l (a7)+,a0
-	tst.w d7
-	bne ENDGO
-           	goto instruction_cmp
-
-.DONT_WRITE_TO_ROM:
-           	goto instruction_cmp
-	
-
-
-;/* SAX   [unofficial - A AND X, then SBC Mem, store to X] */
-opcode_cb:	;/* SAX #ab [unofficial - A AND X, then SBC Mem, store to X] */
-	and.b A,X
-
-	btst #D_FLAGB,_regP
-	bne.s .BDC_SBC
-
-	not.w CCR6502 ;change it????
-	move.w CCR6502,CCR
-	subx.b d6,X
-	move.w CCR,CCR6502
-	svs ZFLAG
-	swap ZFLAG
-	not.w CCR6502
-
-	;and.b #V_FLAG,d6
-	;and.b #~V_FLAG,_regP
-	;or.b d6,_regP
-	move.b X,ZFLAG
-	move.b X,NFLAG
-	bra NEXTCHANGE_WITHOUT
-
-.BDC_SBC:
-	not.w CCR6502 ;change it ?????
-	move.b CCR6502,CCR
-	ori.b #4,CCR ; set zero flag
-	sbcd d6,X
-	move.b CCR,CCR6502  ;V flag isn't soluted
-	not.w CCR6502
-	move.b X,ZFLAG
-	move.b X,NFLAG
-	bra NEXTCHANGE_WITHOUT
-				
-
-
-;/* INS [unofficial - INC Mem then SBC with Acc] */
-opcode_e3:	;/* INS (ab,x) [unofficial - INC Mem then SBC with Acc] */
-opcode_e7:	;/* INS zpage [unofficial - INC Mem then SBC with Acc] */
-opcode_ef:	;/* INS abcd [unofficial - INC Mem then SBC with Acc] */
-opcode_f3:	;/* INS (ab),y [unofficial - INC Mem then SBC with Acc] */
-opcode_f7:	;/* INS zpage,x [unofficial - INC Mem then SBC with Acc] */
-opcode_fb:	;/* INS abcd,y [unofficial - INC Mem then SBC with Acc] */
-opcode_ff:	;/* INS abcd,x [unofficial - INC Mem then SBC with Acc] */
-	addq.b #1,d6
-
-	tst.b (attrib_pointer,d7.l)
-	bne.s .Putbyte
-	move.b d6,(memory_pointer,d7.l)
-           	goto sbc
-
-.Putbyte
-	cmp.b #1,(attrib_pointer,d7.l)
-	beq.s .DONT_WRITE_TO_ROM
-
-	move.l a0,-(a7)
-	move.w d0,-(a7)
-	move.w d1,-(a7)
-	move.l a6,-(a7)
-	move.w d6,-(a7)
-	clr.l -(a7)
-	move.b d6,3(a7) ;byte
-	move.l d7,-(a7) ;adress
-	jsr _PUTBYTE
-	move.w d0,d7 ;put value onto right place
-	addq.l #8,a7
-	move.w (a7)+,d6
-	move.l (a7)+,a6
-	move.w (a7)+,d1
-	move.w (a7)+,d0
-	move.l (a7)+,a0
-	tst.w d7
-	bne ENDGO
-	bra sbc
-
-.DONT_WRITE_TO_ROM:
-	bra sbc
-	
-	
-
-
-
-;/* AXA [unofficial - original decode by R.Sterba and R.Petruzela 15.1.1998 :-)]
-;   AXA - this is our new imaginative name for instruction with opcode hex BB.
-;   AXA - Store Mem AND #$FD to Acc and X, then set stackpoint to value (Acc - 4)
-;   It's cool! :-)
-;*/
-opcode_bb:	;/* AXA abcd,y [unofficial - Store Mem AND #$FD to Acc and X, then set stackpoint to value (Acc - 4) */
-	and.b #$fd,d6
-	clr.l A
-	move.b d6,A
-	move.b d6,X
-	move.b d6,ZFLAG
-	move.b d6,NFLAG
-	move.l A,stack_pointer
-      	subq.l #4,stack_pointer
-	add.l memory_pointer,stack_pointer
-	lea 101(stack_pointer),stack_pointer
-      	bra NEXTCHANGE_WITHOUT
-
-;opcode_eb:	;/* SBC #ab [unofficial] */ I have put it into sbc chunk
-
-	;pea text(pc)
-	;move.w #9,-(a7)
-	;trap #1
-	;addq.l #1,ILEGALY
-	;illegal
-	bra NEXTCHANGE_WITHOUT
-ILEGALY:	dc.l 0
-text:	dc.b 'NEJAKA CHYBA TY BLBE'
-	even
-
-UPDATE_GLOBAL_REGS
-
-      ;printf ("*** Invalid Opcode %02x at address %04x\n",
-      ;	      memory[PC-1], PC-1);
-      ;ncycles = 0;
-      ;break;
-
-
-A800GETB:
-	cmp.b #1,(attrib_pointer,d7.l)
-	beq.s .READ_FROM_ROM
-	movem.l a0/a1/a6/d0/d1,-(a7)
-	move.l d7,-(a7)
-	jsr _GETBYTE
-	move.w d0,d6 ;put stack onto right place
-	addq.l #4,a7
-	movem.l (a7)+,a0/a1/a6/d0/d1
-	bra AFTER_READ
-
-.READ_FROM_ROM:
-	move.b (memory_pointer,d7.l),d6
-	bra AFTER_READ
-
-	ifd DEBUG
-_GETBYTE:	move.b (memory_pointer,d7.l),d6
-	rts
-	endc
-
-; I used to be really stupid about stacking in C :))
-; I believed that I have to push onto stack every time I call
-; C function all registers, Fortunately I don't have to, d0-d1 and a0-a1 is enough
-
-A800PUTB:
-	cmp.b #1,(attrib_pointer,d7.l)
-	beq.s .DONT_WRITE_TO_ROM
-
-	move.l a0,-(a7)
-	move.w d0,-(a7)
-	move.w d1,-(a7)
-	move.l a6,-(a7)
-	clr.l -(a7)
-	move.b d6,3(a7) ;byte
-	move.l d7,-(a7) ;adress
-	jsr _PUTBYTE
-	move.w d0,d6 ;put value onto right place
-	addq.l #8,a7
-	move.l (a7)+,a6
-	move.w (a7)+,d1
-	move.w (a7)+,d0
-	move.l (a7)+,a0
-	tst.w d6
-	bne ENDGO
-	bra NEXTCHANGE_WITHOUT
-
-.DONT_WRITE_TO_ROM:
-	bra NEXTCHANGE_WITHOUT
-
-	ifd DEBUG
-_PUTBYTE:	move.b d6,(memory_pointer,d7.l)
-	endc
+  subq.l #cy_58,CD
+  ClrI
+  tst.b  _IRQ      ; ~ CPUCHECKIRQ
+  beq.w  NEXTCHANGE_WITHOUT
+  move.l PC6502,d7
+  sub.l  memory_pointer,d7
+  PHW_AND_P d7,d0
+  SetI
+  move.w (memory_pointer,$fffe.l),d7
+  LoHi
+  move.l d7,PC6502
+  add.l  memory_pointer,PC6502
+  clr.b  _IRQ
+  bra.w  NEXTCHANGE_WITHOUT
+
+opcode_59: ;/* EOR abcd,y */
+  ABSOLUTE_Y_NCY cy_59
+  GETANYBYTE_d0
+  EOR_C_CONT
+
+opcode_5d: ;/* EOR abcd,x */
+  ABSOLUTE_X_NCY cy_5d
+  GETANYBYTE_d0
+  EOR_C_CONT
+
+opcode_5e: ;/* LSR abcd,x */
+  ABSOLUTE_X
+  subq.l #cy_5e,CD
+  RPW_LSR_C
+
+opcode_60: ;/* RTS */
+  PLW d7,d0
+  lea    1(memory_pointer,d7.l),PC6502
+  subq.l #cy_60,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_61: ;/* ADC (ab,x) */
+  INDIRECT_X
+  subq.l #cy_61,CD
+  GETANYBYTE_d0
+  bra adc
+
+opcode_65: ;/* ADC ab */
+  subq.l #cy_65,CD
+  ZPAGE
+  GETZPBYTE d0
+  bra adc
+
+opcode_66: ;/* ROR ab */
+  ZPAGE
+  GETZPBYTE ZFLAG
+  ROR_C ZFLAG
+  PUTZPBYTE_Z cy_66
+
+opcode_68: ;/* PLA */
+  subq.l #cy_68,CD
+  PLB A,d0
+  NEXTCHANGE_REG A
+
+opcode_69: ;/* ADC #ab */
+  IMMEDIATE d0
+  subq.l #cy_69,CD
+  bra adc
+
+opcode_6a: ;/* RORA */
+  subq.l #cy_6a,CD
+  ROR_C A
+  NEXTCHANGE_REG A
+
+opcode_6c: ;/* JMP (abcd) */
+  move.w (PC6502)+,d7
+  LoHi
+  ifd P65C02
+  move.w (memory_pointer,d7.l),d7
+  LoHi
+  lea    (memory_pointer,d7.l),PC6502
+  else
+  ;/* original 6502 had a bug in jmp (addr) when addr crossed page boundary */
+  cmp.b  #$ff,d7
+  beq.s  .PROBLEM_FOUND ;when problematic jump is found
+  move.w (memory_pointer,d7.l),d7
+  LoHi
+  lea    (memory_pointer,d7.l),PC6502
+  subq.l #cy_6c,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+.PROBLEM_FOUND:
+  move.l d7,d0 ;we have to use both of them
+  clr.b  d7 ;instead of reading right this adress,
+            ;we read adress at this start of page
+  move.b (memory_pointer,d7.l),d7
+  LoHi
+  move.b (memory_pointer,d0.l),d7
+  lea    (memory_pointer,d7.l),PC6502
+  endc
+  subq.l #cy_6c,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_6d: ;/* ADC abcd */
+  ABSOLUTE
+  subq.l #cy_6d,CD
+  GETANYBYTE_d0
+  bra adc
+
+opcode_6e: ;/* ROR abcd */
+  ABSOLUTE
+  subq.l #cy_6e,CD
+  RPW_ROR_C
+
+opcode_70: ;/* BVS */
+  btst   #16,VFLAG
+  bne SOLVE
+  DONT_BRA
+
+opcode_71: ;/* ADC (ab),y */
+  INDIRECT_Y_NCY cy_71
+  GETANYBYTE_d0
+  bra adc
+
+opcode_75: ;/* ADC ab,x */
+  subq.l #cy_75,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  bra adc
+
+opcode_76: ;/* ROR ab,x */
+  ZPAGE_X
+  GETZPBYTE ZFLAG
+  ROR_C ZFLAG
+  PUTZPBYTE_Z cy_76
+
+opcode_78: ;/* SEI */
+  SetI
+  subq.l #cy_78,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_79: ;/* ADC abcd,y */
+  ABSOLUTE_Y_NCY cy_79
+  GETANYBYTE_d0
+  bra adc
+
+opcode_7d: ;/* ADC abcd,x */
+  ABSOLUTE_X_NCY cy_7d
+  GETANYBYTE_d0
+  bra adc
+
+opcode_7e: ;/* ROR abcd,x */
+  ABSOLUTE_X
+  subq.l #cy_7e,CD
+  RPW_ROR_C
+
+opcode_81: ;/* STA (ab,x) */
+  INDIRECT_X
+  STOREANYBYTE cy_81,A
+
+opcode_84: ;/* STY ab */
+  ZPAGE
+  PUTZPBYTE cy_84,Y
+
+opcode_85: ;/* STA ab */
+  ZPAGE
+  PUTZPBYTE cy_85,A
+
+opcode_86: ;/* STX ab */
+  ZPAGE
+  PUTZPBYTE cy_86,X
+
+opcode_88: ;/* DEY */
+  subq.l #cy_88,CD
+  subq.b #1,Y
+  NEXTCHANGE_REG Y
+
+opcode_8a: ;/* TXA */
+  subq.l #cy_8a,CD
+  move.b X,A
+  NEXTCHANGE_REG A
+
+opcode_8c: ;/* STY abcd */
+  ABSOLUTE
+  STOREANYBYTE cy_8c,Y
+
+opcode_8d: ;/* STA abcd */
+  ABSOLUTE
+  STOREANYBYTE cy_8d,A
+
+opcode_8e: ;/* STX abcd */
+  ABSOLUTE
+  STOREANYBYTE cy_8e,X
+
+opcode_90: ;/* BCC */
+  btst #EB68,CCR6502
+  beq SOLVE
+  DONT_BRA
+
+opcode_91: ;/* STA (ab),y */
+  INDIRECT_Y
+  STOREANYBYTE cy_91,A
+
+opcode_94: ;/* STY ab,x */
+  ZPAGE_X
+  PUTZPBYTE cy_94,Y
+
+opcode_95: ;/* STA ab,x */
+  ZPAGE_X
+  PUTZPBYTE cy_95,A
+
+opcode_96: ;/* STX ab,y */
+  ZPAGE_Y
+  PUTZPBYTE cy_96,X
+
+opcode_98: ;/* TYA */
+  subq.l #cy_98,CD
+  move.b Y,A
+  NEXTCHANGE_REG A
+
+opcode_99: ;/* STA abcd,y */
+  ABSOLUTE_Y
+  STOREANYBYTE cy_99,A
+
+opcode_9a: ;/* TXS */
+  move.b X,_regS
+  subq.l #cy_9a,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_9d: ;/* STA abcd,x */
+  ABSOLUTE_X
+  STOREANYBYTE cy_9d,A
+
+opcode_a0: ;/* LDY #ab */
+  LOAD_IMMEDIATE cy_a0,Y
+
+opcode_a1: ;/* LDA (ab,x) */
+  INDIRECT_X
+  subq.l #cy_a1,CD
+  LOADANYBYTE A
+
+opcode_a2: ;/* LDX #ab */
+  LOAD_IMMEDIATE cy_a2,X
+
+opcode_a4: ;/* LDY ab */
+  LOAD_ZPAGE cy_a4,Y
+
+opcode_a5: ;/* LDA ab */
+  LOAD_ZPAGE cy_a5,A
+
+opcode_a6: ;/* LDX ab */
+  LOAD_ZPAGE cy_a6,X
+
+opcode_a8: ;/* TAY */
+  subq.l #cy_a8,CD
+  move.b A,Y
+  NEXTCHANGE_REG A
+
+opcode_a9: ;/* LDA #ab */
+  LOAD_IMMEDIATE cy_a9,A
+
+opcode_aa: ;/* TAX */
+  subq.l #cy_aa,CD
+  move.b A,X
+  NEXTCHANGE_REG A
+
+opcode_ac: ;/* LDY abcd */
+  ABSOLUTE
+  subq.l #cy_ac,CD
+  LOADANYBYTE Y
+
+opcode_ad: ;/* LDA abcd */
+  ABSOLUTE
+  subq.l #cy_ad,CD
+  LOADANYBYTE A
+
+opcode_ae: ;/* LDX abcd */
+  ABSOLUTE
+  subq.l #cy_ae,CD
+  LOADANYBYTE X
+
+opcode_b0: ;/* BCS */
+  btst #EB68,CCR6502
+  bne SOLVE
+  DONT_BRA
+
+opcode_b1: ;/* LDA (ab),y */
+  INDIRECT_Y_NCY cy_b1
+  LOADANYBYTE A
+
+opcode_b4: ;/* LDY ab,x */
+  subq.l #cy_b4,CD
+  ZPAGE_X
+  GETZPBYTE Y
+  NEXTCHANGE_REG Y
+
+opcode_b5: ;/* LDA ab,x */
+  subq.l #cy_b5,CD
+  ZPAGE_X
+  GETZPBYTE A
+  NEXTCHANGE_REG A
+
+opcode_b6: ;/* LDX ab,y */
+  subq.l #cy_b6,CD
+  ZPAGE_Y
+  GETZPBYTE X
+  NEXTCHANGE_REG X
+
+opcode_b8: ;/* CLV */
+  bclr   #16,VFLAG
+  subq.l #cy_b8,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_b9: ;/* LDA abcd,y */
+  ABSOLUTE_Y_NCY cy_b9
+  LOADANYBYTE A
+
+opcode_ba: ;/* TSX */
+  subq.l #cy_ba,CD
+  move.b _regS,X
+  NEXTCHANGE_REG X
+
+opcode_bc: ;/* LDY abcd,x */
+  ABSOLUTE_X_NCY cy_bc
+  LOADANYBYTE Y
+
+opcode_bd: ;/* LDA abcd,x */
+  ABSOLUTE_X_NCY cy_bd
+  LOADANYBYTE A
+
+opcode_be: ;/* LDX abcd,y */
+  ABSOLUTE_Y_NCY cy_be
+  LOADANYBYTE X
+
+opcode_c0: ;/* CPY #ab */
+  IMMEDIATE d0
+  subq.l #cy_c0,CD
+  move.b Y,ZFLAG
+  bra COMPARE
+
+opcode_c1: ;/* CMP (ab,x) */
+  INDIRECT_X
+  subq.l #cy_c1,CD
+  GETANYBYTE_d0
+  bra COMPARE_A
+
+opcode_c4: ;/* CPY ab */
+  subq.l #cy_c4,CD
+  ZPAGE
+  GETZPBYTE d0
+  move.b Y,ZFLAG
+  bra COMPARE
+
+opcode_c5: ;/* CMP ab */
+  subq.l #cy_c5,CD
+  ZPAGE
+  GETZPBYTE d0
+  bra COMPARE_A
+
+opcode_c6: ;/* DEC ab */
+  ZPAGE
+  GETZPBYTE ZFLAG
+  subq.b #1,ZFLAG
+  PUTZPBYTE_Z cy_c6
+
+opcode_c8: ;/* INY */
+  subq.l #cy_c8,CD
+  addq.b #1,Y
+  NEXTCHANGE_REG Y
+
+opcode_c9: ;/* CMP #ab */
+  IMMEDIATE d0
+  subq.l #cy_c9,CD
+  bra COMPARE_A
+
+opcode_ca: ;/* DEX */
+  subq.l #cy_ca,CD
+  subq.b #1,X
+  NEXTCHANGE_REG X
+
+opcode_cc: ;/* CPY abcd */
+  ABSOLUTE
+  subq.l #cy_cc,CD
+  GETANYBYTE_d0
+  move.b Y,ZFLAG
+  bra COMPARE
+
+opcode_cd: ;/* CMP abcd */
+  ABSOLUTE
+  subq.l #cy_cd,CD
+  GETANYBYTE_d0
+  bra COMPARE_A
+
+opcode_ce: ;/* DEC abcd */
+  ABSOLUTE
+  GETANYBYTE ZFLAG
+  subq.b #1,ZFLAG
+  PUTANYBYTE_N cy_ce
+
+opcode_d0: ;/* BNE */
+  tst.b ZFLAG
+  bne SOLVE
+  DONT_BRA
+
+opcode_d1: ;/* CMP (ab),y */
+  INDIRECT_Y_NCY cy_d1
+  GETANYBYTE_d0
+  bra COMPARE_A
+
+opcode_d2: ;/* ESCRTS #ab (JAM) - on Atari is here instruction CIM
+           ;[unofficial] !RS! */
+  move.b (PC6502)+,d7
+  movem.l d1/a1,-(a7)
+  move.l d7,-(a7)
+  UPDATE_GLOBAL_REGS
+  CPU_GetStatus d0
+  jsr _AtariEscape /*in atari c*/
+  addq.l #4,a7
+  CPU_PutStatus d0
+  movem.l (a7)+,d1/a1
+  UPDATE_LOCAL_REGS
+  PLW d7,d0
+  lea (memory_pointer,d7.l),PC6502
+  addq.l #1,PC6502
+  subq.l #cy_d2,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_d5: ;/* CMP ab,x */
+  subq.l #cy_d5,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  bra COMPARE_A
+
+opcode_d6: ;/* DEC ab,x */
+  ZPAGE_X
+  GETZPBYTE ZFLAG
+  subq.b #1,ZFLAG
+  PUTZPBYTE_Z cy_d6
+
+opcode_d8: ;/* CLD */
+  ClrD
+  subq.l #cy_d8,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_d9: ;/* CMP abcd,y */
+  ABSOLUTE_Y_NCY cy_d9
+  GETANYBYTE_d0
+  bra COMPARE_A
+
+opcode_dd: ;/* CMP abcd,x */
+  ABSOLUTE_X_NCY cy_dd
+  GETANYBYTE_d0
+  bra COMPARE_A
+
+opcode_de: ;/* DEC abcd,x */
+  ABSOLUTE_X
+  GETANYBYTE ZFLAG
+  subq.b #1,ZFLAG
+  PUTANYBYTE_N cy_de
+
+opcode_e0: ;/* CPX #ab */
+  IMMEDIATE d0
+  subq.l #cy_e0,CD
+  move.b X,ZFLAG
+  bra COMPARE
+
+opcode_e1: ;/* SBC (ab,x) */
+  INDIRECT_X
+  subq.l #cy_e1,CD
+  GETANYBYTE_d0
+  bra sbc
+
+opcode_e4: ;/* CPX ab */
+  subq.l #cy_e4,CD
+  ZPAGE
+  GETZPBYTE d0
+  move.b X,ZFLAG
+  bra COMPARE
+
+opcode_e5: ;/* SBC ab */
+  subq.l #cy_e5,CD
+  ZPAGE
+  GETZPBYTE d0
+  bra sbc
+
+opcode_e6: ;/* INC ab */
+  ZPAGE
+  GETZPBYTE ZFLAG
+  addq.b #1,ZFLAG
+  PUTZPBYTE_Z cy_e6
+
+opcode_e8: ;/* INX */
+  subq.l #cy_e8,CD
+  addq.b #1,X
+  NEXTCHANGE_REG X
+
+opcode_e9: ;/* SBC #ab */
+  IMMEDIATE d0
+  subq.l #cy_e9,CD
+  bra sbc
+
+;opcode_ea: ;/* NOP */ ;official
+instr_NOP:
+  subq.l #cy_NOP,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_ec: ;/* CPX abcd */
+  ABSOLUTE
+  subq.l #cy_ec,CD
+  GETANYBYTE_d0
+  move.b X,ZFLAG
+  bra COMPARE
+
+opcode_ed: ;/* SBC abcd */
+  ABSOLUTE
+  subq.l #cy_ed,CD
+  GETANYBYTE_d0
+  bra sbc
+
+opcode_ee: ;/* INC abcd */
+  ABSOLUTE
+  GETANYBYTE ZFLAG
+  addq.b #1,ZFLAG
+  PUTANYBYTE_N cy_ee
+
+opcode_f0: ;/* BEQ */
+  tst.b ZFLAG
+  beq SOLVE
+  DONT_BRA
+
+opcode_f1: ;/* SBC (ab),y */
+  INDIRECT_Y_NCY cy_f1
+  GETANYBYTE_d0
+  bra sbc
+
+opcode_f2:  ;/* ESC #ab (JAM) - on Atari is here instruction CIM
+            ;[unofficial] !RS! */
+  move.b (PC6502)+,d7
+  movem.l d1/a1,-(a7)
+  move.l d7,-(a7)
+  UPDATE_GLOBAL_REGS
+  CPU_GetStatus d0
+  jsr _AtariEscape
+  addq.l #4,a7
+  CPU_PutStatus d0
+  movem.l (a7)+,d1/a1
+  UPDATE_LOCAL_REGS
+  subq.l #cy_f2,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_f5: ;/* SBC ab,x */
+  subq.l #cy_f5,CD
+  ZPAGE_X
+  GETZPBYTE d0
+  bra sbc
+
+opcode_f6: ;/* INC ab,x */
+  ZPAGE_X
+  GETZPBYTE ZFLAG
+  addq.b #1,ZFLAG
+  PUTZPBYTE_Z cy_f6
+
+opcode_f8: ;/* SED */
+  SetD
+  subq.l #cy_f8,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+opcode_f9: ;/* SBC abcd,y */
+  ABSOLUTE_Y_NCY cy_f9
+  GETANYBYTE_d0
+  bra sbc
+
+opcode_fd: ;/* SBC abcd,x */
+  ABSOLUTE_X_NCY cy_fd
+  GETANYBYTE_d0
+  bra sbc
+
+opcode_fe: ;/* INC abcd,x */
+  ABSOLUTE_X
+  GETANYBYTE ZFLAG
+  addq.b #1,ZFLAG
+  PUTANYBYTE_N cy_fe
+
+COMPARE_A:
+  move.b A,ZFLAG
+COMPARE:
+  sub.b  d0,ZFLAG
+  move.w CCR,CCR6502
+  not.w  CCR6502
+; bra.w  NEXTCHANGE_N
+
+;MAIN LOOP , where we are counting cycles and working with other STUFF
+
+NEXTCHANGE_N:
+  ext.w  NFLAG
+NEXTCHANGE_WITHOUT:
+  tst.l CD
+  ble.s END_OF_CYCLE
+NEXTCHANGE_WSYNC:
+  tst.l _wsync_halt  ; or tst.w _wsync_halt+2 ?
+  bne HELD_BY_WSYNC
+****************************************
+  ifd MONITOR_BREAK  ;following block of code allows you to enter
+  move ccr,-(sp)     ;a break address in monitor
+  move.l PC6502,d7
+  sub.l memory_pointer,d7
+  cmp.w _break_addr,d7
+  bne.s .get_first
+  move.b #$ff,d7
+  move (sp)+,ccr
+  bsr odskoc_si   ;on break monitor is invoked
+  move ccr,-(sp)
+
+.get_first
+  move (sp)+,ccr
+  endc
+****************************************
+  clr.l  d7
+  move.b (PC6502)+,d7
+  ifd PROFILE
+  lea _instruction_count,a0
+  addq.l #1,(a0,d7.l*4)
+  endc
+  jmp ([a1,d7.l*4])
+
+HELD_BY_WSYNC:
+  clr.l  CD
+END_OF_CYCLE:
+  CPU_GetStatus d0
+  UPDATE_GLOBAL_REGS
+  move.l CD,d0 ;returned value
+  movem.l (a7)+,d2-d7/a2-a5
+  rts
+
+SOLVE:
+  move.b (PC6502)+,d7
+  extb.l d7
+  add.l  d7,PC6502
+  move.w PC6502,d0
+  cmp.b  d7,d0
+  bmi.s  SOLVE_PB
+  subq.l #cy_Bcc1,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+SOLVE_PB:
+  subq.l #cy_Bcc2,CD
+  bgt.w  NEXTCHANGE_WSYNC
+  bra.w  END_OF_CYCLE
+
+adc:
+  btst   #D_FLAGB,_regP
+  bne.s  BCD_ADC
+  move.w CCR6502,CCR
+  addx.b d0,A ;data are added with carry (in 68000 Extended bit in this case)
+  move.w CCR,CCR6502
+  bvs.s  .SET_V
+  bclr   #16,VFLAG
+  NEXTCHANGE_REG A
+.SET_V:
+  bset   #16,VFLAG
+  NEXTCHANGE_REG A
+; Version 1 : exact like Thor
+;   Z from binary calc.
+;   N + V after lower nibble decimal correction
+;   C from decimal calc.
+; a lot of code necessary to replicate a 6502 bug
+BCD_ADC:
+  move.w d6,-(a7)  ; no movem because d0 is needed first
+  move.w d7,-(a7)
+  move.w d0,-(a7)
+  move.b d0,d6
+  lsr.b  #4,d6
+  andi.b #$0f,d0  ; low nibble Add
+  move.b A,d7
+  andi.b #$0f,d7  ; low nibble A
+  move.w CCR6502,CCR
+  addx.b d0,d7
+  cmp.b  #10,d7
+  bmi.s  .lonib_e
+  addq.b #6,d7   ; low nibble BCD fixup
+  andi.b #15,d7
+  addq.b #1,d6   ; add to high nibble Add
+.lonib_e:
+  move.b A,d0
+  lsr.b  #4,d0   ; high nibble A
+  add.b  d0,d6
+  move.b d6,ZFLAG
+  lsl.b  #4,ZFLAG
+  ext.w  NFLAG   ; NFLAG finished
+  move.w (a7),d0 ; without + because we need it again
+  eor.b  A,d0
+  not.b  d0
+  bpl.s  .CLR_V
+  eor.b  A,ZFLAG
+  bpl.s  .CLR_V
+  bset   #16,VFLAG
+  bra.s  .V_DONE
+.CLR_V:
+  bclr   #16,VFLAG
+.V_DONE:         ; VFLAG finished
+  cmp.b  #10,d6
+  bmi.s  .hinib_e
+  addq.b #6,d6   ; high nibble BCD fixup
+.hinib_e:
+  move.w (a7)+,d0  ; second time restored
+  move.w CCR6502,CCR
+  addx.b d0,A
+  move.b A,ZFLAG ; ZFLAG finished
+  clr.w  CCR6502
+  cmp.b  #16,d6
+  bmi.s  .C_DONE
+  not.w  CCR6502
+.C_DONE          ; CCR6502 finished
+  lsl.b  #4,d6
+  or.b   d6,d7   ; compose result
+  move.b d7,A
+  move.w (a7)+,d7
+  move.w (a7)+,d6
+  bra.w  NEXTCHANGE_WITHOUT
+
+sbc:
+  btst   #D_FLAGB,_regP
+  bne.s  BCD_SBC
+  not.w  CCR6502
+  move.w CCR6502,CCR
+  subx.b d0,A
+  move.w CCR,CCR6502
+  bvs.s  .SET_V
+  bclr   #16,VFLAG
+  not.w  CCR6502
+  NEXTCHANGE_REG A
+.SET_V:
+  bset   #16,VFLAG
+  not.w  CCR6502
+  NEXTCHANGE_REG A
+BCD_SBC:
+  move.b A,ZFLAG
+  not.w  CCR6502
+  move.w CCR6502,CCR
+  subx.b d0,ZFLAG
+  bvs.s  .SET_VX
+  bclr   #16,VFLAG
+  bra.s  .END_VX
+.SET_VX:
+  bset   #16,VFLAG
+.END_VX:
+  ext.w  NFLAG
+  move.w CCR6502,CCR
+  sbcd   d0,A
+  move.w CCR,CCR6502
+  not.w  CCR6502
+  bra.w  NEXTCHANGE_WITHOUT
+
+Putbyte_SPCL macro
+  move.l d1,-(a7)
+  EXE_PUTBYTE_d0
+  move.l (a7)+,d1
+  lea OPMODE_TABLE,a1
+  endm
+
+Putbyte_ADC:
+  Putbyte_SPCL
+  bra.w  adc
+
+Putbyte_CMP:
+  Putbyte_SPCL
+  bra.w  COMPARE_A
+
+Putbyte_SBC:
+  Putbyte_SPCL
+  bra.w  sbc
 
 odskoc_si:
-      UPDATE_GLOBAL_REGS
-      movem.l a0-a6,-(a7)
-      CPU_GetStatus
-      move.l d7,-(a7)
-      jsr _AtariEscape
-      addq.l #4,a7
-      CPU_PutStatus
-      movem.l (a7)+,a0-a6
-      UPDATE_LOCAL_REGS
-      rts
-
-	ifd DEBUG
-_CEKEJ:	dc.l 1
-	endc
-
-EE:	dc.w 0
-WAIT:	dc.w 0
-
-	section bss
-_OPMODE_TABLE:
-	ds.w 1
-OPMODE_TABLE: ds.l 514 (2*256 long words)+2 as a reserve
-
-
-	ifnd DEBUG
-LE:	ds.l 1
-STACKALL:   ds.l 16
-	endc
-
-	ifd DEBUG
-	section data
-;VBDIFLAG:	dc.w 1 ;information about CCR bits V B D I
-	dc.l 0
-	dc.l 0 ;
-mem6502:	;dc.l MEMORY
-
-	;ds.w 1
-memory:
-_memory:
-
-	ds.b 40960
-	incbin H:\ATARI800\ATARIBAS.ROM ;load basic
-	incbin H:\ATARI800\ATARIXL.ROM  ;load Atari XL
-
-	ds.b 8192
-	dc.b $a9,50,$69,90,$e9,40,$20,$4c,00,20
-
-	dc.b $a9,$00,$a2,0,$a0,0
-	;lda #0, ldx #0, ldy #0
-	dc.b $a5,$06,$ae,$1,$1,$bc,2,2
-	;lda $06 ldx $0101 ldy $0202,x
-	dc.b $a1,02,$a6,2,$b4,2
-	;lda (2,x) ldx 2 ldy 2,x
-	dc.b $81,0,$8e,01,01,$94,22
-	;   sta (0,x) stx $0101 sty 22,y
-	dc.b $e6,10,$6e,05,05,$e0,10
-	;   INC 10, ROR 0505 CPX #10
-	dc.b $4c,0,$20
-;PL:	ds.b 65536-(PL-memory)
-
-
-attrib:
-_attrib:	dcb.b $A000,RAM
-	dcb.b  $2000,ROM
-	dcb.b  $1000,HARDWARE
-	dcb.b  $3000,ROM
-	;dc.b ROM
-	;dc.b ROM
-	;dc.b ROM
-	;dcb.b 16383,RAM
-	;65536,RAM ;set all the memory as RAM
-
-	section bss
-TEST2:	ds.l 20000
-	section text
-_Escape:	rts
-	endc
-	section text
+  UPDATE_GLOBAL_REGS
+  movem.l d1/a1,-(a7)
+  CPU_GetStatus d0
+  move.l d7,-(a7)
+  jsr    _AtariEscape
+  addq.l #4,a7
+  CPU_PutStatus d0
+  movem.l (a7)+,d1/a1
+  UPDATE_LOCAL_REGS
+  rts

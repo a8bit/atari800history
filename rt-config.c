@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char *rcsid = "$Id: rt-config.c,v 1.4 1998/02/21 14:51:54 david Exp $";
-
 #define FALSE   0
 #define TRUE    1
 
@@ -28,6 +26,8 @@ char atari_h1_dir[MAX_FILENAME_LEN];
 char atari_h2_dir[MAX_FILENAME_LEN];
 char atari_h3_dir[MAX_FILENAME_LEN];
 char atari_h4_dir[MAX_FILENAME_LEN];
+char atari_exe_dir[MAX_FILENAME_LEN];
+char atari_state_dir[MAX_FILENAME_LEN];
 char print_command[256];
 int refresh_rate;
 int default_system;
@@ -48,6 +48,9 @@ int RtConfigLoad(char *rtconfig_filename)
 	FILE *fp;
 	int status = TRUE;
 
+	/* Win32 version doesn't use any of the RTxxx functions, but needs the variable 
+	   declarations above, so all of these are stubbed out by ifndefs in Win32	*/
+#ifndef WIN32
 	/*
 	 * Set Configuration Parameters to sensible values
 	 * in case the configuration file is missing.
@@ -65,6 +68,8 @@ int RtConfigLoad(char *rtconfig_filename)
 	atari_h2_dir[0] = '\0';
 	atari_h3_dir[0] = '\0';
 	atari_h4_dir[0] = '\0';
+	atari_exe_dir[0] = '\0';
+	atari_state_dir[0] = '\0';
 	strcpy(print_command, "lpr %s");
 	refresh_rate = 1;
 	default_system = 3;
@@ -127,6 +132,10 @@ int RtConfigLoad(char *rtconfig_filename)
 					strcpy(atari_h3_dir, ptr);
 				else if (strcmp(string, "H4_DIR") == 0)
 					strcpy(atari_h4_dir, ptr);
+				else if (strcmp(string, "EXE_DIR") == 0)
+					strcpy(atari_exe_dir, ptr);
+				else if (strcmp(string, "STATE_DIR") == 0)
+					strcpy(atari_state_dir, ptr);
 				else if (strcmp(string, "PRINT_COMMAND") == 0)
 					strcpy(print_command, ptr);
 				else if (strcmp(string, "SCREEN_REFRESH_RATIO") == 0)
@@ -192,12 +201,13 @@ int RtConfigLoad(char *rtconfig_filename)
 	else {
 		status = FALSE;
 	}
-
+#endif /* Win32 */
 	return status;
 }
 
 void RtConfigSave(void)
 {
+#ifndef WIN32
 	FILE *fp;
 	int i;
 
@@ -221,6 +231,8 @@ void RtConfigSave(void)
 	fprintf(fp, "H2_DIR=%s\n", atari_h2_dir);
 	fprintf(fp, "H3_DIR=%s\n", atari_h3_dir);
 	fprintf(fp, "H4_DIR=%s\n", atari_h4_dir);
+	fprintf(fp, "EXE_DIR=%s\n", atari_exe_dir);
+	fprintf(fp, "STATE_DIR=%s\n", atari_state_dir);
 	fprintf(fp, "PRINT_COMMAND=%s\n", print_command);
 	fprintf(fp, "SCREEN_REFRESH_RATIO=%d\n", refresh_rate);
 
@@ -260,10 +272,12 @@ void RtConfigSave(void)
 	fprintf(fp, "ENABLE_SIO_PATCH=%d\n", enable_rom_patches ? enable_sio_patch : 0);
 
 	fclose(fp);
+#endif /* Win32 */
 }
 
 void RtConfigUpdate(void)
 {
+#ifndef WIN32
 	strcpy(atari_osa_filename, "atariosa.rom");
 	strcpy(atari_osb_filename, "atariosb.rom");
 	strcpy(atari_xlxe_filename, "atarixl.rom");
@@ -283,6 +297,8 @@ void RtConfigUpdate(void)
 	GetString("Enter path for H2: device [%s] ", atari_h2_dir);
 	GetString("Enter path for H3: device [%s] ", atari_h3_dir);
 	GetString("Enter path for H4: device [%s] ", atari_h4_dir);
+	GetString("Enter path for single exe files [%s] ", atari_exe_dir);
+	GetString("Enter path for state files [%s] ", atari_state_dir);
 	GetString("Enter print command [%s] ", print_command);
 	GetNumber("Enter default screen refresh ratio 1:[%d] ", &refresh_rate);
 	if (refresh_rate < 1)
@@ -339,4 +355,5 @@ void RtConfigUpdate(void)
 	fflush(stdout);
 	getchar();
 #endif
+#endif /* Win32 */
 }

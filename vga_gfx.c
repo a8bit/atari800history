@@ -4,6 +4,7 @@
 #include <go32.h>
 #include <dpmi.h>
 #include <sys/farptr.h>
+#include <string.h>
 #include "atari.h"
 
 #ifdef AT_USE_ALLEGRO
@@ -188,7 +189,7 @@ UBYTE VESA_getmode(int width,int height,UWORD *videomode,ULONG *memaddress,ULONG
     return FALSE;  /*vesa 2.0 not found*/
 
   /*now we must search the videomode list for desired screen resolutin*/
-  modesAddr=( (vInfo.videomodes>>12)&0xffff0)+vInfo.videomodes&0xffff;
+  modesAddr=( (vInfo.videomodes>>12)&0xffff0)+(vInfo.videomodes&0xffff);
   while ((mode=_farpeekw(_dos_ds,modesAddr))!=0xffff)
   {
     modesAddr+=2;
@@ -203,7 +204,7 @@ UBYTE VESA_getmode(int width,int height,UWORD *videomode,ULONG *memaddress,ULONG
 
     if (rg.h.ah!=0) continue; /*mode not supported*/
     dosmemget(__tb&0xfffff,sizeof(mInfo)-216,&mInfo); /*note: we don't need the reserved bytes*/
-    if (mInfo.attributes&0x99 != 0x99) continue;
+    if ((mInfo.attributes&0x99) != 0x99) continue;
     /*0x99 = available, color, graphics mode, LFB available*/
     if (mInfo.XResolution!=width || mInfo.YResolution!=height) continue;
     if (mInfo.numOfPlanes!=1 || mInfo.bitsPerPixel!=8 || mInfo.memoryModel!=4) continue;
@@ -364,6 +365,7 @@ UWORD *x_verttab[]={x_vert350+1,(void*)0,x_vert480+1,x_vert350,(void*)1,x_vert48
 UBYTE x_open(UWORD mode)
 {
     __dpmi_regs rg;
+    UBYTE ret = 0;
 
     if (mode>0xb) return 0;
     rg.x.ax = 0x1a00;
@@ -446,6 +448,8 @@ x_exit:
      : "g" (mode), "c" (_dos_ds)
      : "%esi", "%eax", "%ebx", "%ecx", "%edx"
      );
+     /* ret should be filled with %al in the inline asm but I don't know the syntax */
+     return ret;
 }
 
 /* Procedure for copying atari screen to x-mode videomemory */
@@ -634,5 +638,23 @@ void make_darker(void *target,void *source,int bytes)
 }
 
 #endif
-
+/* Vertical retrace control */
+void v_ret()
+{
+__asm__ __volatile__("
+    movw $0x03da,%%dx;
+1:
+    inb %%dx,%%al
+    testb $8,%%al
+    jnz 1b
+2:
+    inb %%dx,%%al
+    testb $8,%%al
+    jz 2b
+   "
+    :
+    :
+    :"%al", "%dx"
+  );
+}
 

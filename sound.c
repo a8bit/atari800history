@@ -9,8 +9,6 @@
 
 #include "pokeysnd.h"
 
-static char *rcsid = "$Id: sound.c,v 1.5 1998/02/21 15:20:42 david Exp $";
-
 /* 0002 = 2 Fragments */
 /* 0007 = means each fragment is 2^2 or 128 bytes */
 /* See voxware docs in /usr/src/linux/drivers/sound for more info */

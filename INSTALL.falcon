@@ -1,4 +1,4 @@
-                                                                   July 1998
+                                                                December 1998
 
     Hi,
 
@@ -9,7 +9,7 @@ Atari800 contains special routines for direct VIDEL programming (for achieving
 336x240 resolution on VGA monitors) and also NOVA graphics card support.
 
 Atari800 has been developed by David Firth. Falcon port was done by me.
-Empty Head (= Karel Rous) helped a lot with his 65C02 emulation written
+Empty Head (= Karel Rous) and Gerhard Janka wrote the 65C02 emulation
 in pure MC68030 assembler. Douglas Little's assembler routines for VIDEL
 were used for achieving maximal possible speed and compatibility.
 
@@ -32,14 +32,21 @@ Help = Help key
 Joystick emulation works fine. Both real joysticks (CX-40 type) can be
 connected.
 
-Two special command line parameters were introduced in this Falcon port:
+Several special command line parameters were introduced in this Falcon port:
 
-- interlace <number>      the <number> is a number of skipped Falcon screens.
-                          Normally the Falcon screen is updated every time
-                          when it's build, i.e. <number> is 0 by default. Higher
-                          <number> should cause faster emulation (because of
-                          less time spent by updating slow Falcon screen).
+-interlace <number>     the <number> is a number of skipped Falcon screens.
+                        Normally the Falcon screen is updated every time
+                        when it's build, i.e. <number> is 0 by default. Higher
+                        <number> should cause faster emulation (because of
+                        less time spent by updating slow Falcon screen).
 
+-joyswap                swap Joysticks
+
+-videl                  on Falcon use direct VIDEL programing (allows you
+                        to switch res on-the-fly and achieve special 336x240
+                        resolution on VGA)
+
+-double                 double the screen size on NOVA cards
 
 For bugreports of Falcon port please write to me (Petr Stehlik)
 

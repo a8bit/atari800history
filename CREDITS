@@ -124,6 +124,10 @@ Thomas Richter <thor@math.tu-berlin.de>
 - POKEY timers
 - ADC/SBC "V" bit bug found and fixed using Frodo 6502 emu source
 
+Rich Lawrence <rich@kesmai.com>
+- Win32 port (using DirectX)
+- DCM and ZLIB compressed files support
+
 Petr Sumbera <xsumbe00@stud.fee.vutbr.cz>
 - LPTjoy idea and design of the interface
 
@@ -147,3 +151,15 @@ Preston Crow
 
 Jason Duerstock <jason@sdi.cluephone.com>
 - R-Time 8 cartridge support (real date and time from host machine)
+- page based memory access
+
+Kuba <kubad@zeus.polsl.gliwice.pl>
+- vertical retrace control in DOS port
+
+Gerhard Janka <gerhard.janka@siemens.at>
+- cpu_m68k.s corrections and improvements
+- double buffering of screen output
+
+Jindroush <kubecj@asw.cz>
+- various corrections and refinements
+  hours of testing on real Atari800XL

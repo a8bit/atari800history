@@ -35,8 +35,6 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 
-static char *rcsid = "$Id: cpu.c,v 1.22 1998/02/21 15:02:12 david Exp $";
-
 #define	FALSE	0
 #define	TRUE	1
 

@@ -71,13 +71,17 @@ OBJECTS =       atari.o \
 		gtia.o \
 		pokey.o \
 		pia.o \
-                supercart.o \
-                prompts.o \
-                rt-config.o \
-                ui.o \
-                list.o \
-                ataripcx.o \
-                log.o
+		supercart.o \
+		prompts.o \
+		rt-config.o \
+		ui.o \
+		list.o \
+		ataripcx.o \
+		log.o \
+		compfile.o \
+		memory.o  \
+		pbi.o \
+		statesav.o
 
 atari800        :       $(OBJECTS) $(OBJ) joycfg.exe
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
@@ -156,6 +160,9 @@ ataripcx.o	:	ataripcx.c
 	
 log.o	:	log.c log.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
+	
+compfile.o	:	compfile.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) compfile.c
 	
 joycfg.exe	:	joycfg.o pcjoy.h
 	$(LD) $(LDFLAGS) joycfg.o -o joycfg.exe

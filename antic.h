@@ -44,6 +44,11 @@ extern int xmax;
 extern int dmactl_xmin_noscroll;
 extern int dmactl_xmax_noscroll;
 extern ULONG *atari_screen;
+#ifdef BITPL_SCR
+extern ULONG *atari_screen_b;
+extern ULONG *atari_screen1;
+extern ULONG *atari_screen2;
+#endif
 
 void ANTIC_Initialise(int *argc, char *argv[]);
 void ANTIC_RunDisplayList(void);

@@ -44,4 +44,5 @@ extern void make_darker(void *target,void *source,int bytes);
 
 
 #endif
-
+/*vertical retrace control*/
+extern void v_ret();

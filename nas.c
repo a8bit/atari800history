@@ -1,7 +1,5 @@
 #include <audio/audiolib.h>
 
-static char *rcsid = "$Id: nas.c,v 1.6 1998/02/21 14:55:43 david Exp $";
-
 #define FALSE 0
 #define TRUE 1
 

@@ -37,13 +37,12 @@
 #endif
 #endif
 
-static char *rcsid = "$Id: devices.c,v 1.21 1998/02/21 15:17:44 david Exp $";
-
 #define FALSE   0
 #define TRUE    1
 
 #include "atari.h"
 #include "cpu.h"
+#include "memory.h"
 #include "devices.h"
 #include "rt-config.h"
 #include "log.h"
@@ -153,10 +152,10 @@ void Device_GetFilename()
 	int offset = 0;
 	int devnam = TRUE;
 
-	bufadr = (memory[ICBAHZ] << 8) | memory[ICBALZ];
+	bufadr = (dGetByte(ICBAHZ) << 8) | dGetByte(ICBALZ);
 
-	while (Device_isvalid(memory[bufadr])) {
-		int byte = memory[bufadr];
+	while (Device_isvalid(dGetByte(bufadr))) {
+		int byte = dGetByte(bufadr);
 
 		if (!devnam) {
 			if (isupper(byte))
@@ -214,7 +213,7 @@ void Device_HHOPEN(void)
 	if (devbug)
 		Aprint("HHOPEN");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
 	if (fp[fid]) {
 		fclose(fp[fid]);
@@ -230,7 +229,7 @@ void Device_HHOPEN(void)
    else
    sprintf (fname, "%s/%s", h_prefix, filename);
  */
-	devnum = memory[ICDNOZ];
+	devnum = dGetByte(ICDNOZ);
 	if (devnum > 9) {
 		Aprint("Attempt to access H%d: device", devnum);
 		return;
@@ -255,7 +254,7 @@ void Device_HHOPEN(void)
 #endif
 #endif
 
-	temp = memory[ICAX1Z];
+	temp = dGetByte(ICAX1Z);
 
 	switch (temp) {
 	case 4:
@@ -371,7 +370,7 @@ void Device_HHCLOS(void)
 	if (devbug)
 		Aprint("HHCLOS");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
 	if (fp[fid]) {
 		fclose(fp[fid]);
@@ -386,7 +385,7 @@ void Device_HHREAD(void)
 	if (devbug)
 		Aprint("HHREAD");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
 	if (fp[fid]) {
 		int ch;
@@ -422,7 +421,7 @@ void Device_HHWRIT(void)
 	if (devbug)
 		Aprint("HHWRIT");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
 	if (fp[fid]) {
 		int ch;
@@ -452,7 +451,7 @@ void Device_HHSTAT(void)
 	if (devbug)
 		Aprint("HHSTAT");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
 	regY = 146;
 	SetN;
@@ -463,9 +462,9 @@ void Device_HHSPEC(void)
 	if (devbug)
 		Aprint("HHSPEC");
 
-	fid = memory[0x2e] >> 4;
+	fid = dGetByte(0x2e) >> 4;
 
-	switch (memory[ICCOMZ]) {
+	switch (dGetByte(ICCOMZ)) {
 	case 0x20:
 		Aprint("RENAME Command");
 		break;

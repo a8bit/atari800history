@@ -15,6 +15,8 @@ extern char atari_h1_dir[MAX_FILENAME_LEN];
 extern char atari_h2_dir[MAX_FILENAME_LEN];
 extern char atari_h3_dir[MAX_FILENAME_LEN];
 extern char atari_h4_dir[MAX_FILENAME_LEN];
+extern char atari_exe_dir[MAX_FILENAME_LEN];
+extern char atari_state_dir[MAX_FILENAME_LEN];
 extern char print_command[256];
 extern int refresh_rate;
 extern int default_system;

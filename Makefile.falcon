@@ -23,27 +23,31 @@ default :
 	@echo To clean directory, type: make clean
 
 basic :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DBASIC" LDLIBS="-lm" OBJ="cpu.o atari_basic.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DBASIC" LDLIBS="-lm" OBJ="atari_basic.o"
 	@echo Finished.
 
 ncurses :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCURSES -DANSI_NCURSES" LDLIBS="-lncurses -lm" OBJ="cpu.o atari_curses.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCURSES -DANSI_NCURSES" LDLIBS="-lncurses -lm" OBJ="atari_curses.o"
 	@echo Finished.
 
 gem :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG" OBJ="cpu.o atari_falcon.o c2p_uni.o videl.o ikbd.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DSCREENSAVER" OBJ="atari_falcon.o c2p_uni.o videl.o ikbd.o"
 	@echo Finished.
 
 snd :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND" OBJ="cpu.o atari_falcon.o c2p_uni.o videl.o ikbd.o sound_dma.o"
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND -DSCREENSAVER" OBJ="atari_falcon.o c2p_uni.o videl.o ikbd.o sound_dma.o"
 	@echo Finished.
 
 asm :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG" OBJ="cpu_asm.o atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o"
+	@rm cpu.o
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DSCREENSAVER" OBJ="atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o"
+	@rm cpu.o
 	@echo Finished.
 
 super :
-	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND" OBJ="cpu_asm.o atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o sound_dma.o"
+	@rm cpu.o
+	@make atari800 CPPFLAGS="-DBACK_SLASH -DCPUASS -DUSE_CLOCK -DSET_LED -DBUFFERED_LOG -DDMASOUND -DSCREENSAVER" OBJ="atari_falcon.o c2p_uni.o videl.o ikbd.o cpu_m68k.o sound_dma.o"
+	@rm cpu.o
 	@echo Finished.
 
 #
@@ -76,6 +80,7 @@ configure.o	:	configure.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) configure.c
 
 OBJECTS =       atari.o \
+		cpu.o \
 		monitor.o \
 		sio.o \
 		devices.o \
@@ -83,18 +88,23 @@ OBJECTS =       atari.o \
 		gtia.o \
 		pokey.o \
 		pia.o \
-                supercar.o \
-                prompts.o \
-                rtconfig.o \
-                ui.o \
-                list.o \
-                pokeysnd.o \
+		supercar.o \
+		prompts.o \
+		rtconfig.o \
+		ui.o \
+		list.o \
+		pokeysnd.o \
 		sound_falcon.o \
 		ataripcx.o \
-		log.o
+		log.o \
+		compfile.o \
+		memory.o \
+		pbi.o \
+		statesav.o
 
 atari800        :       $(OBJECTS) $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJECTS) $(OBJ) $(LDLIBS) -o atari800
+	fixstk 128k atari800
 	# strip atari800
 
 atari.o         :       atari.c $(INCLUDES)
@@ -102,9 +112,6 @@ atari.o         :       atari.c $(INCLUDES)
 
 cpu.o           :       cpu.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) cpu.c -o cpu.o
-
-cpu_asm.o           :       cpu_asm.c $(INCLUDES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) cpu_asm.c
 
 monitor.o       :       monitor.c $(INCLUDES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) monitor.c
@@ -188,6 +195,9 @@ ataripcx.o	:	ataripcx.c
 		
 log.o	:	log.c log.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) log.c
+		
+compfile.o	:	compfile.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) compfile.c
 		
 clean   :
 	rm -f configure

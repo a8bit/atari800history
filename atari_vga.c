@@ -17,7 +17,7 @@
 #include <dos.h>
 #include "cpu.h"
 #include "colours.h"
-#include "ui.h"		/* for ui_is_active */
+#include "ui.h"         /* for ui_is_active */
 #include "pcjoy.h"
 
 #ifdef AT_USE_ALLEGRO
@@ -65,6 +65,7 @@ static UBYTE LEDstatus=0; /*status of disk LED*/
 
 static int video_mode=0;       /*video mode (0-3)*/
 static int use_vesa=1;         /*use vesa mode?*/
+static int use_vret=0;           /*control vertical retrace?*/
 #ifdef AT_USE_ALLEGRO
   static BITMAP *scr_bitmap;   /*allegro BITMAP*/
   static UBYTE *dark_memory;   /*buffer with darker lines*/
@@ -78,7 +79,7 @@ static int use_vesa=1;         /*use vesa mode?*/
   static int vesa_selector;  /*selector for accessing LFB*/
 #endif
 
-static int vga_started = 0;		/*AAA needed for DOS to see text */
+static int vga_started = 0;             /*AAA needed for DOS to see text */
 
 UBYTE POT[2];
 extern int SHIFT;
@@ -86,7 +87,7 @@ extern int ATKEYPRESSED;
 
 static int SHIFT_LEFT = FALSE;
 static int SHIFT_RIGHT = FALSE;
-static int norepkey = FALSE;	/* for "no repeat" of some keys !RS! */
+static int norepkey = FALSE;    /* for "no repeat" of some keys !RS! */
 
 static int PC_keyboard = TRUE;
 
@@ -123,92 +124,92 @@ static int js0_centre_y;
 /*read analog joystick 0*/
 int joystick0(int *x, int *y)
 {
-	int jx, jy, jb;
+        int jx, jy, jb;
 
-	__asm__ __volatile__(
-							"cli\n\t"
-							"movw	$0x201,%%dx\n\t"
-							"xorl	%%ebx,%%ebx\n\t"
-							"xorl	%%ecx,%%ecx\n\t"
-							"outb	%%al,%%dx\n\t"
-							"__jloop:\n\t"
-							"inb	%%dx,%%al\n\t"
-							"testb	$1,%%al\n\t"
-							"jz		x_ok\n\t"
-							"incl	%%ecx\n\t"
-							"x_ok:\n\t"
-							"testb	$2,%%al\n\t"
-							"jz		y_ok\n\t"
-							"incl	%%ebx\n\t"
-							"jmp	__jloop\n\t"
-							"y_ok:\n\t"
-							"testb	$1,%%al\n\t"
-							"jnz	__jloop\n\t"
-							"sti\n\t"
-							"shrb	$4,%%al"
-							:"=a"(jb), "=b"(jy), "=c"(jx)
-							:	/* no input values */
-							:"%al", "%ebx", "%ecx", "%dx"
-	);
+        __asm__ __volatile__(
+                                                        "cli\n\t"
+                                                        "movw   $0x201,%%dx\n\t"
+                                                        "xorl   %%ebx,%%ebx\n\t"
+                                                        "xorl   %%ecx,%%ecx\n\t"
+                                                        "outb   %%al,%%dx\n\t"
+                                                        "__jloop:\n\t"
+                                                        "inb    %%dx,%%al\n\t"
+                                                        "testb  $1,%%al\n\t"
+                                                        "jz             x_ok\n\t"
+                                                        "incl   %%ecx\n\t"
+                                                        "x_ok:\n\t"
+                                                        "testb  $2,%%al\n\t"
+                                                        "jz             y_ok\n\t"
+                                                        "incl   %%ebx\n\t"
+                                                        "jmp    __jloop\n\t"
+                                                        "y_ok:\n\t"
+                                                        "testb  $1,%%al\n\t"
+                                                        "jnz    __jloop\n\t"
+                                                        "sti\n\t"
+                                                        "shrb   $4,%%al"
+                                                        :"=a"(jb), "=b"(jy), "=c"(jx)
+                                                        :       /* no input values */
+                                                        :"%al", "%ebx", "%ecx", "%dx"
+        );
 
-	*x = jx;
-	*y = jy;
+        *x = jx;
+        *y = jy;
 
-	return jb & 0x03;
+        return jb & 0x03;
 }
 /*read analog joystick and set astick & atrig values*/
 void read_joystick(int centre_x, int centre_y)
 {
-	const int threshold = 50;
-	int jsx, jsy;
+        const int threshold = 50;
+        int jsx, jsy;
 
-	astick = STICK_CENTRE;
+        astick = STICK_CENTRE;
 
-	atrig = (joystick0(&jsx, &jsy) < 3) ? 0 : 1;
+        atrig = (joystick0(&jsx, &jsy) < 3) ? 0 : 1;
 
-	if (jsx < (centre_x - threshold))
-		astick &= 0xfb;
-	if (jsx > (centre_x + threshold))
-		astick &= 0xf7;
-	if (jsy < (centre_y - threshold))
-		astick &= 0xfe;
-	if (jsy > (centre_y + threshold))
-		astick &= 0xfd;
+        if (jsx < (centre_x - threshold))
+                astick &= 0xfb;
+        if (jsx > (centre_x + threshold))
+                astick &= 0xf7;
+        if (jsy < (centre_y - threshold))
+                astick &= 0xfe;
+        if (jsy > (centre_y + threshold))
+                astick &= 0xfd;
 }
-#endif							/* AT_USE_ALLEGRO_JOY */
+#endif                                                  /* AT_USE_ALLEGRO_JOY */
 
 /*find port for given LPT joystick*/
 int test_LPTjoy(int portno,int *port)
 {
-	int addr;
+        int addr;
 
-	if (portno < 1 || portno > 3)
-		return FALSE;
-	addr = _farpeekw(_dos_ds, (portno - 1) * 2 + 0x408);
-	if (addr == 0)
-		return FALSE;
+        if (portno < 1 || portno > 3)
+                return FALSE;
+        addr = _farpeekw(_dos_ds, (portno - 1) * 2 + 0x408);
+        if (addr == 0)
+                return FALSE;
 
         if (port!=NULL) *port=addr;
 
-	return TRUE;
+        return TRUE;
 }
 
 void read_LPTjoy(int port, int joyport)
 {
-	int state = STICK_CENTRE, trigger = 1, val;
+        int state = STICK_CENTRE, trigger = 1, val;
 
-	val = inportb(port + 1);
-	if (!(val & (1 << 4)))
-		state &= STICK_FORWARD;
-	else if (!(val & (1 << 5)))
-		state &= STICK_BACK;
-	if (!(val & (1 << 6)))
-		state &= STICK_RIGHT;
-	else if ((val & (1 << 7)))
-		state &= STICK_LEFT;
+        val = inportb(port + 1);
+        if (!(val & (1 << 4)))
+                state &= STICK_FORWARD;
+        else if (!(val & (1 << 5)))
+                state &= STICK_BACK;
+        if (!(val & (1 << 6)))
+                state &= STICK_RIGHT;
+        else if ((val & (1 << 7)))
+                state &= STICK_LEFT;
 
-	if (!(val & (1 << 3)))
-		trigger = 0;
+        if (!(val & (1 << 3)))
+                trigger = 0;
 
         switch (joyport)
         {
@@ -295,21 +296,21 @@ void key_handler(void)
         /*forget scancodes used by keysticks*/
         if (joy_keyboard && !ui_is_active && keyforget[raw_key_r]) raw_key_r=0;
 
-	switch (raw_key_r) {
-		case 0xaa:  /*ignore 0xe0 0xaa sent by gray arrows*/
-			raw_key_r=0;
-			key_leave=0;
-			break;
+        switch (raw_key_r) {
+                case 0xaa:  /*ignore 0xe0 0xaa sent by gray arrows*/
+                        raw_key_r=0;
+                        key_leave=0;
+                        break;
                 case 0x2a:
                         SHIFT_LEFT = !key_leave;
-		        break;
+                        break;
                 case 0x36:
                         SHIFT_RIGHT = !key_leave;
-		        break;
+                        break;
                 case 0x1d:
                 case 0x9d:
                         control = !key_leave;
-		        break;
+                        break;
                 case 0x41:                                      /*F7*/
                         if (!key_leave)
                         {
@@ -357,24 +358,24 @@ void key_handler(void)
                         raw_key_r=0;
                         break;
                 case 0x3c:
-		        if (!key_leave)
-		          consol &= 0x03;			/* OPTION key ON */
+                        if (!key_leave)
+                          consol &= 0x03;                       /* OPTION key ON */
                         else
-	          	  consol |= 0x04;       		/* OPTION key OFF */
-		        break;
+                          consol |= 0x04;                       /* OPTION key OFF */
+                        break;
                 case 0x3d:
                         if (!key_leave)
-	          	  consol &= 0x05;			/* SELECT key ON */
+                          consol &= 0x05;                       /* SELECT key ON */
                         else
-	  	          consol |= 0x02;                       /* SELECT key OFF */
-		        break;
+                          consol |= 0x02;                       /* SELECT key OFF */
+                        break;
                 case 0x3e:
                         if (!key_leave)
-	        	  consol &= 0x06;			/* START key ON */
+                          consol &= 0x06;                       /* START key ON */
                         else
-	          	  consol |= 0x01;                       /* START key OFF */
-		        break;
-	}
+                          consol |= 0x01;                       /* START key OFF */
+                        break;
+        }
 
         if (k_test)  /*keystick key was pressed*/
         {
@@ -406,7 +407,7 @@ void key_handler(void)
             }
         }
 
-	SHIFT_KEY = SHIFT_LEFT | SHIFT_RIGHT;
+        SHIFT_KEY = SHIFT_LEFT | SHIFT_RIGHT;
         raw_key_r=(key_leave?0x200:0)|raw_key_r;
         if (raw_key_r==0x200) raw_key_r=0;
         if (raw_key==last_raw_key && raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
@@ -432,17 +433,17 @@ void key_init(void)
           outportb(0x60,0x2);
 
         raw_key_r=0;raw_key=0;
-	new_key_handler.pm_offset = (int) key_handler;
-	new_key_handler.pm_selector = _go32_my_cs();
-	_go32_dpmi_get_protected_mode_interrupt_vector(0x9, &old_key_handler);
-	_go32_dpmi_allocate_iret_wrapper(&new_key_handler);
-	_go32_dpmi_set_protected_mode_interrupt_vector(0x9, &new_key_handler);
+        new_key_handler.pm_offset = (int) key_handler;
+        new_key_handler.pm_selector = _go32_my_cs();
+        _go32_dpmi_get_protected_mode_interrupt_vector(0x9, &old_key_handler);
+        _go32_dpmi_allocate_iret_wrapper(&new_key_handler);
+        _go32_dpmi_set_protected_mode_interrupt_vector(0x9, &new_key_handler);
 }
 
 void key_delete(void)
 {
         int kflags;
-	_go32_dpmi_set_protected_mode_interrupt_vector(0x9, &old_key_handler);
+        _go32_dpmi_set_protected_mode_interrupt_vector(0x9, &old_key_handler);
         /*set the original keyboard LED settings*/
         kflags=_farpeekb(_dos_ds,0x417);
         outportb(0x60,0xed);
@@ -461,10 +462,10 @@ void key_delete(void)
 
 void SetupVgaEnvironment()
 {
-	int a, r, g, b, i;
-	union REGS rg;
-	__dpmi_regs d_rg;
-	UBYTE ctab[768];
+        int a, r, g, b, i;
+        union REGS rg;
+        __dpmi_regs d_rg;
+        UBYTE ctab[768];
 
 #ifdef AT_USE_ALLEGRO
         int allegro_mode;
@@ -472,25 +473,25 @@ void SetupVgaEnvironment()
         if (use_vesa) allegro_mode=GFX_AUTODETECT; else allegro_mode=GFX_MODEX;
         switch(video_mode)
         {
-	  case 0:
-	    set_gfx_mode(GFX_VGA, 320, 200, 0, 0);
+          case 0:
+            set_gfx_mode(GFX_VGA, 320, 200, 0, 0);
             break;
           case 1:
             set_gfx_mode(allegro_mode,320,240,0,0);
- 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT);
-	    scr_data=scr_bitmap->dat;
+            scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT);
+            scr_data=scr_bitmap->dat;
             break;
           case 2:
             set_gfx_mode(allegro_mode,320,480,0,0);
- 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
-	    scr_data=scr_bitmap->dat;
+            scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
+            scr_data=scr_bitmap->dat;
             dark_memory=(UBYTE*)malloc(ATARI_WIDTH*ATARI_HEIGHT);
             memset(dark_memory,0,ATARI_WIDTH*ATARI_HEIGHT);
             break;
           case 3:
             set_gfx_mode(allegro_mode,320,480,0,0);
- 	    scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
-	    scr_data=scr_bitmap->dat;
+            scr_bitmap=create_bitmap(ATARI_WIDTH,ATARI_HEIGHT*2);
+            scr_data=scr_bitmap->dat;
             dark_memory=(UBYTE*)malloc(ATARI_WIDTH*ATARI_HEIGHT);
             break;
         }
@@ -504,8 +505,8 @@ void SetupVgaEnvironment()
           switch(video_mode)
           {
             case 0:
-  	      rg.x.ax = 0x0013;
-  	      int86(0x10, &rg, &rg); /*vga 320x200*/
+              rg.x.ax = 0x0013;
+              int86(0x10, &rg, &rg); /*vga 320x200*/
               break;
             case 1:
               x_open(2);             /*xmode 320x240*/
@@ -516,84 +517,84 @@ void SetupVgaEnvironment()
               break;
           }
 #endif
-	vga_started = 1;
+        vga_started = 1;
 
-	/* setting all palette at once is faster....*/
-	for (a = 0, i = 0; a < 256; a++) {
-	  ctab[i++]=(colortable[a] >> 18) & 0x3f;
-	  ctab[i++]=(colortable[a] >> 10) & 0x3f;
-	  ctab[i++]=(colortable[a] >> 2) & 0x3f;
-	}
+        /* setting all palette at once is faster....*/
+        for (a = 0, i = 0; a < 256; a++) {
+          ctab[i++]=(colortable[a] >> 18) & 0x3f;
+          ctab[i++]=(colortable[a] >> 10) & 0x3f;
+          ctab[i++]=(colortable[a] >> 2) & 0x3f;
+        }
         /*copy ctab to djgpp transfer buffer in DOS memory*/
-	dosmemput(ctab,768,__tb&0xfffff);
-	d_rg.x.ax=0x1012;
-	d_rg.x.bx=0;
-	d_rg.x.cx=256;
-	d_rg.x.dx=__tb&0xf; /*offset of transfer buffer*/
-	d_rg.x.es=(__tb >> 4) & 0xffff;  /*segment of transfer buffer*/
-	__dpmi_int(0x10,&d_rg);  /*VGA set palette block*/
+        dosmemput(ctab,768,__tb&0xfffff);
+        d_rg.x.ax=0x1012;
+        d_rg.x.bx=0;
+        d_rg.x.cx=256;
+        d_rg.x.dx=__tb&0xf; /*offset of transfer buffer*/
+        d_rg.x.es=(__tb >> 4) & 0xffff;  /*segment of transfer buffer*/
+        __dpmi_int(0x10,&d_rg);  /*VGA set palette block*/
 
-	key_init(); /*initialize keyboard handler*/
+        key_init(); /*initialize keyboard handler*/
 }
 
 void ShutdownVgaEnvironment()
 {
-	union REGS rg;
+        union REGS rg;
 
-	if (vga_started) {
+        if (vga_started) {
 #ifndef AT_USE_ALLEGRO
                 if (use_vesa)
                   VESA_close(&vesa_linear,&vesa_selector);
                 else
                 {
-		  rg.x.ax = 0x0003;
-		  int86(0x10, &rg, &rg);
+                  rg.x.ax = 0x0003;
+                  int86(0x10, &rg, &rg);
                 }
 #else
                 /*when closing Allegro video mode, we must free the allocated BITMAP structure*/
-		switch(video_mode)
-		{
-		  case 1:
- 	            Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT);
-	            destroy_bitmap(scr_bitmap);
-	            break;
-	          case 2:
-	          case 3:
- 	            Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT*2);
-	            destroy_bitmap(scr_bitmap);
+                switch(video_mode)
+                {
+                  case 1:
+                    Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT);
+                    destroy_bitmap(scr_bitmap);
+                    break;
+                  case 2:
+                  case 3:
+                    Map_bitmap(scr_bitmap,scr_data,ATARI_WIDTH,ATARI_HEIGHT*2);
+                    destroy_bitmap(scr_bitmap);
                     free(dark_memory);
-	            break;
+                    break;
                 }
                 rg.x.ax = 0x0003;
-	        int86(0x10, &rg, &rg);
+                int86(0x10, &rg, &rg);
 #endif
-	}
+        }
    vga_started=FALSE;
 }
 
 void Atari_DisplayScreen(UBYTE * ascreen)
 {
-	static int lace = 0;
-	unsigned long vga_ptr;
+        static int lace = 0;
+        unsigned long vga_ptr;
 
-	UBYTE *scr_ptr;
-	int ypos;
-	int x;
+        UBYTE *scr_ptr;
+        int ypos;
+        int x;
 #ifdef AT_USE_ALLEGRO_COUNTER
-	static char speedmessage[200];
-	extern int speed_count;
+        static char speedmessage[200];
+        extern int speed_count;
 #endif
-	vga_ptr = 0xa0000;
-	scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
+        vga_ptr = 0xa0000;
+        scr_ptr = &ascreen[first_lno * ATARI_WIDTH + first_col];
 
-	if (ypos_inc == 2) {
-		if (lace) {
-			vga_ptr += 320;
-			scr_ptr += ATARI_WIDTH;
-		}
-		lace = 1 - lace;
-	}
-	
+        if (ypos_inc == 2) {
+                if (lace) {
+                        vga_ptr += 320;
+                        scr_ptr += ATARI_WIDTH;
+                }
+                lace = 1 - lace;
+        }
+
       if (vga_started) /*draw screen only in graphics mode*/
       {
 
@@ -606,17 +607,18 @@ void Atari_DisplayScreen(UBYTE * ascreen)
           LEDstatus--;
         }
 
+      if(use_vret) v_ret(); /*vertical retrace control */
 #if AT_USE_ALLEGRO
         /*draw screen using Allegro*/
         switch(video_mode)
         {
           case 0:
-	    for (ypos = 0; ypos < 200; ypos += ypos_inc) {
-		_dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+            for (ypos = 0; ypos < 200; ypos += ypos_inc) {
+                _dosmemputl(scr_ptr, 320 / 4, vga_ptr);
 
-		vga_ptr += vga_ptr_inc;
-		scr_ptr += scr_ptr_inc;
-	    }
+                vga_ptr += vga_ptr_inc;
+                scr_ptr += scr_ptr_inc;
+            }
             break;
           case 1:
             if (screen!=scr_bitmap->dat)
@@ -662,11 +664,11 @@ void Atari_DisplayScreen(UBYTE * ascreen)
             switch(video_mode)
             {
               case 0:
-    	        for (ypos = 0; ypos < 200; ypos += ypos_inc) {
-    		    _dosmemputl(scr_ptr, 320 / 4, vga_ptr);
-    
-    		    vga_ptr += vga_ptr_inc;
-    		    scr_ptr += scr_ptr_inc;
+                for (ypos = 0; ypos < 200; ypos += ypos_inc) {
+                    _dosmemputl(scr_ptr, 320 / 4, vga_ptr);
+
+                    vga_ptr += vga_ptr_inc;
+                    scr_ptr += scr_ptr_inc;
                 }
                 break;
               case 1:
@@ -683,13 +685,13 @@ void Atari_DisplayScreen(UBYTE * ascreen)
 
 
 #ifdef AT_USE_ALLEGRO_COUNTER
-	sprintf(speedmessage, "%d", speed_count);
-	textout((BITMAP *) screen, font, speedmessage, 1, 1, 10);
-	speed_count = 0;
+        sprintf(speedmessage, "%d", speed_count);
+        textout((BITMAP *) screen, font, speedmessage, 1, 1, 10);
+        speed_count = 0;
 #endif
       } /* if (vga_started) */
 #ifdef USE_DOSSOUND
-	dossound_UpdateSound();
+        dossound_UpdateSound();
 #endif
 }
 
@@ -712,91 +714,96 @@ void Atari_Set_LED(int how)
 
 void Atari_Initialise(int *argc, char *argv[])
 {
-	int i;
-	int j;
+        int i;
+        int j;
         int use_lpt1=0,use_lpt2=0,use_lpt3=0;
 
-	for (i = j = 1; i < *argc; i++) {
-		if (strcmp(argv[i], "-interlace") == 0) {
-			ypos_inc = 2;
-			vga_ptr_inc = 320 + 320;
-			scr_ptr_inc = ATARI_WIDTH + ATARI_WIDTH;
-		}
-		else if (strcmp(argv[i], "-LPTjoy1") == 0)
-			use_lpt1=test_LPTjoy(1,NULL);
-		else if (strcmp(argv[i], "-LPTjoy2") == 0)
-			use_lpt2=test_LPTjoy(2,NULL);
-		else if (strcmp(argv[i], "-LPTjoy3") == 0)
-			use_lpt3=test_LPTjoy(3,NULL);
+        for (i = j = 1; i < *argc; i++) {
+                if (strcmp(argv[i], "-interlace") == 0) {
+                        ypos_inc = 2;
+                        vga_ptr_inc = 320 + 320;
+                        scr_ptr_inc = ATARI_WIDTH + ATARI_WIDTH;
+                }
+                else if (strcmp(argv[i], "-LPTjoy1") == 0)
+                        use_lpt1=test_LPTjoy(1,NULL);
+                else if (strcmp(argv[i], "-LPTjoy2") == 0)
+                        use_lpt2=test_LPTjoy(2,NULL);
+                else if (strcmp(argv[i], "-LPTjoy3") == 0)
+                        use_lpt3=test_LPTjoy(3,NULL);
 
-		else if (strcmp(argv[i], "-joyswap") == 0)
-			joyswap = TRUE;
-			
-		else if (strcmp(argv[i], "-video") == 0)	
-		{
-		  i++;
-		  video_mode=atoi(argv[i]);
-		  if (video_mode<0 || video_mode>3) 
-		  {
-		    printf("Invalid video mode, using default.\n");
-		    getchar();
-		    video_mode=0;
-		  }
-		}
+                else if (strcmp(argv[i], "-joyswap") == 0)
+                        joyswap = TRUE;
+
+                else if (strcmp(argv[i], "-video") == 0)
+                {
+                  i++;
+                  video_mode=atoi(argv[i]);
+                  if (video_mode<0 || video_mode>3)
+                  {
+                    printf("Invalid video mode, using default.\n");
+                    getchar();
+                    video_mode=0;
+                  }
+                }
                 else if (strcmp(argv[i],"-novesa") == 0)
                 {
                   use_vesa=FALSE;
                 }
-		else {
-			if (strcmp(argv[i], "-help") == 0) {
-				printf("\t-interlace    Generate screen with interlace\n");
-				printf("\t-LPTjoy1      Read joystick connected to LPT1\n");
-				printf("\t-LPTjoy2      Read joystick connected to LPT2\n");
-				printf("\t-LPTjoy3      Read joystick connected to LPT3\n");
-				printf("\t-joyswap      Swap joysticks\n");
-				printf("\t-video x      Set video mode:\n");
-				printf("\t\t0 - 320x200\n\t\t1 - 320x240\n");
-				printf("\t\t2 - 320x240, interlaced with black lines\n");
-				printf("\t\t3 - 320x240, interlaced with darker lines (slower!)\n");
+                else if (strcmp(argv[i],"-vretrace") == 0)
+                {
+                  use_vret=TRUE;
+                }
+                else {
+                        if (strcmp(argv[i], "-help") == 0) {
+                                printf("\t-interlace    Generate screen with interlace\n");
+                                printf("\t-LPTjoy1      Read joystick connected to LPT1\n");
+                                printf("\t-LPTjoy2      Read joystick connected to LPT2\n");
+                                printf("\t-LPTjoy3      Read joystick connected to LPT3\n");
+                                printf("\t-joyswap      Swap joysticks\n");
+                                printf("\t-video x      Set video mode:\n");
+                                printf("\t\t0 - 320x200\n\t\t1 - 320x240\n");
+                                printf("\t\t2 - 320x240, interlaced with black lines\n");
+                                printf("\t\t3 - 320x240, interlaced with darker lines (slower!)\n");
                                 printf("\t-novesa       Do not use vesa2 videomodes\n");
-				printf("\nPress Return/Enter to continue...");
-				getchar();
-				printf("\r                                 \n");
-			}
-			argv[j++] = argv[i];
-		}
-	}
+                                printf("\t-vretrace     Use vertical retrace control\n");
+                                printf("\nPress Return/Enter to continue...");
+                                getchar();
+                                printf("\r                                 \n");
+                        }
+                        argv[j++] = argv[i];
+                }
+        }
 
-	*argc = j;
+        *argc = j;
 
 #ifdef AT_USE_ALLEGRO
-	allegro_init();
+        allegro_init();
 #endif
 
-	/* initialise sound routines */
+        /* initialise sound routines */
 #ifndef USE_DOSSOUND
-	Sound_Initialise(argc, argv);
+        Sound_Initialise(argc, argv);
 #else
-	if (dossound_Initialise(argc, argv))
-		exit(1);
+        if (dossound_Initialise(argc, argv))
+                exit(1);
 #endif
 
-	/* check if joystick is connected */
-	printf("Joystick is checked...");
-	fflush(stdout);
+        /* check if joystick is connected */
+        printf("Joystick is checked...");
+        fflush(stdout);
 #ifndef AT_USE_ALLEGRO_JOY
-	outportb(0x201, 0xff);
-	usleep(100000UL);
-	joy_in = ((inportb(0x201) & 3) == 0);
-	if (joy_in)
-		joystick0(&js0_centre_x, &js0_centre_y);
+        outportb(0x201, 0xff);
+        usleep(100000UL);
+        joy_in = ((inportb(0x201) & 3) == 0);
+        if (joy_in)
+                joystick0(&js0_centre_x, &js0_centre_y);
 #else
-	joy_in = (initialise_joystick() == 0 ? TRUE : FALSE);
+        joy_in = (initialise_joystick() == 0 ? TRUE : FALSE);
 #endif
-	if (joy_in)
-		printf(" found!\n");
-	else
-		printf("\n\nSorry, I see no joystick. Use numeric pad\n");
+        if (joy_in)
+                printf(" found!\n");
+        else
+                printf("\n\nSorry, I see no joystick. Use numeric pad\n");
 
 #ifndef AT_USE_ALLEGRO
         /*find number of VESA2 video mode*/
@@ -818,9 +825,9 @@ void Atari_Initialise(int *argc, char *argv[])
         }
 #endif
 
-	/* setup joystick */
-	stick0 = stick1 = stick2 = stick3 = STICK_CENTRE;
-	trig0 = trig1 = trig2 = trig3 = 1;
+        /* setup joystick */
+        stick0 = stick1 = stick2 = stick3 = STICK_CENTRE;
+        trig0 = trig1 = trig2 = trig3 = 1;
         /* for compatibility with older versions' command line parameters */
         if (use_lpt3)
         {
@@ -883,9 +890,9 @@ void Atari_Initialise(int *argc, char *argv[])
             keyset_used[i]=0;
         }
 
-	consol = 7;
+        consol = 7;
 
-	SetupVgaEnvironment();
+        SetupVgaEnvironment();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -908,6 +915,13 @@ int Atari_Configure(char* option,char* parameters)
     sscanf(parameters,"%d",&help);
     if (help!=0 && help!=1) return 0;
     use_vesa=help;
+    return 1;
+  }
+  else if (strcmp(option,"VRETRACE")==0)
+  {
+    sscanf(parameters,"%d",&help);
+    if (help!=0 && help!=1) return 0;
+    use_vret=help;
     return 1;
   }
   else if (strncmp(option,"JOYSTICK_",9)==0)
@@ -949,32 +963,32 @@ int Atari_Configure(char* option,char* parameters)
 
 int Atari_Exit(int run_monitor)
 {
-	/* restore to text mode */
-	ShutdownVgaEnvironment();
+        /* restore to text mode */
+        ShutdownVgaEnvironment();
 
 #ifdef BUFFERED_LOG
-	Aflushlog();
+        Aflushlog();
 #endif
 
-	key_delete();				/* enable keyboard in monitor */
+        key_delete();                           /* enable keyboard in monitor */
 
-	if (run_monitor)
-		if (monitor()) {
+        if (run_monitor)
+                if (monitor()) {
 #ifdef MONITOR_BREAK
                         if (!break_step)       /*do not enter videomode when stepping through the code*/
                           SetupVgaEnvironment();
 #else
-			SetupVgaEnvironment();
+                        SetupVgaEnvironment();
 #endif
 
-			return 1;			/* return to emulation */
-		}
+                        return 1;                       /* return to emulation */
+                }
 
 #ifndef USE_DOSSOUND
-	Sound_Exit();
+        Sound_Exit();
 #endif
 
-	return 0;
+        return 0;
 }
 
 
@@ -991,28 +1005,28 @@ int Atari_Exit(int run_monitor)
 */
 int Atari_Keyboard(void)
 {
-	int i;
-	int keycode;
-	int shift_mask;
-	static int stillpressed;	/* is 5200 button 2 still pressed */
+        int i;
+        int keycode;
+        int shift_mask;
+        static int stillpressed;        /* is 5200 button 2 still pressed */
 
 #ifdef AT_USE_ALLEGRO_JOY
-	extern volatile int joy_left, joy_right, joy_up, joy_down;
-	extern volatile int joy_b1, joy_b2, joy_b3, joy_b4;
+        extern volatile int joy_left, joy_right, joy_up, joy_down;
+        extern volatile int joy_b1, joy_b2, joy_b3, joy_b4;
 #endif
-	last_raw_key=raw_key;
+        last_raw_key=raw_key;
 /*
  * Trigger and Joystick handling should
  * be moved into the Keyboard Interrupt Routine  - done for keyboard-emulated joysticks
  */
 
-	if (joy_in) {
+        if (joy_in) {
 #ifndef AT_USE_ALLEGRO_JOY
-		read_joystick(js0_centre_x, js0_centre_y);	/* read real PC joystick */
+                read_joystick(js0_centre_x, js0_centre_y);      /* read real PC joystick */
 #else
-		poll_joystick();
-		astick = ((joy_right << 3) | (joy_left << 2) | (joy_down << 1) | joy_up) ^ 0x0f;
-		atrig = !joy_b1;
+                poll_joystick();
+                astick = ((joy_right << 3) | (joy_left << 2) | (joy_down << 1) | joy_up) ^ 0x0f;
+                atrig = !joy_b1;
 #endif
            if (joytypes[0]==joy_analog)
            {  stick0=astick; trig0=atrig; }
@@ -1022,9 +1036,9 @@ int Atari_Keyboard(void)
            {  stick2=astick; trig2=atrig; }
            if (joytypes[3]==joy_analog)
            {  stick3=astick; trig3=atrig; }
-	}
+        }
 
-	/* read LPT joysticks */
+        /* read LPT joysticks */
         for (i=0;i<4;i++)
           if (joytypes[i]>=joy_lpt1 && joytypes[i]<=joy_lpt3)
             read_LPTjoy(lptport[i],i);
@@ -1033,30 +1047,30 @@ int Atari_Keyboard(void)
  * This needs a bit of tidying up - array lookup
  */
 /* Atari5200 stuff */
-	if (machine == Atari5200 && !ui_is_active) {
-		POT[0] = 120;
-		POT[1] = 120;
-		if (!(stick0 & 0x04))
-			POT[0] = 15;
-		if (!(stick0 & 0x01))
-			POT[1] = 15;
-		if (!(stick0 & 0x08))
-			POT[0] = 220;
-		if (!(stick0 & 0x02))
-			POT[1] = 220;
+        if (machine == Atari5200 && !ui_is_active) {
+                POT[0] = 120;
+                POT[1] = 120;
+                if (!(stick0 & 0x04))
+                        POT[0] = 15;
+                if (!(stick0 & 0x01))
+                        POT[1] = 15;
+                if (!(stick0 & 0x08))
+                        POT[0] = 220;
+                if (!(stick0 & 0x02))
+                        POT[1] = 220;
 
-		switch (raw_key) {
-		case 0x3b:
-			keycode = AKEY_UI;
-			break;
-		case 0x3f:				/* F5 */
-			/* if (SHIFT_KEY) */
-			keycode = AKEY_COLDSTART;	/* 5200 has no warmstart */
-			/*  else
-			   keycode = AKEY_WARMSTART;
-			 */
+                switch (raw_key) {
+                case 0x3b:
+                        keycode = AKEY_UI;
+                        break;
+                case 0x3f:                              /* F5 */
+                        /* if (SHIFT_KEY) */
+                        keycode = AKEY_COLDSTART;       /* 5200 has no warmstart */
+                        /*  else
+                           keycode = AKEY_WARMSTART;
+                         */
 
-			break;
+                        break;
                 case 0x44:                              /* F10 */
                         if (!norepkey)
                         {
@@ -1065,114 +1079,114 @@ int Atari_Keyboard(void)
                         }else
                             keycode = AKEY_NONE;
                         break;
-		case 0x43:
-			keycode = AKEY_EXIT;
-			break;
-		case 0x02:
-			keycode = 0x3f;
-			break;
-		case 0x03:
-			keycode = 0x3d;
-			break;
-		case 0x04:
-			keycode = 0x3b;
-			break;
-		case 0x0D:
-			keycode = 0x23;		/* = = * */
-			break;
-		case 0x05:
-			keycode = 0x37;
-			break;
-		case 0x06:
-			keycode = 0x35;
-			break;
-		case 0x07:
-			keycode = 0x33;
-			break;
-		case 0x08:
-			keycode = 0x2f;
-			break;
-		case 0x09:
-			keycode = 0x2d;
-			break;
-		case 0x0C:
-			keycode = 0x27;		/* - = * */
-			break;
-		case 0x0a:
-			keycode = 0x2b;
-			break;
-		case 0x0b:
-			keycode = 0x25;
-			break;
-		case 0x3e:				/* 1f : */
-			keycode = 0x39;		/* start */
-			break;
-		case 0x19:
-			keycode = 0x31;		/* pause */
-			break;
-		case 0x13:
-			keycode = 0x29;		/* reset */
-			break;
-		case 0x42:				/* F8 */
-			if (!norepkey) {
-				keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;	/* invoke monitor */
-				norepkey = TRUE;
-			}
-			else
-				keycode = AKEY_NONE;
-			break;
-		default:
-			keycode = AKEY_NONE;
-			norepkey = FALSE;
-			break;
-		}
-		KEYPRESSED = (keycode != AKEY_NONE);	/* for POKEY */
+                case 0x43:
+                        keycode = AKEY_EXIT;
+                        break;
+                case 0x02:
+                        keycode = 0x3f;
+                        break;
+                case 0x03:
+                        keycode = 0x3d;
+                        break;
+                case 0x04:
+                        keycode = 0x3b;
+                        break;
+                case 0x0D:
+                        keycode = 0x23;         /* = = * */
+                        break;
+                case 0x05:
+                        keycode = 0x37;
+                        break;
+                case 0x06:
+                        keycode = 0x35;
+                        break;
+                case 0x07:
+                        keycode = 0x33;
+                        break;
+                case 0x08:
+                        keycode = 0x2f;
+                        break;
+                case 0x09:
+                        keycode = 0x2d;
+                        break;
+                case 0x0C:
+                        keycode = 0x27;         /* - = * */
+                        break;
+                case 0x0a:
+                        keycode = 0x2b;
+                        break;
+                case 0x0b:
+                        keycode = 0x25;
+                        break;
+                case 0x3e:                              /* 1f : */
+                        keycode = 0x39;         /* start */
+                        break;
+                case 0x19:
+                        keycode = 0x31;         /* pause */
+                        break;
+                case 0x13:
+                        keycode = 0x29;         /* reset */
+                        break;
+                case 0x42:                              /* F8 */
+                        if (!norepkey) {
+                                keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;        /* invoke monitor */
+                                norepkey = TRUE;
+                        }
+                        else
+                                keycode = AKEY_NONE;
+                        break;
+                default:
+                        keycode = AKEY_NONE;
+                        norepkey = FALSE;
+                        break;
+                }
+                KEYPRESSED = (keycode != AKEY_NONE);    /* for POKEY */
 #ifdef AT_USE_ALLEGRO_JOY
-		if (joy_b2) {
-			if (stillpressed) {
-				SHIFT_KEY = 1;
-			}
-			else {
-				keycode = AKEY_BREAK;
-				stillpressed = 1;
-				SHIFT_KEY = 1;
-				return keycode;
-			}
-		}
-		else {
-			stillpressed = 0;
-			SHIFT_KEY = 0;
-		}
+                if (joy_b2) {
+                        if (stillpressed) {
+                                SHIFT_KEY = 1;
+                        }
+                        else {
+                                keycode = AKEY_BREAK;
+                                stillpressed = 1;
+                                SHIFT_KEY = 1;
+                                return keycode;
+                        }
+                }
+                else {
+                        stillpressed = 0;
+                        SHIFT_KEY = 0;
+                }
 #endif
-   	        if (raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
-		return keycode;
-	}
+                if (raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
+                return keycode;
+        }
 
-	/* preinitialize of keycode */
-	shift_mask = SHIFT_KEY ? 0x40 : 0;
-	keycode = shift_mask | (control ? 0x80 : 0);
+        /* preinitialize of keycode */
+        shift_mask = SHIFT_KEY ? 0x40 : 0;
+        keycode = shift_mask | (control ? 0x80 : 0);
 
-	switch (raw_key) {
-	case 0x3b:					/* F1 */
-		if (control) {
-			PC_keyboard = TRUE;	/* PC keyboard mode (default) */
-			keycode = AKEY_NONE;
-		}
-		else if (SHIFT_KEY) {
-			PC_keyboard = FALSE;	/* Atari keyboard mode */
-			keycode = AKEY_NONE;
-		}
-		else
-			keycode = AKEY_UI;
-		break;
-	case 0xCF:                                      /* gray END*/
-		if (!norepkey) {
-			keycode = AKEY_BREAK;
-			norepkey = TRUE;
-		}
-		else
-			keycode = AKEY_NONE;
-		break;
+        switch (raw_key) {
+        case 0x3b:                                      /* F1 */
+                if (control) {
+                        PC_keyboard = TRUE;     /* PC keyboard mode (default) */
+                        keycode = AKEY_NONE;
+                }
+                else if (SHIFT_KEY) {
+                        PC_keyboard = FALSE;    /* Atari keyboard mode */
+                        keycode = AKEY_NONE;
+                }
+                else
+                        keycode = AKEY_UI;
+                break;
+        case 0xCF:                                      /* gray END*/
+                if (!norepkey) {
+                        keycode = AKEY_BREAK;
+                        norepkey = TRUE;
+                }
+                else
+                        keycode = AKEY_NONE;
+                break;
         case 0x44:                                      /* F10 */
                 if (!norepkey)
                 {
@@ -1182,370 +1196,371 @@ int Atari_Keyboard(void)
                 else
                      keycode = AKEY_NONE;
                 break;
-	case 0x3f:					/* F5 */
-		keycode = SHIFT_KEY ? AKEY_COLDSTART : AKEY_WARMSTART;
-		break;
-	case 0x40:					/* F6 */
-		if (machine == Atari)
-			keycode = AKEY_PIL;
-		else
-			keycode = AKEY_HELP;
-		break;
-	case 0x42:					/* F8 */
-		if (!norepkey) {
-			keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;	/* invoke monitor */
-			norepkey = TRUE;
-		}
-		else
-			keycode = AKEY_NONE;
-		break;
-	case 0x43:					/* F9 */
-		keycode = AKEY_EXIT;
-		break;
-	case 0x01:
-		keycode |= AKEY_ESCAPE;
-		break;
+        case 0x3f:                                      /* F5 */
+                keycode = SHIFT_KEY ? AKEY_COLDSTART : AKEY_WARMSTART;
+                break;
+        case 0x40:                                      /* F6 */
+                if (machine == Atari)
+                        keycode = AKEY_PIL;
+                else
+                        keycode = AKEY_HELP;
+                break;
+        case 0x42:                                      /* F8 */
+                if (!norepkey) {
+                        keycode = Atari_Exit(1) ? AKEY_NONE : AKEY_EXIT;        /* invoke monitor */
+                        norepkey = TRUE;
+                }
+                else
+                        keycode = AKEY_NONE;
+                break;
+        case 0x43:                                      /* F9 */
+                keycode = AKEY_EXIT;
+                break;
+        case 0x01:
+                keycode |= AKEY_ESCAPE;
+                break;
         case 0xD0:
-	case 0x50:
-		if (PC_keyboard)
-			keycode = AKEY_DOWN;
-		else {
-			keycode |= AKEY_EQUAL;
-			keycode ^= shift_mask;
-		}
-		break;
+        case 0x50:
+                if (PC_keyboard)
+                        keycode = AKEY_DOWN;
+                else {
+                        keycode |= AKEY_EQUAL;
+                        keycode ^= shift_mask;
+                }
+                break;
         case 0xCB:
-	case 0x4b:
-		if (PC_keyboard)
-			keycode = AKEY_LEFT;
-		else {
-			keycode |= AKEY_PLUS;
-			keycode ^= shift_mask;
-		}
-		break;
+        case 0x4b:
+                if (PC_keyboard)
+                        keycode = AKEY_LEFT;
+                else {
+                        keycode |= AKEY_PLUS;
+                        keycode ^= shift_mask;
+                }
+                break;
         case 0xCD:
-	case 0x4d:
-		if (PC_keyboard)
-			keycode = AKEY_RIGHT;
-		else {
-			keycode |= AKEY_ASTERISK;
-			keycode ^= shift_mask;
-		}
-		break;
+        case 0x4d:
+                if (PC_keyboard)
+                        keycode = AKEY_RIGHT;
+                else {
+                        keycode |= AKEY_ASTERISK;
+                        keycode ^= shift_mask;
+                }
+                break;
         case 0xC8:
-	case 0x48:
-		if (PC_keyboard)
-			keycode = AKEY_UP;
-		else {
-			keycode |= AKEY_MINUS;
-			keycode ^= shift_mask;
-		}
-		break;
-	case 0x29:					/* "`" key on top-left */
-		keycode |= AKEY_ATARI;	/* Atari key (inverse video) */
-		break;
-	case 0x3a:
-		keycode |= AKEY_CAPSTOGGLE;		/* Caps key */
-		break;
-	case 0x02:
-		keycode |= AKEY_1;		/* 1 */
-		break;
-	case 0x03:
-		if (!PC_keyboard)
-			keycode |= AKEY_2;
-		else if (SHIFT_KEY)
-			keycode = AKEY_AT;
-		else
-			keycode |= AKEY_2;	/* 2,@ */
-		break;
-	case 0x04:
-		keycode |= AKEY_3;		/* 3 */
-		break;
-	case 0x05:
-		keycode |= AKEY_4;		/* 4 */
-		break;
-	case 0x06:
-		keycode |= AKEY_5;		/* 5 */
-		break;
-	case 0x07:
-		if (!PC_keyboard)
-			keycode |= AKEY_6;
-		else if (SHIFT_KEY)
-			keycode = AKEY_CIRCUMFLEX;	/* 6,^ */
-		else
-			keycode |= AKEY_6;
-		break;
-	case 0x08:
-		if (!PC_keyboard)
-			keycode |= AKEY_7;
-		else if (SHIFT_KEY)
-			keycode = AKEY_AMPERSAND;	/* 7,& */
-		else
-			keycode |= AKEY_7;
-		break;
-	case 0x09:
-		if (!PC_keyboard)
-			keycode |= AKEY_8;
-		else if (SHIFT_KEY)
-			keycode = AKEY_ASTERISK;	/* 8,* */
-		else
-			keycode |= AKEY_8;
-		break;
-	case 0x0a:
-		if (!PC_keyboard)
-			keycode |= AKEY_9;
-		else if (SHIFT_KEY)
-			keycode = AKEY_PARENLEFT;
-		else
-			keycode |= AKEY_9;	/* 9,( */
-		break;
-	case 0x0b:
-		if (!PC_keyboard)
-			keycode |= AKEY_0;
-		else if (SHIFT_KEY)
-			keycode = AKEY_PARENRIGHT;	/* 0,) */
-		else
-			keycode |= AKEY_0;
-		break;
-	case 0x0c:
-		if (!PC_keyboard)
-			keycode |= AKEY_LESS;
-		else if (SHIFT_KEY)
-			keycode = AKEY_UNDERSCORE;
-		else
-			keycode |= AKEY_MINUS;
-		break;
-	case 0x0d:
-		if (!PC_keyboard)
-			keycode |= AKEY_GREATER;
-		else if (SHIFT_KEY)
-			keycode = AKEY_PLUS;
-		else
-			keycode |= AKEY_EQUAL;
-		break;
-	case 0x0e:
-		keycode |= AKEY_BACKSPACE;
-		break;
+        case 0x48:
+                if (PC_keyboard)
+                        keycode = AKEY_UP;
+                else {
+                        keycode |= AKEY_MINUS;
+                        keycode ^= shift_mask;
+                }
+                break;
+        case 0x29:                                      /* "`" key on top-left */
+                keycode |= AKEY_ATARI;  /* Atari key (inverse video) */
+                break;
+        case 0x3a:
+                keycode |= AKEY_CAPSTOGGLE;             /* Caps key */
+                break;
+        case 0x02:
+                keycode |= AKEY_1;              /* 1 */
+                break;
+        case 0x03:
+                if (!PC_keyboard)
+                        keycode |= AKEY_2;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_AT;
+                else
+                        keycode |= AKEY_2;      /* 2,@ */
+                break;
+        case 0x04:
+                keycode |= AKEY_3;              /* 3 */
+                break;
+        case 0x05:
+                keycode |= AKEY_4;              /* 4 */
+                break;
+        case 0x06:
+                keycode |= AKEY_5;              /* 5 */
+                break;
+        case 0x07:
+                if (!PC_keyboard)
+                        keycode |= AKEY_6;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_CIRCUMFLEX;      /* 6,^ */
+                else
+                        keycode |= AKEY_6;
+                break;
+        case 0x08:
+                if (!PC_keyboard)
+                        keycode |= AKEY_7;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_AMPERSAND;       /* 7,& */
+                else
+                        keycode |= AKEY_7;
+                break;
+        case 0x09:
+                if (!PC_keyboard)
+                        keycode |= AKEY_8;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_ASTERISK;        /* 8,* */
+                else
+                        keycode |= AKEY_8;
+                break;
+        case 0x0a:
+                if (!PC_keyboard)
+                        keycode |= AKEY_9;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_PARENLEFT;
+                else
+                        keycode |= AKEY_9;      /* 9,( */
+                break;
+        case 0x0b:
+                if (!PC_keyboard)
+                        keycode |= AKEY_0;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_PARENRIGHT;      /* 0,) */
+                else
+                        keycode |= AKEY_0;
+                break;
+        case 0x0c:
+                if (!PC_keyboard)
+                        keycode |= AKEY_LESS;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_UNDERSCORE;
+                else
+                        keycode |= AKEY_MINUS;
+                break;
+        case 0x0d:
+                if (!PC_keyboard)
+                        keycode |= AKEY_GREATER;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_PLUS;
+                else
+                        keycode |= AKEY_EQUAL;
+                break;
+        case 0x0e:
+                keycode |= AKEY_BACKSPACE;
+                break;
 
 
-	case 0x0f:
-		keycode |= AKEY_TAB;
-		break;
-	case 0x10:
-		keycode |= AKEY_q;
-		break;
-	case 0x11:
-		keycode |= AKEY_w;
-		break;
-	case 0x12:
-		keycode |= AKEY_e;
-		break;
-	case 0x13:
-		keycode |= AKEY_r;
-		break;
-	case 0x14:
-		keycode |= AKEY_t;
-		break;
-	case 0x15:
-		keycode |= AKEY_y;
-		break;
-	case 0x16:
-		keycode |= AKEY_u;
-		break;
-	case 0x17:
-		keycode |= AKEY_i;
-		break;
-	case 0x18:
-		keycode |= AKEY_o;
-		break;
-	case 0x19:
-		keycode |= AKEY_p;
-		break;
-	case 0x1a:
-		if (!PC_keyboard)
-			keycode |= AKEY_MINUS;
-		else if (control | SHIFT_KEY)
-			keycode |= AKEY_UP;
-		else
-			keycode = AKEY_BRACKETLEFT;
-		break;
-	case 0x1b:
-		if (!PC_keyboard)
-			keycode |= AKEY_EQUAL;
-		else if (control | SHIFT_KEY)
-			keycode |= AKEY_DOWN;
-		else
-			keycode = AKEY_BRACKETRIGHT;
-		break;
+        case 0x0f:
+                keycode |= AKEY_TAB;
+                break;
+        case 0x10:
+                keycode |= AKEY_q;
+                break;
+        case 0x11:
+                keycode |= AKEY_w;
+                break;
+        case 0x12:
+                keycode |= AKEY_e;
+                break;
+        case 0x13:
+                keycode |= AKEY_r;
+                break;
+        case 0x14:
+                keycode |= AKEY_t;
+                break;
+        case 0x15:
+                keycode |= AKEY_y;
+                break;
+        case 0x16:
+                keycode |= AKEY_u;
+                break;
+        case 0x17:
+                keycode |= AKEY_i;
+                break;
+        case 0x18:
+                keycode |= AKEY_o;
+                break;
+        case 0x19:
+                keycode |= AKEY_p;
+                break;
+        case 0x1a:
+                if (!PC_keyboard)
+                        keycode |= AKEY_MINUS;
+                else if (control | SHIFT_KEY)
+                        keycode |= AKEY_UP;
+                else
+                        keycode = AKEY_BRACKETLEFT;
+                break;
+        case 0x1b:
+                if (!PC_keyboard)
+                        keycode |= AKEY_EQUAL;
+                else if (control | SHIFT_KEY)
+                        keycode |= AKEY_DOWN;
+                else
+                        keycode = AKEY_BRACKETRIGHT;
+                break;
         case 0x9c:
-	case 0x1c:
-		keycode |= AKEY_RETURN;
-		break;
+        case 0x1c:
+                keycode |= AKEY_RETURN;
+                break;
 
-	case 0x1e:
-		keycode |= AKEY_a;
-		break;
-	case 0x1f:
-		keycode |= AKEY_s;
-		break;
-	case 0x20:
-		keycode |= AKEY_d;
-		break;
-	case 0x21:
-		keycode |= AKEY_f;
-		break;
-	case 0x22:
-		keycode |= AKEY_g;
-		break;
-	case 0x23:
-		keycode |= AKEY_h;
-		break;
-	case 0x24:
-		keycode |= AKEY_j;
-		break;
-	case 0x25:
-		keycode |= AKEY_k;
-		break;
-	case 0x26:
-		keycode |= AKEY_l;
-		break;
-	case 0x27:
-		keycode |= AKEY_SEMICOLON;
-		break;
-	case 0x28:
-		if (!PC_keyboard)
-			keycode |= AKEY_PLUS;
-		else if (SHIFT_KEY)
-			keycode = AKEY_DBLQUOTE;
-		else
-			keycode = AKEY_QUOTE;
-		break;
-	case 0x2b:					/* PC key "\,|" */
-	case 0x56:					/* PC key "\,|" */
-		if (!PC_keyboard)
-			keycode |= AKEY_ASTERISK;
-		else if (SHIFT_KEY)
-			keycode = AKEY_BAR;
-		else
-			keycode |= AKEY_BACKSLASH;
-		break;
-
-
-	case 0x2c:
-		keycode |= AKEY_z;
-		break;
-	case 0x2d:
-		keycode |= AKEY_x;
-		break;
-	case 0x2e:
-		keycode |= AKEY_c;
-		break;
-	case 0x2f:
-		keycode |= AKEY_v;
-		break;
-	case 0x30:
-		keycode |= AKEY_b;
-		break;
-	case 0x31:
-		keycode |= AKEY_n;
-		break;
-	case 0x32:
-		keycode |= AKEY_m;
-		break;
-	case 0x33:
-		if (!PC_keyboard)
-			keycode |= AKEY_COMMA;
-		else if (SHIFT_KEY && !control)
-			keycode = AKEY_LESS;
-		else
-			keycode |= AKEY_COMMA;
-		break;
-	case 0x34:
-		if (!PC_keyboard)
-			keycode |= AKEY_FULLSTOP;
-		else if (SHIFT_KEY && !control)
-			keycode = AKEY_GREATER;
-		else
-			keycode |= AKEY_FULLSTOP;
-		break;
-	case 0x35:
-		keycode |= AKEY_SLASH;
-		break;
-	case 0x39:
-		keycode |= AKEY_SPACE;
-		break;
+        case 0x1e:
+                keycode |= AKEY_a;
+                break;
+        case 0x1f:
+                keycode |= AKEY_s;
+                break;
+        case 0x20:
+                keycode |= AKEY_d;
+                break;
+        case 0x21:
+                keycode |= AKEY_f;
+                break;
+        case 0x22:
+                keycode |= AKEY_g;
+                break;
+        case 0x23:
+                keycode |= AKEY_h;
+                break;
+        case 0x24:
+                keycode |= AKEY_j;
+                break;
+        case 0x25:
+                keycode |= AKEY_k;
+                break;
+        case 0x26:
+                keycode |= AKEY_l;
+                break;
+        case 0x27:
+                keycode |= AKEY_SEMICOLON;
+                break;
+        case 0x28:
+                if (!PC_keyboard)
+                        keycode |= AKEY_PLUS;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_DBLQUOTE;
+                else
+                        keycode = AKEY_QUOTE;
+                break;
+        case 0x2b:                                      /* PC key "\,|" */
+        case 0x56:                                      /* PC key "\,|" */
+                if (!PC_keyboard)
+                        keycode |= AKEY_ASTERISK;
+                else if (SHIFT_KEY)
+                        keycode = AKEY_BAR;
+                else
+                        keycode |= AKEY_BACKSLASH;
+                break;
 
 
-	case 0xc7:					/* HOME key */
-		keycode |= 118;			/* clear screen */
-		break;
-	case 0xd2:					/* INSERT key */
-		if (SHIFT_KEY)
-			keycode = AKEY_INSERT_LINE;
-		else
-			keycode = AKEY_INSERT_CHAR;
-		break;
-	case 0xd3:					/* DELETE key */
-		if (SHIFT_KEY)
-			keycode = AKEY_DELETE_LINE;
-		else
-			keycode = AKEY_DELETE_CHAR;
-		break;
-	default:
-		keycode = AKEY_NONE;
-		norepkey = FALSE;
-		break;
-	}
+        case 0x2c:
+                keycode |= AKEY_z;
+                break;
+        case 0x2d:
+                keycode |= AKEY_x;
+                break;
+        case 0x2e:
+                keycode |= AKEY_c;
+                break;
+        case 0x2f:
+                keycode |= AKEY_v;
+                break;
+        case 0x30:
+                keycode |= AKEY_b;
+                break;
+        case 0x31:
+                keycode |= AKEY_n;
+                break;
+        case 0x32:
+                keycode |= AKEY_m;
+                break;
+        case 0x33:
+                if (!PC_keyboard)
+                        keycode |= AKEY_COMMA;
+                else if (SHIFT_KEY && !control)
+                        keycode = AKEY_LESS;
+                else
+                        keycode |= AKEY_COMMA;
+                break;
+        case 0x34:
+                if (!PC_keyboard)
+                        keycode |= AKEY_FULLSTOP;
+                else if (SHIFT_KEY && !control)
+                        keycode = AKEY_GREATER;
+                else
+                        keycode |= AKEY_FULLSTOP;
+                break;
+        case 0x35:
+                keycode |= AKEY_SLASH;
+                break;
+        case 0x39:
+                keycode |= AKEY_SPACE;
+                break;
 
-	KEYPRESSED = (keycode != AKEY_NONE);	/* for POKEY */
-	if (raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
 
-	return keycode;
+        case 0xc7:                                      /* HOME key */
+                keycode |= 118;                 /* clear screen */
+                break;
+        case 0xd2:                                      /* INSERT key */
+                if (SHIFT_KEY)
+                        keycode = AKEY_INSERT_LINE;
+                else
+                        keycode = AKEY_INSERT_CHAR;
+                break;
+        case 0xd3:                                      /* DELETE key */
+                if (SHIFT_KEY)
+                        keycode = AKEY_DELETE_LINE;
+                else
+                        keycode = AKEY_DELETE_CHAR;
+                break;
+        default:
+                keycode = AKEY_NONE;
+                norepkey = FALSE;
+                break;
+        }
+
+        KEYPRESSED = (keycode != AKEY_NONE);    /* for POKEY */
+        if (raw_key_r!=0) {raw_key=raw_key_r;raw_key_r=0;}
+
+        return keycode;
 }
 
 /* -------------------------------------------------------------------------- */
 
 int Atari_PORT(int num)
-{ 
-	if (num == 0)
-		return (stick1 << 4) | stick0;
-	else
-		return (stick3 << 4) | stick2;
+{
+        if (num == 0)
+                return (stick1 << 4) | stick0;
+        else
+                return (stick3 << 4) | stick2;
 }
 
 /* -------------------------------------------------------------------------- */
 
 int Atari_TRIG(int num)
 {
-	switch (num) {
-	case 0:
-		return trig0;
-	case 1:
-		return trig1;
-	case 2:
+        switch (num) {
+        case 0:
+                return trig0;
+        case 1:
+                return trig1;
+        case 2:
                 return trig2;
-	case 3:
-		return trig3;
-	}
+        case 3:
+                return trig3;
+        }
+        return 0;
 }
 
 /* -------------------------------------------------------------------------- */
 
 int Atari_POT(int num)
 {
-	if (machine == Atari5200) {
-		if (num >= 0 && num < 2)
-			return POT[num];
-	}
+        if (machine == Atari5200) {
+                if (num >= 0 && num < 2)
+                        return POT[num];
+        }
 
-	return 228;
+        return 228;
 }
 
 /* -------------------------------------------------------------------------- */
 
 int Atari_CONSOL(void)
 {
-	return consol;
+        return consol;
 }
 
 /* -------------------------------------------------------------------------- */

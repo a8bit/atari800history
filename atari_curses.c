@@ -4,8 +4,6 @@
 #include	<curses.h>
 #endif
 
-static char *rcsid = "$Id: atari_curses.c,v 1.8 1998/02/21 14:54:11 david Exp $";
-
 #include "atari.h"
 #include "cpu.h"
 #include "monitor.h"

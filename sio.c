@@ -4,9 +4,8 @@
  * All Output is assumed to be coming from either RAM or ROM
  *
  */
-#define Peek(a) (memory[(a)])
-#define DPeek(a) ( memory[(a)]+( memory[(a)+1]<<8 ) )
-#define Poke(a,b) ( memory[(a)] = (b) )
+#define Peek(a) (dGetByte((a)))
+#define DPeek(a) ( dGetByte((a))+( dGetByte((a)+1)<<8 ) )
 /* PM Notes:
    note the versions in Thors emu are able to deal with ROM better than
    these ones.  These are only used for the 'fake' fast SIO replacement
@@ -14,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>	/* for toupper() */
 
 #ifdef WIN32
 #include <windows.h>
@@ -31,22 +31,16 @@
 #endif
 #endif
 
-#ifdef DJGPP
-#include "djgpp.h"
-#endif
 extern int DELAYED_SERIN_IRQ;
 extern int DELAYED_SEROUT_IRQ;
 extern int DELAYED_XMTDONE_IRQ;
-typedef int ATPtr;
-
-
-static char *rcsid = "$Id: sio.c,v 1.9 1998/02/21 14:55:21 david Exp $";
 
 #define FALSE   0
 #define TRUE    1
 
 #include "atari.h"
 #include "cpu.h"
+#include "memory.h"
 #include "sio.h"
 #include "pokeysnd.h"
 #include "platform.h"
@@ -55,20 +49,9 @@ static char *rcsid = "$Id: sio.c,v 1.9 1998/02/21 14:55:21 david Exp $";
 void CopyFromMem(int to, UBYTE *, int size);
 void CopyToMem(UBYTE *, ATPtr from, int size);
 
-#define	MAGIC1	0x96
-#define	MAGIC2	0x02
-
-struct ATR_Header {
-	unsigned char magic1;
-	unsigned char magic2;
-	unsigned char seccountlo;
-	unsigned char seccounthi;
-	unsigned char secsizelo;
-	unsigned char secsizehi;
-	unsigned char hiseccountlo;
-	unsigned char hiseccounthi;
-	unsigned char gash[8];
-};
+#ifdef WIN32
+extern void Atari_Set_Disk_LED( int unit, int state );
+#endif
 
 /*
  * it seems, there are two different ATR formats with different handling for
@@ -81,19 +64,15 @@ typedef enum Format {
 } Format;
 
 static Format format[MAX_DRIVES];
-static int disk[MAX_DRIVES] =
-{-1, -1, -1, -1, -1, -1, -1, -1};
+static int disk[MAX_DRIVES] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static int sectorcount[MAX_DRIVES];
 static int sectorsize[MAX_DRIVES];
 
-static enum DriveStatus {
-	Off,
-	NoDisk,
-	ReadOnly,
-	ReadWrite
-} drive_status[MAX_DRIVES];
-
+UnitStatus drive_status[MAX_DRIVES];
 char sio_filename[MAX_DRIVES][FILENAME_LEN];
+
+static char	 tmp_filename[MAX_DRIVES][FILENAME_LEN];
+static UBYTE istmpfile[MAX_DRIVES] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 /* Serial I/O emulation support */
 UBYTE CommandFrame[6];
@@ -104,30 +83,101 @@ int DataIndex = 0;
 int TransferStatus = 0;
 int ExpectedBytes = 0;
 
+extern int opendcm( int diskno, char *infilename, char *outfilename );
+#ifdef ZLIB_CAPABLE
+extern int openzlib(int diskno, char *infilename, char *outfilename );
+#endif
 
 void SIO_Initialise(int *argc, char *argv[])
 {
 	int i;
 
 	for (i = 0; i < MAX_DRIVES; i++)
+	{
 		strcpy(sio_filename[i], "Empty");
+		memset(tmp_filename[i], 0, FILENAME_LEN );
+		istmpfile[i] = 0;
+	}
 
 	TransferStatus = SIO_NoFrame;
 }
 
+/* This is to clean temp files that were not caught with a dismount. 
+   It should be called from Atari_Exit() */
+void Clear_Temp_Files( void )
+{
+	int i;
+
+	for( i = 0; i < MAX_DRIVES; i++ )
+	{
+		if( istmpfile[i] != 0 )
+		{
+			if( disk[i] != -1 )
+			{
+				close(disk[i]);
+				disk[i] = -1;
+			}
+			remove( tmp_filename[i] );
+			memset( tmp_filename[i], 0, FILENAME_LEN );
+			istmpfile[i] = 0;
+		}
+	}
+}
+
+/* This will take an existing mounted file and set it as temp so it will be deleted 
+   when dismounted. Primarily for mounted images that have been made on-the-fly to
+   load an executable without having it be on an Atari disk */
+void Set_Temp_File( int diskno )
+{
+	diskno--;
+	if( disk[ diskno ] == -1 )
+		return;
+	istmpfile[ diskno ] = 1;
+	strcpy( tmp_filename[ diskno ], sio_filename[ diskno ] );
+}
+
 int SIO_Mount(int diskno, char *filename)
 {
+	char	upperfile[ FILENAME_LEN ];
 	struct ATR_Header header;
+	int fd, i;
 
-	int fd;
+	memset( upperfile, 0, FILENAME_LEN );
+	for( i=0; i < (int)strlen( filename ); i++ )
+		upperfile[i] = toupper( filename[i] );
 
-	drive_status[diskno - 1] = ReadWrite;
-	strcpy(sio_filename[diskno - 1], "Empty");
+	/* If file is DCM, open it with opendcm to create a temp file */
+	if( !strcmp( &upperfile[ strlen( upperfile )-3 ], "DCM" ) )
+	{
+		istmpfile[ diskno -1 ] = 1;
+		drive_status[ diskno -1 ] = ReadOnly;
+		fd = opendcm( diskno, filename, tmp_filename[diskno - 1] );
+		if( fd == -1 )
+			istmpfile[ diskno - 1] = 0;
+	}
+#ifdef ZLIB_CAPABLE
+	else if( !strcmp( &upperfile[ strlen( upperfile )-3], "ATZ" ) || 
+		     !strcmp( &upperfile[strlen( upperfile )-6], "ATR.GZ" ) ||
+			 !strcmp( &upperfile[ strlen( upperfile )-3], "XFZ" ) || 
+			 !strcmp( &upperfile[strlen( upperfile )-6], "XFD.GZ") )
+	{
+		istmpfile[ diskno -1 ] = 1;
+		drive_status[ diskno -1 ] = ReadOnly;
+		fd = openzlib( diskno, filename, tmp_filename[ diskno - 1] );
+		if( fd == -1 )
+			istmpfile[ diskno - 1] = 0;
+	}	
+#endif /* ZLIB_CAPABLE */
+	else /* Normal ATR, XFD disk */
+	{
+		drive_status[diskno - 1] = ReadWrite;
+		strcpy(sio_filename[diskno - 1], "Empty");
 
-	fd = open(filename, O_RDWR | O_BINARY, 0777);
-	if (fd == -1) {
-		fd = open(filename, O_RDONLY | O_BINARY, 0777);
-		drive_status[diskno - 1] = ReadOnly;
+		fd = open(filename, O_RDWR | O_BINARY, 0777);
+		if (fd == -1) {
+			fd = open(filename, O_RDONLY | O_BINARY, 0777);
+			drive_status[diskno - 1] = ReadOnly;
+		}
 	}
 
 	if (fd >= 0) {
@@ -195,11 +245,18 @@ int SIO_Mount(int diskno, char *filename)
 
 void SIO_Dismount(int diskno)
 {
-	if (disk[diskno - 1] != -1) {
+	if (disk[diskno - 1] != -1) 
+	{
 		close(disk[diskno - 1]);
 		disk[diskno - 1] = -1;
 		drive_status[diskno - 1] = NoDisk;
 		strcpy(sio_filename[diskno - 1], "Empty");
+		if( istmpfile[ diskno - 1] )
+		{
+			remove( tmp_filename[ diskno - 1] );
+			memset( tmp_filename[ diskno - 1], 0, FILENAME_LEN );
+			istmpfile[ diskno - 1] = 0;
+		}
 	}
 }
 
@@ -242,15 +299,15 @@ void SizeOfSector(UBYTE unit, int sector, int *sz, ULONG * ofs)
 
 int SeekSector(int unit, int sector)
 {
-	ULONG offset;
+	int offset;
 	int size;
 
 	sprintf(sio_status, "%d: %d", unit + 1, sector);
 	SizeOfSector((UBYTE)unit, sector, &size, &offset);
 	/* printf("Sector %x,Offset: %x\n",sector,offset); */
-	if (offset > lseek(disk[unit], 0L, SEEK_END)) {
+	if (offset < 0 || offset > lseek(disk[unit], 0L, SEEK_END)) {
 #ifdef DEBUG
-		Aprint("Seek after end of file");
+		Aprint("SIO:SeekSector() - Wrong seek offset");
 #endif
 /*
 		Atari800_Exit(FALSE);
@@ -271,7 +328,10 @@ int ReadSector(int unit, int sector, UBYTE * buffer)
 
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
-			if (sector <= sectorcount[unit]) {
+			if (sector > 0 && sector <= sectorcount[unit]) {
+#ifdef WIN32
+				Atari_Set_Disk_LED( unit, LED_READ );
+#endif
 				size = SeekSector(unit, sector);
 				read(disk[unit], buffer, size);
 				return 'C';
@@ -293,7 +353,10 @@ int WriteSector(int unit, int sector, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
 			if (drive_status[unit] == ReadWrite) {
-				if (sector <= sectorcount[unit]) {
+#ifdef WIN32
+					Atari_Set_Disk_LED( unit, LED_WRITE );
+#endif
+				if (sector > 0 && sector <= sectorcount[unit]) {
 					size = SeekSector(unit, sector);
 					write(disk[unit], buffer, size);
 					return 'C';
@@ -311,6 +374,38 @@ int WriteSector(int unit, int sector, UBYTE * buffer)
 		return 0;
 }
 
+/* Before this function we were ruining ATR images every time they were
+ * formatted, because they would be re-initialized as XFD, paying no
+ * attention to the ATR header information, and in fact overwriting it!
+ */
+
+int ATRFormat( int unit, UBYTE * buffer )
+{
+	int i;
+
+	if( drive_status[unit] != Off )
+	{
+		if( disk[unit] != -1 ) 
+		{
+			if( drive_status[unit] == ReadWrite )
+			{
+				SeekSector( unit, 1 );
+				memset( buffer, 0, sectorsize[unit] );
+				for( i = 1; i <= sectorcount[unit]; i++ )
+					write( disk[unit], buffer, sectorsize[unit] );
+				memset( buffer, 0xff, sectorsize[unit] );
+				return 'C';
+			}
+			else
+				return 'E';
+		}
+		else
+			return 'N';
+	}
+
+	return 0;
+}
+
 /*
  * FormatSingle is used on the XF551 for formating SS/DD and DS/DD too
  * however, I have to check if they expect a 256 byte buffer or if 128
@@ -323,6 +418,8 @@ int FormatSingle(int unit, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
 			if (drive_status[unit] == ReadWrite) {
+				if( format[unit] == ATR )
+					return ATRFormat( unit, buffer );
 				sectorcount[unit] = 720;
 				sectorsize[unit] = 128;
 				format[unit] = XFD;
@@ -350,6 +447,8 @@ int FormatEnhanced(int unit, UBYTE * buffer)
 	if (drive_status[unit] != Off) {
 		if (disk[unit] != -1) {
 			if (drive_status[unit] == ReadWrite) {
+				if( format[unit] == ATR )
+					return ATRFormat( unit, buffer );
 				sectorcount[unit] = 1040;
 				sectorsize[unit] = 128;
 				format[unit] = XFD;
@@ -569,6 +668,8 @@ void SIO(void)
 				result = 'E';
 			break;
 		case 0x66:				/* US Doubler Format - I think! */
+			if( format[unit] == ATR )
+				result = ATRFormat( unit, DataBuffer );
 			result = 'A';		/* Not yet supported... to be done later... */
 			break;
 		default:
@@ -665,7 +766,7 @@ void Command_Frame(void)
 		case 0x52:				/* Read */
 			SizeOfSector((UBYTE)unit, sector, &realsize, NULL);
 			DataBuffer[0] = ReadSector(unit, sector, DataBuffer + 1);
-			DataBuffer[1 + realsize] = ChkSum(DataBuffer + 1, realsize);
+			DataBuffer[1 + realsize] = ChkSum(DataBuffer + 1, (UWORD)realsize);
 			DataIndex = 0;
 			ExpectedBytes = 2 + realsize;
 			TransferStatus = SIO_ReadFrame;
@@ -794,7 +895,7 @@ void SIO_PutByte(int byte)
 		if (DataIndex < ExpectedBytes) {
 			DataBuffer[DataIndex++] = byte;
 			if (DataIndex >= ExpectedBytes) {
-				sum = ChkSum(DataBuffer, ExpectedBytes - 1);
+				sum = ChkSum(DataBuffer, (UWORD)(ExpectedBytes - 1));
 				if (sum == DataBuffer[ExpectedBytes - 1]) {
 					result = WriteSectorBack();
 					if (result) {
@@ -894,20 +995,4 @@ int SIO_GetByte(void)
 	}
 
 	return byte;
-}
-void CopyFromMem(ATPtr from, UBYTE * to, int size)
-{
-	memcpy(to, from + memory, size);
-}
-
-extern UBYTE attrib[65536];
-void CopyToMem(UBYTE * from, ATPtr to, int size)
-{
-	int i;
-
-	for (i = 0; i < size; i++) {
-		if (!attrib[to])
-			Poke(to, *from);
-		from++, to++;
-	}
 }

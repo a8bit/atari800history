@@ -1,5 +1,130 @@
-Changes in 0.9.7
+Changes in 0.9.8
+----------------
+
+o antic.c: artif_mode is up to 4 (fixed) <Rich>
+
+o compfile.c: ReadAtariExe() for direct loading of single EXE files (actually it
+  creates a temporary ATR file) <Rich>
+
+o sio.c: formatting of ATR disk images fixed <Rich>
+
+o supercart.c: fixed RTIME month (months are zero indexed) <Rich>
+
+o ui.c: added Run Exe option. The LoadState file calls fileselector now.
+
+o rt-config.c: added two config options: EXE_DIR and STATE_DIR
+
+o compfile.c: fixed a serious bug when using prepend_tmp_file()
+
+
+Changes in 0.9.8g
 -----------------
+
+o Falcon030 direct VIDEL programming for 336x240 resolution, NOVA screen saver
+
+o START/SELECT/OPTION keys on Atari fixed
+
+o DOS drives for Atari (still needs to be fixed)
+
+o "Load State", "Save State", "Back to emulated Atari"
+  "Cold/Warm Start" reboots machine immediately
+
+o fixed the CPU opcode 0xcb and removed the BCD tables definitely
+
+
+Changes in 0.9.8f
+-----------------
+
+o PAGE BASED memory access implemented (partially). See memory*.[ch] files
+  and possibly #define PAGED_MEM in memory.h to see the (speed) difference.
+  <Jason>
+
+o cpu.c: BCDtoDEC and DECtoBCD removed.
+  WARNING - cpu_nogoto.c is out-of-date!
+
+o cpu_asm.c, cpu_m68k.s updated <Gerhard>
+
+o double buffering of screen output on Atari port <Gerhard>
+
+o little fixes and general source cleanup (rcsid's were removed, at last)
+  <Jason>
+
+
+Changes in 0.9.8e
+-----------------
+
+o Antic address counters fixed (both DisplayList and ScreenAddress). Salmon
+  Run and other games should now scroll the screen correctly. The bug was found
+  by Jindroush.
+
+o SelfTest must be disabled when OS ROM is disabled (suggested by Jindroush).
+
+o cpu_m68k.s is corrected (stack bug found and fixed). Spelunker runs now.
+  <Gerhard>
+
+
+Changes in 0.9.8d
+-----------------
+
+o introduced #ifdef ZLIB_CAPABLE. Emulator is now compilable without
+  the zlib files.
+
+o deleted file 'djgpp.h' and added O_BINARY to all O_RDONLY in open() calls.
+
+TODO: update UI and add there menu items for state saving and restoring
+
+
+Changes in 0.9.8c
+-----------------
+
+o atari.c contains three functions that should rather be port-specific:
+  - zlib_capable() should return TRUE if we're linked against ZLIB
+  - prepend_tmpfile_path() should insert path to a Temp dir to supplied buffer
+  - ReadDisabledROMs() should read ROM files from disk instead from state image
+  The functions are not written yet (they just return FALSE or something like
+  that). Emulator code is not compilable without zlib header files...
+
+o cpu_m68k.s contains GetByte, PutByte and GenerateIRQ now. It's faster.
+  <Gerhard>
+
+
+Changes in 0.9.8b
+-----------------
+
+o SIO bug fix: sectors are counted from 1! <Jindroush>
+
+o new icon for Atari800 emulator
+
+o State Saving - a new feature that allows saving the state of emulated
+  environment anytime (in the VBL, actually) and restoring it later.
+  <Rich>
+
+o cpu_m68k.s (assembler module for CPU 6502 emulation on M680x0 machines)
+  was updated (undocumented commands), corrected (Bruce Lee works now)
+  and greatly improved (profilling support, speed). <Gerhard>
+
+
+Changes in 0.9.8a
+-----------------
+
+o added compfile.c for handling DCM and ZLIB compressed files. SIO module 
+  updated. Please add call to 'Clear_Temp_Files()' into Atari800_Exit() in
+  all Atari800 ports. <Rich>
+
+o some more printfs changed to Aprints (not sure if everything still
+  works correctly in all ports). <Rich>
+
+o CTIA (artifacting mode 4) added. <Rich>
+
+o DOS port: vertical retrace control in display functions (animations
+  are now much smoother) for both "official" and Allegro Dos versions.
+  It will probably need a fast CPU to work fine.
+  Vertical retrace is normally turned off, it may be activated by command
+  line '-vretrace' option or by adding 'VRETRACE=1' to atari800.cfg. <Kuba>
+
+
+Changes in 0.9.7
+----------------
 
 o CPU.C has got several new macros for stack (PH, PHW, PL) and memory
   access (dGetByte, dPutByte, dGetWord). This is intented for easier
@@ -11,7 +136,7 @@ o new command line switch "-nopatchall" and option in config file
   disable the SIO patch as well. But the main purpose of this is to get
   a clean Atari800 ROM so Self-Test is happy when testing CRC and
   some games that search for certain device in HATABS do work now.
-  <idea by Jindrich>
+  <idea by Jindroush>
 
 o new undocumented GTIA priority ("transparent missiles") added. The 5th
   player colour of missiles is transparent in mode 9 and 11.
@@ -81,7 +206,7 @@ o Falcon port cleaned up a lot: cflib removed, three different routines
 o source is compilable with -Wall, all previously uninitialised variables are
   set to 0.
 
-o UI: long file names in Disk Selection dialog are shortened now. <Jindrich>
+o UI: long file names in Disk Selection dialog are shortened now. <Jindroush>
 
 o Colour Artifacting! Use '-artif <MODE>' command line switch to enable
   the artifacting. Mode is number between 0 and 3. <Perry>
@@ -116,7 +241,7 @@ o Falcon: NOVA graphics extended: 336x240 or 672x480 (double size)
 
 o UI: the too fast autorepeat was fixed - by disabling the repeat altogether.
 
-o SIO: serious bug in CopyToMem fixed. No more rewritten ROM OS. <Jindrich>
+o SIO: serious bug in CopyToMem fixed. No more rewritten ROM OS. <Jindroush>
 
 o ANTIC patch: no player DMA without missile DMA. <Perry>
 

@@ -594,7 +594,7 @@ void Pokey_process(register uint8 * buffer, register uint16 n)
 
 		count--;
 	} while (count);
-#ifdef USE_DOSSOUND
+#if defined (USE_DOSSOUND) || (WIN32)
 	cur_val += 32 * atari_speaker;
 #endif
 

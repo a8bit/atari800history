@@ -36,8 +36,6 @@
 #include <string.h>
 #include <workbench/workbench.h>
 
-static char *rcsid = "$Id: atari_amiga.c,v 1.7 1998/02/21 14:54:11 david Exp $";
-
 #include "atari.h"
 #include "colours.h"
 

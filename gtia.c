@@ -25,11 +25,11 @@
 #include "antic.h"
 #include "platform.h"
 #include "sio.h"
+#include "statesav.h"
 
 #define FALSE 0
 #define TRUE 1
 
-static char *rcsid = "$Id: gtia.c,v 1.17 1997/02/15 13:57:11 david Exp $";
 int atari_speaker;
 int consol_mask;
 extern int DELAYED_SERIN_IRQ;
@@ -416,7 +416,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 {
 	UBYTE byte = 0xff;
 
-	addr &= 0xff1f;
+	addr &= 0x1f;
 	switch (addr) {
 	case _CONSOL:
 		if (next_console_value != 7) {
@@ -543,7 +543,7 @@ UBYTE GTIA_GetByte(UWORD addr)
 int GTIA_PutByte(UWORD addr, UBYTE byte)
 {
 	UWORD cword;
-	addr &= 0xff1f;
+	addr &= 0x1f;
 	switch (addr) {
 	case _COLBK:
 		byte &= 0xfe;			/* clip lowest bit. 16 lum only in gtia 9! */
@@ -762,4 +762,152 @@ int GTIA_PutByte(UWORD addr, UBYTE byte)
 	}
 
 	return FALSE;
+}
+
+void GTIAStateSave( void )
+{
+	SaveUBYTE( &COLBK, 1 );
+	SaveUBYTE( &COLPF0, 1 );
+	SaveUBYTE( &COLPF1, 1 );
+	SaveUBYTE( &COLPF2, 1 );
+	SaveUBYTE( &COLPF3, 1 );
+	SaveUBYTE( &COLPM0, 1 );
+	SaveUBYTE( &COLPM1, 1 );
+	SaveUBYTE( &COLPM2, 1 );
+	SaveUBYTE( &COLPM3, 1 );
+	SaveUBYTE( &GRAFM, 1 );
+	SaveUBYTE( &GRAFP0, 1 );
+	SaveUBYTE( &GRAFP1, 1 );
+	SaveUBYTE( &GRAFP2, 1 );
+	SaveUBYTE( &GRAFP3, 1 );
+	SaveUBYTE( &HPOSP0, 1 );
+	SaveUBYTE( &HPOSP1, 1 );
+	SaveUBYTE( &HPOSP2, 1 );
+	SaveUBYTE( &HPOSP3, 1 );
+	SaveUBYTE( &HPOSM0, 1 );
+	SaveUBYTE( &HPOSM1, 1 );
+	SaveUBYTE( &HPOSM2, 1 );
+	SaveUBYTE( &HPOSM3, 1 );
+	SaveUBYTE( &SIZEP0, 1 );
+	SaveUBYTE( &SIZEP1, 1 );
+	SaveUBYTE( &SIZEP2, 1 );
+	SaveUBYTE( &SIZEP3, 1 );
+	SaveUBYTE( &SIZEM, 1 );
+	SaveUBYTE( &M0PF, 1 );
+	SaveUBYTE( &M1PF, 1 );
+	SaveUBYTE( &M2PF, 1 );
+	SaveUBYTE( &M3PF, 1 );
+	SaveUBYTE( &M0PL, 1 );
+	SaveUBYTE( &M1PL, 1 );
+	SaveUBYTE( &M2PL, 1 );
+	SaveUBYTE( &M3PL, 1 );
+	SaveUBYTE( &P0PF, 1 );
+	SaveUBYTE( &P1PF, 1 );
+	SaveUBYTE( &P2PF, 1 );
+	SaveUBYTE( &P3PF, 1 );
+	SaveUBYTE( &P0PL, 1 );
+	SaveUBYTE( &P1PL, 1 );
+	SaveUBYTE( &P2PL, 1 );
+	SaveUBYTE( &P3PL, 1 );
+	SaveUBYTE( &PRIOR, 1 );
+	SaveUBYTE( &GRACTL, 1 );
+
+	SaveINT( &global_hposp0, 1 );
+	SaveINT( &global_hposp1, 1 );
+	SaveINT( &global_hposp2, 1 );
+	SaveINT( &global_hposp3, 1 );
+	SaveINT( &global_hposm0, 1 );
+	SaveINT( &global_hposm1, 1 );
+	SaveINT( &global_hposm2, 1 );
+	SaveINT( &global_hposm3, 1 );
+	SaveINT( &global_sizep0, 1 );
+	SaveINT( &global_sizep1, 1 );
+	SaveINT( &global_sizep2, 1 );
+	SaveINT( &global_sizep3, 1 );
+	SaveINT( &global_sizem[0], 4 );
+	SaveINT( &next_console_value, 1 );
+
+	SaveUWORD( &pl0adr, 24 );
+	SaveUWORD( &pl1adr, 24 );
+	SaveUWORD( &pl2adr, 24 );
+	SaveUWORD( &pl3adr, 24 );
+	SaveUWORD( &m0123adr, 24 );
+
+
+	SaveINT( &PM_XPos[0], 256 );
+	SaveUBYTE( &PM_Width[0], 4 );
+}
+
+void GTIAStateRead( void )
+{
+	ReadUBYTE( &COLBK, 1 );
+	ReadUBYTE( &COLPF0, 1 );
+	ReadUBYTE( &COLPF1, 1 );
+	ReadUBYTE( &COLPF2, 1 );
+	ReadUBYTE( &COLPF3, 1 );
+	ReadUBYTE( &COLPM0, 1 );
+	ReadUBYTE( &COLPM1, 1 );
+	ReadUBYTE( &COLPM2, 1 );
+	ReadUBYTE( &COLPM3, 1 );
+	ReadUBYTE( &GRAFM, 1 );
+	ReadUBYTE( &GRAFP0, 1 );
+	ReadUBYTE( &GRAFP1, 1 );
+	ReadUBYTE( &GRAFP2, 1 );
+	ReadUBYTE( &GRAFP3, 1 );
+	ReadUBYTE( &HPOSP0, 1 );
+	ReadUBYTE( &HPOSP1, 1 );
+	ReadUBYTE( &HPOSP2, 1 );
+	ReadUBYTE( &HPOSP3, 1 );
+	ReadUBYTE( &HPOSM0, 1 );
+	ReadUBYTE( &HPOSM1, 1 );
+	ReadUBYTE( &HPOSM2, 1 );
+	ReadUBYTE( &HPOSM3, 1 );
+	ReadUBYTE( &SIZEP0, 1 );
+	ReadUBYTE( &SIZEP1, 1 );
+	ReadUBYTE( &SIZEP2, 1 );
+	ReadUBYTE( &SIZEP3, 1 );
+	ReadUBYTE( &SIZEM, 1 );
+	ReadUBYTE( &M0PF, 1 );
+	ReadUBYTE( &M1PF, 1 );
+	ReadUBYTE( &M2PF, 1 );
+	ReadUBYTE( &M3PF, 1 );
+	ReadUBYTE( &M0PL, 1 );
+	ReadUBYTE( &M1PL, 1 );
+	ReadUBYTE( &M2PL, 1 );
+	ReadUBYTE( &M3PL, 1 );
+	ReadUBYTE( &P0PF, 1 );
+	ReadUBYTE( &P1PF, 1 );
+	ReadUBYTE( &P2PF, 1 );
+	ReadUBYTE( &P3PF, 1 );
+	ReadUBYTE( &P0PL, 1 );
+	ReadUBYTE( &P1PL, 1 );
+	ReadUBYTE( &P2PL, 1 );
+	ReadUBYTE( &P3PL, 1 );
+	ReadUBYTE( &PRIOR, 1 );
+	ReadUBYTE( &GRACTL, 1 );
+
+	ReadINT( &global_hposp0, 1 );
+	ReadINT( &global_hposp1, 1 );
+	ReadINT( &global_hposp2, 1 );
+	ReadINT( &global_hposp3, 1 );
+	ReadINT( &global_hposm0, 1 );
+	ReadINT( &global_hposm1, 1 );
+	ReadINT( &global_hposm2, 1 );
+	ReadINT( &global_hposm3, 1 );
+	ReadINT( &global_sizep0, 1 );
+	ReadINT( &global_sizep1, 1 );
+	ReadINT( &global_sizep2, 1 );
+	ReadINT( &global_sizep3, 1 );
+	ReadINT( &global_sizem[0], 4 );
+	ReadINT( &next_console_value, 1 );
+
+	ReadUWORD( &pl0adr, 24 );
+	ReadUWORD( &pl1adr, 24 );
+	ReadUWORD( &pl2adr, 24 );
+	ReadUWORD( &pl3adr, 24 );
+	ReadUWORD( &m0123adr, 24 );
+
+
+	ReadINT( &PM_XPos[0], 256 );
+	ReadUBYTE( &PM_Width[0], 4 );
 }

@@ -21,7 +21,6 @@
 #endif
 
 #ifdef DJGPP
-#include "djgpp.h"
 int timesync = 1;
 #endif
 
@@ -30,13 +29,12 @@ int timesync = 1;
 static int i_love_bill = TRUE;	/* Perry, why this? */
 #endif
 
-static char *rcsid = "$Id: atari.c,v 1.48 1998/02/21 15:22:04 david Exp $";
-
 #define FALSE   0
 #define TRUE    1
 
 #include "atari.h"
 #include "cpu.h"
+#include "memory.h"
 #include "antic.h"
 #include "gtia.h"
 #include "pia.h"
@@ -51,6 +49,7 @@ static char *rcsid = "$Id: atari.c,v 1.48 1998/02/21 15:22:04 david Exp $";
 #include "ui.h"
 #include "ataripcx.h"		/* for Save_PCX() */
 #include "log.h"
+#include "statesav.h"
 
 TVmode tv_mode = TV_PAL;
 Machine machine = Atari;
@@ -62,26 +61,26 @@ ULONG lastspeed;				/* measure time between two Antic runs */
 
 #ifdef WIN32		/* AUGH clean this crap up REL */
 #include "ddraw.h"
-
-extern LPDIRECTDRAWSURFACE3	lpPrimary;
-extern UBYTE	screenbuff[];
+#include "registry.h"
+extern unsigned char *screenbuff;
 extern void (*Atari_PlaySound)( void );
 extern HWND	hWnd;
 extern void GetJoystickInput( void );
-extern void ReadRegDrives( HKEY hkInitKey );
-extern void WriteAtari800Registry( HKEY hkInitKey );
 extern void Start_Atari_Timer( void );
 extern void Screen_Paused( UBYTE *screen );
-int			unAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
+extern unsigned long ulMiscStates;
+int			ulAtariState = ATARI_UNINITIALIZED | ATARI_PAUSED;
 int		test_val;
 int		FindCartType( char *rom_filename );
 char	current_rom[ _MAX_PATH ];
-int	os = 2;
+int pil_on = FALSE;
 #else	/* not Win32 */
-static int os = 2;
+int pil_on = FALSE;
 #endif
-static int pil_on = FALSE;
 
+int	os = 2;
+
+extern SaveVal( void *value, int size );
 extern UBYTE NMIEN;
 extern UBYTE NMIST;
 extern UBYTE PORTA;
@@ -91,8 +90,6 @@ extern int xe_bank;
 extern int selftest_enabled;
 extern int Ram256;
 extern int rom_inserted;
-extern UBYTE atari_basic[8192];
-extern UBYTE atarixl_os[16384];
 
 UBYTE *cart_image = NULL;		/* For cartridge memory */
 int cart_type = NO_CART;
@@ -100,7 +97,6 @@ int cart_type = NO_CART;
 int countdown_rate = 4000;
 double deltatime;
 
-void add_esc(UWORD address, UBYTE esc_code);
 int Atari800_Exit(int run_monitor);
 void Atari800_Hardware(void);
 
@@ -124,491 +120,7 @@ void sigint_handler(int num)
 	exit(0);
 }
 
-
-int load_image(char *filename, int addr, int nbytes)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		status = read(fd, &memory[addr], nbytes);
-		if (status != nbytes) {
-			Aprint("Error reading %s", filename);
-			Atari800_Exit(FALSE);
-			return FALSE;
-		}
-		close(fd);
-
-		status = TRUE;
-	}
-	else
-		Aprint("Error loading rom: %s", filename);
-
-	return status;
-}
-
-void EnablePILL(void)
-{
-	if (os != 3) {				/* Disable PIL when running Montezumma's Revenge */
-		SetROM(0x8000, 0xbfff);
-		pil_on = TRUE;
-	}
-}
-
-void DisablePILL(void)
-{
-	if (os != 3) {				/* Disable PIL when running Montezumma's Revenge */
-		SetRAM(0x8000, 0xbfff);
-		pil_on = FALSE;
-	}
-}
-
-/*
- * Load a standard 8K ROM from the specified file
- */
-
-int Insert_8K_ROM(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		read(fd, &memory[0xa000], 0x2000);
-		close(fd);
-		SetRAM(0x8000, 0x9fff);
-		SetROM(0xa000, 0xbfff);
-		cart_type = NORMAL8_CART;
-		rom_inserted = TRUE;
-		status = TRUE;
-#ifdef WIN32
-		strcpy( current_rom, filename );
-#endif
-	}
-	return status;
-}
-
-/*
- * Load a standard 16K ROM from the specified file
- */
-
-int Insert_16K_ROM(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		read(fd, &memory[0x8000], 0x4000);
-		close(fd);
-		SetROM(0x8000, 0xbfff);
-		cart_type = NORMAL16_CART;
-		rom_inserted = TRUE;
-		status = TRUE;
-#ifdef WIN32
-		strcpy( current_rom, filename );
-#endif
-	}
-	return status;
-}
-
-/*
- * Load an OSS Supercartridge from the specified file
- * The OSS cartridge is a 16K bank switched cartridge
- * that occupies 8K of address space between $a000
- * and $bfff
- */
-
-int Insert_OSS_ROM(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		cart_image = (UBYTE *) malloc(0x4000);
-		if (cart_image) {
-			read(fd, cart_image, 0x4000);
-			memcpy(&memory[0xa000], cart_image, 0x1000);
-			memcpy(&memory[0xb000], cart_image + 0x3000, 0x1000);
-			SetRAM(0x8000, 0x9fff);
-			SetROM(0xa000, 0xbfff);
-			cart_type = OSS_SUPERCART;
-			rom_inserted = TRUE;
-			status = TRUE;
-#ifdef WIN32
-			strcpy( current_rom, filename );
-#endif
-		}
-		close(fd);
-	}
-	return status;
-}
-
-/*
- * Load a DB Supercartridge from the specified file
- * The DB cartridge is a 32K bank switched cartridge
- * that occupies 16K of address space between $8000
- * and $bfff
- */
-
-int Insert_DB_ROM(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		cart_image = (UBYTE *) malloc(0x8000);
-		if (cart_image) {
-			read(fd, cart_image, 0x8000);
-			memcpy(&memory[0x8000], cart_image, 0x2000);
-			memcpy(&memory[0xa000], cart_image + 0x6000, 0x2000);
-			SetROM(0x8000, 0xbfff);
-			cart_type = DB_SUPERCART;
-			rom_inserted = TRUE;
-			status = TRUE;
-#ifdef WIN32
-			strcpy( current_rom, filename );
-#endif
-		}
-		close(fd);
-	}
-	return status;
-}
-
-/*
- * Load a 32K 5200 ROM from the specified file
- */
-
-int Insert_32K_5200ROM(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		/* read the first 16k */
-		if (read(fd, &memory[0x4000], 0x4000) != 0x4000) {
-			close(fd);
-			return FALSE;
-		}
-		/* try and read next 16k */
-		cart_type = AGS32_CART;
-		if ((status = read(fd, &memory[0x8000], 0x4000)) == 0) {
-			/* note: AB__ ABB_ ABBB AABB */
-			memcpy(&memory[0x8000], &memory[0x6000], 0x2000);
-			memcpy(&memory[0xA000], &memory[0x6000], 0x2000);
-			memcpy(&memory[0x6000], &memory[0x4000], 0x2000);
-		}
-		else if (status != 0x4000) {
-			close(fd);
-			Aprint("Error reading 32K 5200 rom, %X", status);
-			return FALSE;
-		}
-		else {
-			UBYTE temp_byte;
-			if (read(fd, &temp_byte, 1) == 1) {
-				/* ABCD EFGH IJ */
-				if (!(cart_image = (UBYTE *) malloc(0x8000)))
-					return FALSE;
-				*cart_image = temp_byte;
-				if (read(fd, &cart_image[1], 0x1fff) != 0x1fff)
-					return FALSE;
-				memcpy(&cart_image[0x2000], &memory[0x6000], 0x6000);	/* IJ CD EF GH :CI */
-
-				memcpy(&memory[0xa000], &cart_image[0x0000], 0x2000);	/* AB CD EF IJ :MEM */
-
-				memcpy(&memory[0x8000], &cart_image[0x0000], 0x2000);	/* AB CD IJ IJ :MEM?ij copy */
-
-				memcpy(&cart_image[0x0000], &memory[0x4000], 0x2000);	/* AB CD EF GH :CI */
-
-				memcpy(&memory[0x5000], &cart_image[0x4000], 0x1000);	/* AE CD IJ IJ :MEM CD dont care? */
-
-				SetHARDWARE(0x4ff6, 0x4ff9);
-				SetHARDWARE(0x5ff6, 0x5ff9);
-			}
-		}
-		close(fd);
-		/* SetROM (0x4000, 0xbfff); */
-		/* cart_type = AGS32_CART; */
-		rom_inserted = TRUE;
-		status = TRUE;
-#ifdef WIN32
-		strcpy( current_rom, filename );
-#endif
-	}
-	return status;
-}
-
-/*
- * This removes any loaded cartridge ROM files from the emulator
- * It doesn't remove either the OS, FFP or character set ROMS.
- */
-
-int Remove_ROM(void)
-{
-	if (cart_image) {			/* Release memory allocated for Super Cartridges */
-		free(cart_image);
-		cart_image = NULL;
-	}
-	SetRAM(0x8000, 0xbfff);		/* Ensure cartridge area is RAM */
-	cart_type = NO_CART;
-	rom_inserted = FALSE;
-
-	return TRUE;
-}
-
-int Insert_Cartridge(char *filename)
-{
-	int status = FALSE;
-	int fd;
-
-	fd = open(filename, O_RDONLY, 0777);
-	if (fd != -1) {
-		UBYTE header[16];
-
-		read(fd, header, sizeof(header));
-		if ((header[0] == 'C') &&
-			(header[1] == 'A') &&
-			(header[2] == 'R') &&
-			(header[3] == 'T')) {
-			int type;
-			int checksum;
-
-			type = (header[4] << 24) |
-				(header[5] << 16) |
-				(header[6] << 8) |
-				header[7];
-
-			checksum = (header[4] << 24) |
-				(header[5] << 16) |
-				(header[6] << 8) |
-				header[7];
-
-			switch (type) {
-#define STD_8K 1
-#define STD_16K 2
-#define OSS 3
-#define AGS 4
-			case STD_8K:
-				read(fd, &memory[0xa000], 0x2000);
-				SetRAM(0x8000, 0x9fff);
-				SetROM(0xa000, 0xbfff);
-				cart_type = NORMAL8_CART;
-				rom_inserted = TRUE;
-				status = TRUE;
-				break;
-			case STD_16K:
-				read(fd, &memory[0x8000], 0x4000);
-				SetROM(0x8000, 0xbfff);
-				cart_type = NORMAL16_CART;
-				rom_inserted = TRUE;
-				status = TRUE;
-				break;
-			case OSS:
-				cart_image = (UBYTE *) malloc(0x4000);
-				if (cart_image) {
-					read(fd, cart_image, 0x4000);
-					memcpy(&memory[0xa000], cart_image, 0x1000);
-					memcpy(&memory[0xb000], cart_image + 0x3000, 0x1000);
-					SetRAM(0x8000, 0x9fff);
-					SetROM(0xa000, 0xbfff);
-					cart_type = OSS_SUPERCART;
-					rom_inserted = TRUE;
-					status = TRUE;
-				}
-				break;
-			case AGS:
-				read(fd, &memory[0x4000], 0x8000);
-				close(fd);
-				SetROM(0x4000, 0xbfff);
-				cart_type = AGS32_CART;
-				rom_inserted = TRUE;
-				status = TRUE;
-				break;
-			default:
-				Aprint("%s is in unsupported cartridge format %d", filename, type);
-				break;
-			}
-		}
-		else {
-			Aprint("%s is not a cartridge", filename);
-		}
-		close(fd);
-	}
-	return status;
-}
-
-void RestoreSIO( void )
-{
-	memory[0xe459] = 0x4c;
-	memory[0xe45a] = 0x59;
-	memory[0xe45b] = 0xe9;
-}
-
-void SetSIOEsc( void )
-{
-	if (enable_sio_patch)
-		add_esc(0xe459, ESC_SIOV);
-}
-
-void PatchOS(void)
-{
-	const unsigned short o_open = 0;
-	const unsigned short o_close = 2;
-	const unsigned short o_read = 4;
-	const unsigned short o_write = 6;
-	const unsigned short o_status = 8;
-	/* const unsigned short   o_special = 10; */
-	const unsigned short o_init = 12;
-
-	unsigned short addr = 0;
-	unsigned short entry;
-	unsigned short devtab;
-	int i;
-
-/*
-	Check if ROM patches are enabled - if not return immediately
-*/
-	if (enable_rom_patches == 0)
-		return;
-/*
-   =====================
-   Disable Checksum Test
-   =====================
- */
-
-	SetSIOEsc( );
-
-	switch (machine) {
-	case Atari:
-		break;
-	case AtariXL:
-	case AtariXE:
-	case Atari320XE:
-		memory[0xc314] = 0x8e;
-		memory[0xc315] = 0xff;
-		memory[0xc319] = 0x8e;
-		memory[0xc31a] = 0xff;
-		break;
-	default:
-		Aprint("Fatal Error in atari.c: PatchOS(): Unknown machine");
-		Atari800_Exit(FALSE);
-		break;
-	}
-/*
-   ==========================================
-   Patch O.S. - Modify Handler Table (HATABS)
-   ==========================================
- */
-	switch (machine) {
-	case Atari:
-		addr = 0xf0e3;
-		break;
-	case AtariXL:
-	case AtariXE:
-	case Atari320XE:
-		addr = 0xc42e;
-		break;
-	default:
-		Aprint("Fatal Error in atari.c: PatchOS(): Unknown machine");
-		Atari800_Exit(FALSE);
-		break;
-	}
-
-	for (i = 0; i < 5; i++) {
-		devtab = (memory[addr + 2] << 8) | memory[addr + 1];
-
-		switch (memory[addr]) {
-		case 'P':
-			entry = (memory[devtab + o_open + 1] << 8) | memory[devtab + o_open];
-			add_esc((UWORD)(entry + 1), ESC_PHOPEN);
-			entry = (memory[devtab + o_close + 1] << 8) | memory[devtab + o_close];
-			add_esc((UWORD)(entry + 1), ESC_PHCLOS);
-/*
-   entry = (memory[devtab+o_read+1] << 8) | memory[devtab+o_read];
-   add_esc (entry+1, ESC_PHREAD);
- */
-			entry = (memory[devtab + o_write + 1] << 8) | memory[devtab + o_write];
-			add_esc((UWORD)(entry + 1), ESC_PHWRIT);
-			entry = (memory[devtab + o_status + 1] << 8) | memory[devtab + o_status];
-			add_esc((UWORD)(entry + 1), ESC_PHSTAT);
-/*
-   entry = (memory[devtab+o_special+1] << 8) | memory[devtab+o_special];
-   add_esc (entry+1, ESC_PHSPEC);
- */
-			memory[devtab + o_init] = 0xd2;
-			memory[devtab + o_init + 1] = ESC_PHINIT;
-			break;
-		case 'C':
-			memory[addr] = 'H';
-			entry = (memory[devtab + o_open + 1] << 8) | memory[devtab + o_open];
-			add_esc((UWORD)(entry + 1), ESC_HHOPEN);
-			entry = (memory[devtab + o_close + 1] << 8) | memory[devtab + o_close];
-			add_esc((UWORD)(entry + 1), ESC_HHCLOS);
-			entry = (memory[devtab + o_read + 1] << 8) | memory[devtab + o_read];
-			add_esc((UWORD)(entry + 1), ESC_HHREAD);
-			entry = (memory[devtab + o_write + 1] << 8) | memory[devtab + o_write];
-			add_esc((UWORD)(entry + 1), ESC_HHWRIT);
-			entry = (memory[devtab + o_status + 1] << 8) | memory[devtab + o_status];
-			add_esc((UWORD)(entry + 1), ESC_HHSTAT);
-			break;
-		case 'E':
-#ifdef BASIC
-			printf("Editor Device\n");
-			entry = (memory[devtab + o_open + 1] << 8) | memory[devtab + o_open];
-			add_esc((UWORD)(entry + 1), ESC_E_OPEN);
-			entry = (memory[devtab + o_read + 1] << 8) | memory[devtab + o_read];
-			add_esc((UWORD)(entry + 1), ESC_E_READ);
-			entry = (memory[devtab + o_write + 1] << 8) | memory[devtab + o_write];
-			add_esc((UWORD)(entry + 1), ESC_E_WRITE);
-#endif
-			break;
-		case 'S':
-			break;
-		case 'K':
-#ifdef BASIC
-			printf("Keyboard Device\n");
-			entry = (memory[devtab + o_read + 1] << 8) | memory[devtab + o_read];
-			add_esc(entry + 1, ESC_K_READ);
-#endif
-			break;
-		default:
-			break;
-		}
-
-		addr += 3;				/* Next Device in HATABS */
-	}
-}
-
 /* static int Reset_Disabled = FALSE; - why is this defined here? (PS) */
-int Initialise_Monty(void);		/* forward reference */
-
-void Coldstart(void)
-{
-	if (os == 3) {
-		os = 2;					/* Fiddle OS to prevent infinite recursion */
-		Initialise_Monty();
-		os = 3;
-	}
-	NMIEN = 0x00;
-	NMIST = 0x00;
-	PORTA = 0x00;
-	if (mach_xlxe) {
-		selftest_enabled = TRUE;	/* necessary for init RAM */
-		PORTB = 0x00;			/* necessary for init RAM */
-		PIA_PutByte(_PORTB, 0xff);	/* turn on operating system */
-	}
-	else
-		PORTB = 0xff;
-	memory[0x244] = 1;
-	CPU_Reset();
-
-	if (hold_option)
-		next_console_value = 0x03;	/* Hold Option During Reboot */
-}
 
 void Warmstart(void)
 {
@@ -620,83 +132,6 @@ void Warmstart(void)
 	PORTA = 0x00;
 	PORTB = 0xff;
 	CPU_Reset();
-}
-
-int Initialise_AtariOSA(void)
-{
-	int status;
-	mach_xlxe = FALSE;
-	status = load_image(atari_osa_filename, 0xd800, 0x2800);
-	if (status) {
-		machine = Atari;
-		PatchOS();
-		SetRAM(0x0000, 0xbfff);
-		if (enable_c000_ram)
-			SetRAM(0xc000, 0xcfff);
-		else
-			SetROM(0xc000, 0xcfff);
-		SetROM(0xd800, 0xffff);
-		SetHARDWARE(0xd000, 0xd7ff);
-		Coldstart();
-	}
-	return status;
-}
-
-int Initialise_AtariOSB(void)
-{
-	int status;
-	mach_xlxe = FALSE;
-	status = load_image(atari_osb_filename, 0xd800, 0x2800);
-	if (status) {
-		machine = Atari;
-		PatchOS();
-		SetRAM(0x0000, 0xbfff);
-		if (enable_c000_ram)
-			SetRAM(0xc000, 0xcfff);
-		else
-			SetROM(0xc000, 0xcfff);
-		SetROM(0xd800, 0xffff);
-		SetHARDWARE(0xd000, 0xd7ff);
-		Coldstart();
-	}
-	return status;
-}
-
-int Initialise_AtariXL(void)
-{
-	int status;
-	mach_xlxe = TRUE;
-	status = load_image(atari_xlxe_filename, 0xc000, 0x4000);
-	if (status) {
-		machine = AtariXL;
-		PatchOS();
-		memcpy(atarixl_os, memory + 0xc000, 0x4000);
-
-		if (cart_type == NO_CART) {
-			status = Insert_8K_ROM(atari_basic_filename);
-			if (status) {
-				memcpy(atari_basic, memory + 0xa000, 0x2000);
-				SetRAM(0x0000, 0x9fff);
-				SetROM(0xc000, 0xffff);
-				SetHARDWARE(0xd000, 0xd7ff);
-				rom_inserted = FALSE;
-				Coldstart();
-			}
-			else {
-				Aprint("Unable to load %s", atari_basic_filename);
-				Atari800_Exit(FALSE);
-		  		return FALSE;
-			}
-		}
-		else {
-			SetRAM(0x0000, 0xbfff);
-			SetROM(0xc000, 0xffff);
-			SetHARDWARE(0xd000, 0xd7ff);
-			rom_inserted = FALSE;
-			Coldstart();
-		}
-	}
-	return status;
 }
 
 int Initialise_AtariXE(void)
@@ -718,93 +153,14 @@ int Initialise_Atari320XE(void)
 	return status;
 }
 
-int Initialise_Atari5200(void)
-{
-	int status;
-	mach_xlxe = FALSE;
-	memset(memory, 0, 0xf800);
-	status = load_image(atari_5200_filename, 0xf800, 0x800);
-	if (status) {
-		machine = Atari5200;
-		SetRAM(0x0000, 0x3fff);
-		SetROM(0xf800, 0xffff);
-		SetROM(0x4000, 0xffff);
-		SetHARDWARE(0xc000, 0xc0ff);	/* 5200 GTIA Chip */
-		SetHARDWARE(0xd400, 0xd4ff);	/* 5200 ANTIC Chip */
-		SetHARDWARE(0xe800, 0xe8ff);	/* 5200 POKEY Chip */
-		SetHARDWARE(0xeb00, 0xebff);	/* 5200 POKEY Chip */
-		Coldstart();
-	}
-	return status;
-}
-
 /*
  * Initialise System with Montezuma's Revenge
  * image. Standard Atari OS is not required.
  */
 
-#include "emuos.h"
-
 #ifdef __BUILT_IN_MONTY__
 #include "monty.h"
 #endif
-
-int Initialise_Monty(void)
-{
-	int status;
-
-	status = load_image("monty-emuos.img", 0x0000, 0x10000);
-#ifdef __BUILT_IN_MONTY__
-	if (!status) {
-		memcpy(&memory[0x0000], monty_h, 0xc000);
-		memcpy(&memory[0xc000], emuos_h, 0x4000);
-		status = TRUE;
-	}
-#endif
-
-	if (status) {
-		machine = Atari;
-		/* PatchOS (); */
-		SetRAM(0x0000, 0xbfff);
-		if (enable_c000_ram)
-			SetRAM(0xc000, 0xcfff);
-		else
-			SetROM(0xc000, 0xcfff);
-		SetROM(0xd800, 0xffff);
-		SetHARDWARE(0xd000, 0xd7ff);
-		Coldstart();
-	}
-	return status;
-}
-
-/*
- * Initialise System with an replacement OS. It has just
- * enough functionality to run Defender and Star Raider.
- */
-
-int Initialise_EmuOS(void)
-{
-	int status;
-
-	status = load_image("emuos.img", 0xc000, 0x4000);
-	if (!status)
-		memcpy(&memory[0xc000], emuos_h, 0x4000);
-	else
-		Aprint("EmuOS: Using external emulated OS");
-
-	machine = Atari;
-	PatchOS();
-	SetRAM(0x0000, 0xbfff);
-	if (enable_c000_ram)
-		SetRAM(0xc000, 0xcfff);
-	else
-		SetROM(0xc000, 0xcfff);
-	SetROM(0xd800, 0xffff);
-	SetHARDWARE(0xd000, 0xd7ff);
-	Coldstart();
-
-	return TRUE;
-}
 
 int main(int argc, char **argv)
 {
@@ -815,18 +171,15 @@ int main(int argc, char **argv)
 
 #ifdef WIN32
 	/* The Win32 version doesn't use configuration files, it reads values in from the Registry */
-	struct tm *newtime;
-	long ltime;
 	int update_registry = FALSE;
 
 	if( argc > 1 )
 		update_registry = TRUE;
-	time( &ltime );
-	newtime = gmtime( &ltime );
-	unAtariState &= ~ATARI_UNINITIALIZED;
-	unAtariState |= ATARI_INITIALIZING | ATARI_PAUSED;
+	ulAtariState &= ~ATARI_UNINITIALIZED;
+	ulAtariState |= ATARI_INITIALIZING | ATARI_PAUSED;
 	rom_inserted = FALSE;
-	Aprint("Start log %s", asctime( newtime ));
+	Aprint("Start log");
+	test_val = 0;
 #else
 	char *rtconfig_filename = NULL;
 	int config = FALSE;
@@ -837,7 +190,7 @@ int main(int argc, char **argv)
 		else if (strcmp(argv[i], "-config") == 0)
 			rtconfig_filename = argv[++i];
 		else if (strcmp(argv[i], "-v") == 0) {
-			printf("%s\n", ATARI_TITLE);
+			Aprint("%s", ATARI_TITLE);
 			return 0;
 		}
 		else if (strcmp(argv[i], "-verbose") == 0)
@@ -964,32 +317,35 @@ int main(int argc, char **argv)
 				refresh_rate = 1;
 		}
 		else if (strcmp(argv[i], "-help") == 0) {
-			printf("\t-configure    Update Configuration File\n");
-			printf("\t-config fnm   Specify Alternate Configuration File\n");
-			printf("\t-atari        Standard Atari 800 mode\n");
-			printf("\t-xl           Atari 800XL mode\n");
-			printf("\t-xe           Atari 130XE mode\n");
-			printf("\t-320xe        Atari 320XE mode (COMPY SHOP)\n");
-			printf("\t-rambo        Atari 320XE mode (RAMBO)\n");
-			printf("\t-nobasic      Turn off Atari BASIC ROM\n");
-			printf("\t-basic        Turn on Atari BASIC ROM\n");
-			printf("\t-5200         Atari 5200 Games System\n");
-			printf("\t-pal          Enable PAL TV mode\n");
-			printf("\t-ntsc         Enable NTSC TV mode\n");
-			printf("\t-rom fnm      Install standard 8K Cartridge\n");
-			printf("\t-rom16 fnm    Install standard 16K Cartridge\n");
-			printf("\t-oss fnm      Install OSS Super Cartridge\n");
-			printf("\t-db fnm       Install DB's 16/32K Cartridge (not for normal use)\n");
-			printf("\t-refresh num  Specify screen refresh rate\n");
-			printf("\t-nopatch      Don't patch SIO routine in OS\n");
-			printf("\t-a            Use A OS\n");
-			printf("\t-b            Use B OS\n");
-			printf("\t-c            Enable RAM between 0xc000 and 0xd000\n");
-			printf("\t-v            Show version/release number\n");
+			Aprint("\t-configure    Update Configuration File");
+			Aprint("\t-config fnm   Specify Alternate Configuration File");
+			Aprint("\t-atari        Standard Atari 800 mode");
+			Aprint("\t-xl           Atari 800XL mode");
+			Aprint("\t-xe           Atari 130XE mode");
+			Aprint("\t-320xe        Atari 320XE mode (COMPY SHOP)");
+			Aprint("\t-rambo        Atari 320XE mode (RAMBO)");
+			Aprint("\t-nobasic      Turn off Atari BASIC ROM");
+			Aprint("\t-basic        Turn on Atari BASIC ROM");
+			Aprint("\t-5200         Atari 5200 Games System");
+			Aprint("\t-pal          Enable PAL TV mode");
+			Aprint("\t-ntsc         Enable NTSC TV mode");
+			Aprint("\t-rom fnm      Install standard 8K Cartridge");
+			Aprint("\t-rom16 fnm    Install standard 16K Cartridge");
+			Aprint("\t-oss fnm      Install OSS Super Cartridge");
+			Aprint("\t-db fnm       Install DB's 16/32K Cartridge (not for normal use)");
+			Aprint("\t-refresh num  Specify screen refresh rate");
+			Aprint("\t-nopatch      Don't patch SIO routine in OS");
+			Aprint("\t-nopatchall   Don't patch OS at all, H: device won't work");
+			Aprint("\t-a            Use A OS");
+			Aprint("\t-b            Use B OS");
+			Aprint("\t-c            Enable RAM between 0xc000 and 0xd000");
+			Aprint("\t-v            Show version/release number");
 			argv[j++] = argv[i];
-			printf("\nPress Return/Enter to continue...");
+#ifndef WIN32
+			Aprint("\nPress Return/Enter to continue...");
 			getchar();
-			printf("\r                                 \n");
+			Aprint("\r                                 \n");
+#endif
 		}
 		else if (strcmp(argv[i], "-a") == 0)
 			os = 1;
@@ -1025,14 +381,20 @@ int main(int argc, char **argv)
 	Device_Initialise(&argc, argv);
     if (hold_option)
 	    next_console_value = 0x03; /* Hold Option During Reboot */
+
 	SIO_Initialise (&argc, argv);
 	Atari_Initialise(&argc, argv);	/* Platform Specific Initialisation */
 
 	if (!atari_screen) {
 #ifdef WIN32
-		atari_screen = (ULONG *)&screenbuff[0];
+		atari_screen = (ULONG *)screenbuff;
 #else
 		atari_screen = (ULONG *) malloc((ATARI_HEIGHT + 16) * ATARI_WIDTH);
+#ifdef BITPL_SCR
+		atari_screen_b = (ULONG *) malloc((ATARI_HEIGHT + 16) * ATARI_WIDTH);
+		atari_screen1 = atari_screen;
+		atari_screen2 = atari_screen_b;
+#endif
 #endif
 		for (i = 0; i < 256; i++)
 			colour_translation_table[i] = i;
@@ -1041,7 +403,7 @@ int main(int argc, char **argv)
 	 * Initialise basic 64K memory to zero.
 	 */
 
-	memset(memory, 0, 65536);	/* Optimalize by Raster */
+	ClearRAM();
 
 	/*
 	 * Initialise Custom Chips
@@ -1113,6 +475,12 @@ int main(int argc, char **argv)
 		status = Initialise_AtariXE();
 		break;
 	case Atari320XE:
+#ifdef WIN32
+		if( ulMiscStates & ATARI_RAMBO_MODE )
+			Ram256 = 1;
+		else
+			Ram256 = 2;
+#endif
 		/* Ram256 is even now set */
 		status = Initialise_Atari320XE();
 		break;
@@ -1127,10 +495,10 @@ int main(int argc, char **argv)
 	}
 
 #ifdef WIN32
-	if (!status || (unAtariState & ATARI_UNINITIALIZED) )
+	if (!status || (ulAtariState & ATARI_UNINITIALIZED) )
     {
 		Aprint("Failed loading specified Atari OS ROM (or basic), check filename\nunder the Atari/Hardware and Atari/Cartridges menu.");
-		unAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED | ATARI_LOAD_WARNING;
+		ulAtariState |= ATARI_LOAD_FAILED | ATARI_PAUSED | ATARI_LOAD_WARNING;
 		if( hWnd )
 			InvalidateRect( hWnd, NULL, FALSE );
 		if( update_registry )
@@ -1212,7 +580,7 @@ int main(int argc, char **argv)
 	if( update_registry )
 		WriteAtari800Registry( NULL );
 	Start_Atari_Timer();
-	unAtariState = ATARI_HW_READY | ATARI_PAUSED;
+	ulAtariState = ATARI_HW_READY | ATARI_PAUSED;
 #else
 	Atari800_Hardware();
 	Aprint("Fatal error: Atari800_Hardware() returned");
@@ -1245,13 +613,6 @@ int FindCartType( char *rom_filename )
 	return cart_type;
 }
 #endif /* WIN32 */
-
-void add_esc(UWORD address, UBYTE esc_code)
-{
-	memory[address++] = 0xf2;	/* ESC */
-	memory[address++] = esc_code;	/* ESC CODE */
-	memory[address] = 0x60;		/* RTS */
-}
 
 /*
    ================================
@@ -1437,27 +798,6 @@ int Atari800_Exit(int run_monitor)
 	return Atari_Exit(run_monitor);
 }
 
-/* special support of Bounty Bob on Atari5200 */
-int bounty_bob1(UWORD addr)
-{
-	if (addr >= 0x4ff6 && addr <= 0x4ff9) {
-		addr -= 0x4ff6;
-		memcpy(&memory[0x4000], &cart_image[addr << 12], 0x1000);
-		return FALSE;
-	}
-	return TRUE;
-}
-
-int bounty_bob2(UWORD addr)
-{
-	if (addr >= 0x5ff6 && addr <= 0x5ff9) {
-		addr -= 0x5ff6;
-		memcpy(&memory[0x5000], &cart_image[(addr << 12) + 0x4000], 0x1000);
-		return FALSE;
-	}
-	return TRUE;
-}
-
 UBYTE Atari800_GetByte(UWORD addr)
 {
 	UBYTE byte = 0xff;
@@ -1581,6 +921,7 @@ void ShowRealSpeed(ULONG * atari_screen, int refresh_rate)
 
 void Atari800_Hardware(void)
 {
+#ifndef WIN32
 	static struct timeval tp;
 	static struct timezone tzp;
 	static double lasttime;
@@ -1615,6 +956,12 @@ void Atari800_Hardware(void)
 			break;
 		case AKEY_EXIT:
 			Atari800_Exit(FALSE);
+			/* unmount disk drives so the temporary ones are deleted */
+			{
+				int diskno;
+				for (diskno = 1; diskno < 8; diskno++)
+					SIO_Dismount(diskno);
+			}
 			exit(1);
 		case AKEY_BREAK:
 			IRQST &= ~0x80;
@@ -1740,55 +1087,13 @@ void Atari800_Hardware(void)
 #endif							/* DJGPP */
 #endif							/* FALCON */
 	}
+#endif
 }
 
 #ifdef WIN32
 void WinAtari800_Hardware (void)
 {
-	int	keycode;
-	
-	keycode = Atari_Keyboard ();
-	
-	switch (keycode) {
-	case AKEY_COLDSTART:
-		Coldstart();
-		break;
-	case AKEY_WARMSTART:
-		Warmstart();
-		break;
-	case AKEY_EXIT:
-	/*		  Atari800_Exit(FALSE);
-		exit(1);*/
-		break;
-	case AKEY_BREAK:
-		IRQST &= ~0x80;
-		if (IRQEN & 0x80) {
-			GenerateIRQ();
-		}
-		break;
-	case AKEY_UI:
-		/*		  ui((UBYTE *)atari_screen);*/
-		break;
-	case AKEY_PIL:
-		if (pil_on)
-			DisablePILL();
-		else
-			EnablePILL();
-		break;
-	case AKEY_NONE:
-		break;
-	default:
-		KBCODE = keycode;
-		IRQST &= ~0x40;
-		if (IRQEN & 0x40) {
-			GenerateIRQ();
-		}
-		break;
-	}
-	
-	/*
-	* Generate Screen
-	*/
+	Atari_Keyboard ();
 	GetJoystickInput( );
 	ANTIC_RunDisplayList();			/* generate screen */
 	if (++test_val==refresh_rate)
@@ -1797,7 +1102,110 @@ void WinAtari800_Hardware (void)
 		test_val = 0;
 	}
 	Atari_PlaySound();
-	if( unAtariState & ATARI_PAUSED )
+
+	if( ulAtariState & ATARI_PAUSED )
 		Screen_Paused( (UBYTE *)atari_screen );
 }
 #endif /* Win32 */
+
+#ifndef WIN32
+int zlib_capable(void)
+{
+#ifdef ZLIB_CAPABLE
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
+int prepend_tmpfile_path(char *buffer)
+{
+	if (buffer)
+		*buffer = 0;
+	return 0;
+}
+
+int ReadDisabledROMs(void)
+{
+	return FALSE;
+}
+#endif
+
+void MainStateSave( void )
+{
+	UBYTE	temp;
+
+	/* Possibly some compilers would handle an enumerated type differently,
+	   so convert these into unsigned bytes and save them out that way */
+	if( tv_mode == TV_PAL )
+		temp = 0;
+	else
+		temp = 1;
+	SaveUBYTE( &temp, 1 );
+
+	if( machine == Atari )
+		temp = 0;
+	if( machine == AtariXL )
+		temp = 1;
+	if( machine == AtariXE )
+		temp = 2;
+	if( machine == Atari320XE )
+		temp = 3;
+	if( machine == Atari5200 )
+		temp = 4;
+	SaveUBYTE( &temp, 1 );
+
+	SaveINT( &os, 1 );
+	SaveINT( &pil_on, 1 );
+	SaveINT( &default_tv_mode, 1 );
+	SaveINT( &default_system, 1 );
+}
+
+void MainStateRead( void )
+{
+	UBYTE	temp;
+
+	ReadUBYTE( &temp, 1 );
+	if( temp == 0 )
+		tv_mode = TV_PAL;
+	else
+		tv_mode = TV_NTSC;
+
+	mach_xlxe = FALSE;
+	ReadUBYTE( &temp, 1 );
+	switch( temp )
+	{
+		case	0:
+			machine = Atari;
+			break;
+
+		case	1:
+			machine = AtariXL;
+			mach_xlxe = TRUE;
+			break;
+
+		case	2:
+			machine = AtariXE;
+			mach_xlxe = TRUE;
+			break;
+
+		case	3:
+			machine = Atari320XE;
+			mach_xlxe = TRUE;
+			break;
+
+		case	4:
+			machine = Atari5200;
+			break;
+
+		default:
+			machine = AtariXL;
+			Aprint( "Warning: Bad machine type read in from state save, defaulting to XL" );
+			break;
+	}
+
+	ReadINT( &os, 1 );
+	ReadINT( &pil_on, 1 );
+	ReadINT( &default_tv_mode, 1 );
+	ReadINT( &default_system, 1 );
+}

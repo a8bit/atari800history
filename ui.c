@@ -11,23 +11,31 @@
 #endif
 #include "rt-config.h"
 #include "atari.h"
+#include "cpu.h"
+#include "memory.h"
 #include "platform.h"
 #include "prompts.h"
-#include "cpu.h"
 #include "gtia.h"
 #include "sio.h"
 #include "list.h"
 #include "ui.h"
 #include "log.h"
+#include "statesav.h"
 
 #define FALSE 0
 #define TRUE 1
 
+#if defined(VGA) || defined(ATARI)
+#define DOS_DRIVES
+#endif
+
 int ui_is_active = FALSE;
+
+int ReadAtariExe( char *filename );
 
 static int current_disk_directory = 0;
 static char curr_dir[MAX_FILENAME_LEN] = "";
-static char charset[8192];
+static char charset[1024];
 
 #ifdef WIN32
 extern int iKbBuffer[KEYBOARD_BUFFER_SIZE];
@@ -509,7 +517,7 @@ List *GetDirectory(char *directory)
 	struct stat st;
 	char fullfilename[MAX_FILENAME_LEN];
 	char *filepart;
-#ifdef VGA
+#ifdef DOS_DRIVES
 	char letter[3] = "C:";
 	char letter2[5] = "[C:]";
 #ifdef __DJGPP__
@@ -518,7 +526,7 @@ List *GetDirectory(char *directory)
 		_STAT_ROOT_TIME | _STAT_WRITEBIT;
 	/*we do not need any of those 'hard-to-get' informations */
 #endif	/* DJGPP */
-#endif	/* VGA */
+#endif	/* DOS_DRIVES */
 	strcpy(fullfilename, directory);
 	filepart = fullfilename + strlen(fullfilename);
 #ifdef BACK_SLASH
@@ -569,7 +577,7 @@ List *GetDirectory(char *directory)
 
 		ListSort(list, (void *) FilenameSort);
 	}
-#ifdef VGA
+#ifdef DOS_DRIVES
 	/*in DOS, add all existing disk letters */
 	ListAddTail(list, strdup("[A:]"));	/*do not check A: - it's slow */
 	letter[0] = 'C';
@@ -704,7 +712,7 @@ int FileSelector(UBYTE * screen, char *directory, char *full_filename)
 							}
 
 						}
-#ifdef VGA
+#ifdef DOS_DRIVES
 						else if (files[item][2] == ':' && files[item][3] == ']') {	/*disk selected */
 							strcpy(help, files[item] + 1);
 							help[2] = '\\';
@@ -866,7 +874,7 @@ void CartManagement(UBYTE * screen)
 				int nbytes;
 				int fd;
 
-				fd = open(filename, O_RDONLY, 0777);
+				fd = open(filename, O_RDONLY | O_BINARY, 0777);
 				if (fd == -1) {
 					perror(filename);
 					exit(1);
@@ -947,7 +955,7 @@ void CartManagement(UBYTE * screen)
 					header.gash[3] = '\0';
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
-					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
 					if (fd != -1) {
 						write(fd, &header, sizeof(header));
 						write(fd, image, nbytes);
@@ -960,7 +968,7 @@ void CartManagement(UBYTE * screen)
 			if (FileSelector(screen, curr_dir, filename)) {
 				int fd;
 
-				fd = open(filename, O_RDONLY, 0777);
+				fd = open(filename, O_RDONLY | O_BINARY, 0777);
 				if (fd != -1) {
 					Header header;
 					UBYTE image[32769];
@@ -981,7 +989,7 @@ void CartManagement(UBYTE * screen)
 
 					sprintf(filename, "%s/%s", atari_rom_dir, fname);
 
-					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+					fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY | O_BINARY, 0777);
 					if (fd != -1) {
 						write(fd, image, nbytes);
 						close(fd);
@@ -1067,23 +1075,82 @@ void AboutEmulator(UBYTE * screen)
 	GetKeyPress(screen);
 }
 
-void ui(UBYTE * screen)
+int RunExe(UBYTE *screen)
+{
+	char exename[MAX_FILENAME_LEN];
+	int ret = FALSE;
+
+	strcpy(curr_dir, atari_exe_dir);
+	if (FileSelector(screen, curr_dir, exename)) {
+		ret = ReadAtariExe(exename);
+		if (! ret) {
+			/* display log to a window */
+		}
+	}
+
+	return ret;
+}
+
+int SaveState(UBYTE *screen)
+{
+	char statename[MAX_FILENAME_LEN];
+	char fname[33];
+
+	memcpy(fname, "                                ", 32);
+	Box(screen, 0x9a, 0x94, 3, 9, 36, 11);
+	Print(screen, 0x94, 0x9a, "Filename", 4, 9);
+	EditString(screen, 0x9a, 0x94, 32, fname, 4, 10);
+	fname[32] = '\0';
+	RemoveSpaces(fname);
+
+	strcpy(statename, atari_state_dir);
+	if (*statename) {
+		char last = statename[strlen(statename)-1];
+		if (last != '/' && last != '\\')
+#ifdef BACK_SLASH
+			strcat(statename, "\\");
+#else
+			strcat(statename, "/");
+#endif
+	}
+	strcat(statename, fname);
+
+	return SaveAtariState(statename, "wb", TRUE);
+}
+
+int LoadState(UBYTE *screen)
+{
+	char statename[MAX_FILENAME_LEN];
+	int ret = FALSE;
+
+	strcpy(curr_dir, atari_state_dir);
+	if (FileSelector(screen, curr_dir, statename))
+		ret = ReadAtariState(statename, "rb");
+
+	return ret;
+}
+
+void ui(UBYTE *screen)
 {
 	static int initialised = FALSE;
 	int option = 0;
 	int done = FALSE;
 
-	const int nitems = 7;
-	char *menu[7] =
+	char *menu[] =
 	{
 		"About the Emulator",
 		"Select System",
 		"Disk Management",
 		"Cartridge Management",
+		"Run EXE directly",
+		"Save State",
+		"Load State",
+		"Back to emulated Atari",
 		"Power On Reset (Warm Start)",
 		"Power Off Reset (Cold Start)",
 		"Exit Emulator"
 	};
+	const int nitems = sizeof(menu) / sizeof(menu[0]);
 
 	ui_is_active = TRUE;
 #ifdef WIN32
@@ -1091,10 +1158,7 @@ void ui(UBYTE * screen)
 #endif
 	/* Sound_Active(FALSE); */
 	if (!initialised) {
-		if (mach_xlxe)
-			memcpy(charset, atarixl_os + 0x2000, 8192);
-		else
-			memcpy(charset, memory + 0xe000, 8192);
+		get_charset(charset);
 		initialised = TRUE;
 	}
 	while (!done) {
@@ -1109,7 +1173,7 @@ void ui(UBYTE * screen)
 
 		switch (option) {
 		case -2:
-		case -1:
+		case -1:		/* ESC key */
 			done = TRUE;
 			break;
 		case 0:
@@ -1125,12 +1189,27 @@ void ui(UBYTE * screen)
 			CartManagement(screen);
 			break;
 		case 4:
-			Warmstart();
+			if (RunExe(screen))
+				done = TRUE;	/* reboot immediately */
 			break;
 		case 5:
-			Coldstart();
+			SaveState(screen);
 			break;
 		case 6:
+			LoadState(screen);
+			break;
+		case 7:
+			done = TRUE;	/* back to emulator */
+			break;
+		case 8:
+			Warmstart();
+			done = TRUE;	/* reboot immediately */
+			break;
+		case 9:
+			Coldstart();
+			done = TRUE;	/* reboot immediately */
+			break;
+		case 10:
 #ifdef WIN32
 			PostMessage(MainhWnd, WM_CLOSE, 0, 0L);
 			hThread = 0L;

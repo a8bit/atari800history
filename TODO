@@ -6,10 +6,6 @@ o The obsolete variable "countdown_rate" is still in use within
   to do it without an Amiga to check it. I've left it defined in "atari.c"
   so that there are no linker errors on the Amiga.
 
-o A new feature that would allow user to "freeze" the emulated program,
-  save everything to disk and later restore the emulator in the same state.
-  Idea invented by Rich so he hopefully will write the code as well :-)
-
 o enable digitised sound in the non-Allegro DOS port (Allegro version of A800
   already does support the digitised sound). The same applies to keyclick sound.
 

@@ -15,8 +15,6 @@
  *       scanline_ptr.
  */
 
-static char *rcsid = "$Id: atari_x11.c,v 1.45 1998/02/21 14:53:17 david Exp $";
-
 #ifdef XVIEW
 #include <xview/xview.h>
 #include <xview/frame.h>
@@ -186,8 +184,8 @@ static int npoints = 0;
 static XPoint points[NPOINTS];
 static XRectangle rectangles[NRECTS];
 
-static int keyboard_consol;
-static int menu_consol;
+static int keyboard_consol = 7;
+static int menu_consol = 7;
 static int screen_dump = 0;
 
 /*
@@ -206,6 +204,8 @@ int GetKeyCode(XEvent * event)
 	KeySym keysym;
 	char buffer[128];
 	int keycode = AKEY_NONE;
+
+	keyboard_consol = 7;
 
 	XLookupString((XKeyEvent *) event, buffer, 128,
 				  &keysym, &keyboard_status);
@@ -2367,7 +2367,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		exit(1);
 	}
 
-	consol = 7;
+	keyboard_consol = 7;
 
 	if (x11bug) {
 		printf("Initial X11 controller configuration\n");
@@ -2911,6 +2911,5 @@ int Atari_CONSOL(void)
 	else {
 		temp = keyboard_consol;
 	}
-
 	return temp;
 }

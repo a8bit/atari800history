@@ -43,13 +43,20 @@ typedef enum {
 	Atari5200
 } Machine;
 
+#define LED_NO_UNIT		0x08
+#define LED_READ		0x10
+#define LED_WRITE		0x20
+#define LED_OTHER		0x40
+
 extern TVmode tv_mode;
 extern Machine machine;
 extern int verbose;
 
+#define FALSE	0
+#define TRUE	1
 #define ATARI_WIDTH  (384)
 #define ATARI_HEIGHT (192 + 24 + 24)
-#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.7"
+#define ATARI_TITLE  "Atari 800 Emulator, Version 0.9.8"
 
 #define NO_CART 0
 #define NORMAL8_CART 1
@@ -100,6 +107,27 @@ enum ESCAPE {
 	ESC_HHSTAT = 0xc4,
 	ESC_HHSPEC = 0xc5,
 	ESC_HHINIT = 0xc6
+};
+
+/* 
+   =================
+   ATR Info
+   =================
+ */
+ 
+#define	MAGIC1	0x96
+#define	MAGIC2	0x02
+
+struct ATR_Header {
+	unsigned char magic1;
+	unsigned char magic2;
+	unsigned char seccountlo;
+	unsigned char seccounthi;
+	unsigned char secsizelo;
+	unsigned char secsizehi;
+	unsigned char hiseccountlo;
+	unsigned char hiseccounthi;
+	unsigned char gash[8];
 };
 
 /*
@@ -320,6 +348,15 @@ enum ESCAPE {
 #define AKEY_CIRCUMFLEX 0x47
 #define AKEY_BACKSLASH 0x46
 #define AKEY_BAR 0x4f
+#define AKEY_CLEAR (AKEY_SHFT | AKEY_LESS)
+#define AKEY_CARET (AKEY_SHFT | AKEY_ASTERISK )
+#define AKEY_F1 0x03
+#define AKEY_F2 0x04
+#define AKEY_F3	0x13
+#define AKEY_F4 0x14
+
+/* Following keys cannot be read with both shift and control pressed:
+   J K L ; + * Z X C V B F1 F2 F3 F4 HELP	 */
 
 void EnablePILL(void);
 int Insert_8K_ROM(char *filename);

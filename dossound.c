@@ -4,7 +4,6 @@
 #include "pokeysnd.h"
 #include "allegro.h"
 extern int timesync;
-static char *rcsid = "$Id: sound.c,v 1.2 1997/04/18 22:23:38 david Exp $";
 int speed_count = 0;
 
 #define FALSE 0

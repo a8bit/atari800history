@@ -8,8 +8,6 @@
 #include "atari.h"
 #include "prompts.h"
 
-static char *rcsid = "$Id: configure.c,v 1.20 1998/02/21 14:56:45 david Exp $";
-
 jmp_buf jmpbuf;
 
 void bus_err()

@@ -71,7 +71,7 @@ main(int argc, char *argv[], char *envp[])
 	}
 	memset(image, 0, 65536);
 
-	fd = open(in_filename, O_RDONLY, 0777);
+	fd = open(in_filename, O_RDONLY | O_BINARY, 0777);
 	if (fd == -1) {
 		perror(in_filename);
 		exit(1);

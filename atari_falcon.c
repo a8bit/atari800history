@@ -13,12 +13,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>		/* for free */
-// #include <linea.h>
 #include <falcon.h>		/* for VsetRGB */
+#include "xcb.h"		/* for NOVA screensaver */
 
 #include "cpu.h"
 #include "colours.h"
 #include "config.h"
+#include "antic.h"		/* for BITPL_SCR */
 #include "platform.h"
 #include "monitor.h"
 #include "log.h"
@@ -51,11 +52,11 @@ int get_cookie(long cookie, long *value)
 
 /* -------------------------------------------------------------------------- */
 
-#ifdef CLOCKY_SCREENSAVER
+#ifdef SCREENSAVER
 
 #include "jclkcook.h"
 
-int screensaver(int on)
+int Clocky_SS(int on)
 {
 	long adr;
 	JCLKSTRUCT *jclk;
@@ -82,20 +83,23 @@ int screensaver(int on)
 	return oldval;
 }
 
-static int screensaverval;		/* original value */
-#endif	/* CLOCKY_SCREENSAVER */
+static int Clocky_SSval;		/* original value */
+static int NOVA_SSval;
+#endif	/* SCREENSAVER */
 
 /* -------------------------------------------------------------------------- */
 
 typedef enum {
 	UNKNOWN,
-	NOVA,
+	TT030,
 	F030,
-	TT030
+	Milan,
 } Video_HW;
 
 static Video_HW video_hw = UNKNOWN;
+static int bitplanes = TRUE;	/* Atari 256 colour mode uses 8 bit planes */
 static int gl_vdi_handle;
+XCB	*NOVA_xcb = NULL;
 static int NOVA_double_size = 0;
 static int HOST_WIDTH, HOST_HEIGHT, HOST_PLANES;
 #define EMUL_WIDTH	(NOVA_double_size ? 2*336 : 336)
@@ -119,13 +123,12 @@ static int joyswap = FALSE;
 /* parameters for c2p_uni */
 UWORD screenw, screenh, vramw, vramh;
 UBYTE *odkud, *kam;
+static int delta_screen = FALSE;
+UBYTE *oldscreen = NULL;	/* pointer to previous screen if double buffering is turned on */
 
 /* parameters for DisplayScreen */
 static int skip_N_frames = 0;
 
-#ifdef CPUASS
-#include "cpu_asm.h"
-#endif
 extern void init_kb(void);
 extern void rem_kb(void);
 extern char key_buf[128];
@@ -143,8 +146,9 @@ UWORD mode336x240_videl_settings[25]=
  0x00a8, 0x0186, 0x0005, 0x00c6, 0x0095, 0x000d, 0x0292, 0x0083, \
  0x0096, 0x0000, 0x0000, 0x0419, 0x03ff, 0x003f, 0x003f, 0x03ff, 0x0415};
 
-static int new_videl_mode_valid = 0;
-static int reprogram_VIDEL = 0;
+static int force_videl = FALSE;	/* force Atari800 to switch VIDEL into new resolution by direct HW programming */
+static int reprogram_VIDEL = FALSE;
+static int new_videl_mode_valid = FALSE;
 UBYTE *new_videoram = NULL;
 
 extern void rplanes(void);
@@ -152,24 +156,45 @@ extern void load_r(void);
 extern void save_r(void);
 extern ULONG *p_str_p;
 
+ULONG f030coltable[256];
+ULONG f030coltable_backup[256];
+ULONG *f030_coltable_ptr;
 long RGBcoltable[256], RGBcoltable_backup[256];
 int coltable[256][3], coltable_backup[256][3];
+
+void get_colors_on_f030(void)
+{
+	int i;
+	ULONG *x = (ULONG *) 0xff9800;
+
+	for (i = 0; i < 256; i++)
+		f030_coltable_ptr[i] = x[i];
+}
+
+void set_colors_on_f030(void)
+{
+	int i;
+	ULONG *x = (ULONG *) 0xff9800;
+
+	for (i = 0; i < 256; i++)
+		x[i] = f030_coltable_ptr[i];
+}
 
 void set_colors(int new)
 {
 	int i;
 
-	switch(video_hw) {
-		case F030:
-//			VsetRGB(0, 256, new ? RGBcoltable : RGBcoltable_backup);
-//			break;
-		case TT030:
-//			Esetpalette();
-//			break;
-		default:
-			for(i=0; i<256; i++) {
-				vs_color(gl_vdi_handle, i, new ? coltable[i] : coltable_backup[i]);
-		}
+	if (reprogram_VIDEL) {
+		if (new)
+			f030_coltable_ptr = f030coltable;
+		else
+			f030_coltable_ptr = f030coltable_backup;
+		Supexec(set_colors_on_f030);
+		// VsetRGB(0, 256, new ? RGBcoltable : RGBcoltable_backup);
+	}
+	else {
+		for(i=0; i<256; i++)
+			vs_color(gl_vdi_handle, i, new ? coltable[i] : coltable_backup[i]);
 	}
 }
 
@@ -177,17 +202,14 @@ void save_original_colors(void)
 {
 	int i;
 
-	switch(video_hw) {
-		case F030:
-//			VgetRGB(0, 256, RGBcoltable_backup);
-//			break;
-		case TT030:
-			// Egetpalette
-//			break;
-		default:
-			for(i=0; i<256; i++) {
-				vq_color(gl_vdi_handle, i, 1, coltable_backup[i]);
-		}
+	if (reprogram_VIDEL) {
+		f030_coltable_ptr = f030coltable_backup;
+		Supexec(get_colors_on_f030);
+		// VgetRGB(0, 256, RGBcoltable_backup);
+	}
+	else {
+		for(i=0; i<256; i++)
+			vq_color(gl_vdi_handle, i, 1, coltable_backup[i]);
 	}
 }
 
@@ -212,6 +234,14 @@ void SetupEmulatedEnvironment(void)
 	Supexec(init_kb);	/* our keyboard routine */
 
 	Bconout(4, 0x14);	/* joystick init */
+
+#ifdef BITPL_SCR
+	if (delta_screen) {
+		if (atari_screen_b != NULL) {
+			memset(atari_screen_b, 0, ((ATARI_HEIGHT + 16) * ATARI_WIDTH));
+		}
+	}
+#endif
 }
 
 void ShutdownEmulatedEnvironment(void)
@@ -246,9 +276,18 @@ void Atari_Initialise(int *argc, char *argv[])
 		}
 		else if (strcmp(argv[i], "-joyswap") == 0)
 			joyswap = TRUE;
+		else if (strcmp(argv[i], "-videl") == 0)
+			force_videl = TRUE;
+		else if (strcmp(argv[i], "-double") == 0)
+			NOVA_double_size = TRUE;
+		else if (strcmp(argv[i], "-delta") == 0)
+			delta_screen = TRUE;
 		else {
 			if (strcmp(argv[i], "-help") == 0) {
 				printf("\t-interlace x  Generate screen only every number-th frame\n");
+				printf("\t-joyswap      Exchange joysticks\n");
+				printf("\t-videl        direct VIDEL programming (Falcon/VGA only)\n");
+				printf("\t-delta        delta screen output (differences only)\n");
 			}
 
 			argv[j++] = argv[i];
@@ -262,6 +301,7 @@ void Atari_Initialise(int *argc, char *argv[])
 		int r = (colortable[i] >> 18) & 0x3f;
 		int g = (colortable[i] >> 10) & 0x3f;
 		int b = (colortable[i] >> 2) & 0x3f;
+		f030coltable[i] = (r << 26) | (g << 18) | (b << 2);
 		RGBcoltable[i] = (r << 16) | (g << 8) | b;
 		coltable[i][0] = r * 1000 / 64;
 		coltable[i][1] = g * 1000 / 64;
@@ -278,13 +318,18 @@ void Atari_Initialise(int *argc, char *argv[])
 		case 3:
 			video_hw = F030;
 			break;
+		case 4:
+			video_hw = Milan;
+			bitplanes = FALSE;
+			break;
 		default:
 			video_hw = UNKNOWN;
+			bitplanes = FALSE;
 	}
 
 	/* check for NOVA graphics card */
-	if (get_cookie('NOVA', NULL))
-		video_hw = NOVA;
+	if (get_cookie('NOVA', &NOVA_xcb))
+		bitplanes = FALSE;
 
 	/* GEM init */
 	appl_init();
@@ -305,7 +350,24 @@ void Atari_Initialise(int *argc, char *argv[])
 	vq_extnd(gl_vdi_handle, 1, work_out);
 	HOST_PLANES = work_out[4];
 
-	if (HOST_PLANES == 8 && HOST_WIDTH >= 320 && HOST_HEIGHT >= ATARI_HEIGHT) {
+	if (force_videl && video_hw == F030) {	/* we may switch VIDEL directly */
+		bitplanes = TRUE;
+
+		/* save original VIDEL settings */
+		p_str_p = (ULONG *) original_videl_settings;
+		Supexec(save_r);
+
+		if ((new_videoram = (UBYTE *)Mxalloc((336UL*ATARI_HEIGHT), 0)) == NULL) {
+			form_alert(1, "[1][Error allocating video memory ][ OK ]");
+			exit(-1);
+		}
+
+		/* create new graphics mode 336x240 in 256 colors */
+		reprogram_VIDEL = 1;
+		vramw = screenw = 336;
+		vramh = screenh = ATARI_HEIGHT;
+	}
+	else if (HOST_PLANES == 8 && HOST_WIDTH >= 320 && HOST_HEIGHT >= ATARI_HEIGHT) {
 		/* current resolution is OK */
 		vramw = HOST_WIDTH;
 		vramh = HOST_HEIGHT;
@@ -319,25 +381,10 @@ void Atari_Initialise(int *argc, char *argv[])
 		screenh = ATARI_HEIGHT;
 	}
 	else {
-		if (video_hw == F030) {	/* we may switch VIDEL directly */
-			/* save original VIDEL settings */
-			p_str_p = (ULONG *) original_videl_settings;
-			Supexec(save_r);
-
-			if ((new_videoram = (UBYTE *)Mxalloc((336UL*ATARI_HEIGHT), 0)) == NULL) {
-				form_alert(1, "[1][Error allocating video memory ][ OK ]");
-				exit(-1);
-			}
-
-			/* create new graphics mode 336x240 in 256 colors */
-			reprogram_VIDEL = 1;
-			vramw = screenw = 336;
-			vramh = screenh = ATARI_HEIGHT;
-		}
-		else { /* non-Falcon hardware */
-			form_alert(1, "[1][Atari800 emulator needs |320x240 or higher res|in 256 colors][ OK ]");
-			exit(-1);
-		}
+		/* we may also try to switch into proper resolution using XBios call and then
+		   reinitialize VDI - we've been told it would work OK */
+		form_alert(1, "[1][Atari800 emulator needs |320x240 or higher res|in 256 colors][ OK ]");
+		exit(-1);
 	}
 
 	/* lock GEM */
@@ -346,8 +393,12 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	save_original_colors();
 
-#ifdef CLOCKY_SCREENSAVER
-	screensaverval = screensaver(0);	/* turn off Clocky's screen saver */
+#ifdef SCREENSAVER
+	Clocky_SSval = Clocky_SS(0);	/* turn off Clocky's screen saver */
+	if (NOVA_xcb) {
+		NOVA_SSval = NOVA_xcb->blnk_time;
+		NOVA_xcb->blnk_time = 0;
+	}
 #endif
 
 	Original_Log_base = Logbase();
@@ -357,9 +408,7 @@ void Atari_Initialise(int *argc, char *argv[])
 
 	consol = 7;
 
-#ifdef CPUASS
-	CPU_INIT();
-#endif
+	CPU_Initialise();
 
 #ifdef DMASOUND
 	Sound_Initialise(argc, argv);
@@ -400,8 +449,10 @@ int Atari_Exit(int run_monitor)
 	/* GEM exit */
 	appl_exit();
 
-#ifdef CLOCKY_SCREENSAVER
-	screensaver(screensaverval);
+#ifdef SCREENSAVER
+	Clocky_SS(Clocky_SSval);
+	if (NOVA_xcb)
+		NOVA_xcb->blnk_time = NOVA_SSval;
 #endif
 
 	return 0;
@@ -427,8 +478,27 @@ void Atari_DisplayScreen(UBYTE *screen)
 
 	odkud = screen;
 	kam = Logbase();
+#ifdef BITPL_SCR
+	oldscreen = atari_screen_b;
+#endif
 
-	if (video_hw == NOVA) {
+	if (bitplanes) {
+		rplanes();
+#ifdef BITPL_SCR
+		if (delta_screen) {
+			/* switch between screens to enable delta output */
+			if (atari_screen==atari_screen1) {
+				atari_screen = atari_screen2;
+				atari_screen_b = atari_screen1;
+			}
+			else {
+				atari_screen = atari_screen1;
+				atari_screen_b = atari_screen2;
+			}
+		}
+#endif
+	}
+	else {
 		UBYTE *ptr_from = screen + 24;
 		UBYTE *ptr_dest = kam + CENTER;
 		int j;
@@ -472,9 +542,6 @@ void Atari_DisplayScreen(UBYTE *screen)
 			ptr_from += ATARI_WIDTH-336;
 			ptr_dest += HOST_WIDTH-EMUL_WIDTH;
 		}
-	}
-	else {
-		rplanes();
 	}
 }
 
@@ -524,18 +591,32 @@ int Atari_Keyboard(void)
 	scancode = 0;
 
 	if (stick0 == STICK_CENTRE && trig0 == 1) {
-		for (i = 1; i <= 0x72; i++)		/* test vsech klaves postupne */
+		for (i = 1; i <= 0x72; i++)	{	/* search for pressed key */
 			if (key_buf[i]) {
-				if (i == 0x1d || i == 0x2a || i == 0x36)	/* prerazovace preskoc */
+				if (i == 0x1d || i == 0x2a || i == 0x36		/* Shift, Control skip */
+					|| i == 0x3c || i == 0x3d || i == 0x3e)	/* F2, F3, F4 skip */
 					continue;
 				scancode = i;
 				break;
 			}
+		}
 	}
 
-	if (scancode) {
+	if (key_buf[0x3c])	/* F2 */
+		consol &= 0x03;	/* OPTION key ON */
+	else
+		consol |= 0x04;	/* OPTION key OFF */
+	if (key_buf[0x3d])	/* F3 */
+		consol &= 0x05;	/* SELECT key ON */
+	else
+		consol |= 0x02;	/* SELECT key OFF */
+	if (key_buf[0x3e])	/* F4 */
+		consol &= 0x06;	/* START key ON */
+	else
+		consol |= 0x01;	/* START key OFF */
 
-		/* precti stisknutou klavesu */
+	if (scancode) {
+		/* read ASCII code of pressed key */
 		if (SHIFT_KEY)
 			keycode = *(UBYTE *) (key_tab->shift + scancode);
 		else
@@ -925,18 +1006,6 @@ int Atari_Keyboard(void)
 				break;
 			case 0x62:			/* Help */
 				keycode = AKEY_HELP;
-				break;
-			case 0x3c:			/* F2 */
-				consol &= 0x03;
-				keycode = AKEY_NONE;
-				break;
-			case 0x3d:			/* F3 */
-				consol &= 0x05;
-				keycode = AKEY_NONE;
-				break;
-			case 0x3e:			/* F4 */
-				consol &= 0x06;
-				keycode = AKEY_NONE;
 				break;
 			case 0x3f:			/* F5 */
 				keycode = SHIFT_KEY ? AKEY_COLDSTART : AKEY_WARMSTART;

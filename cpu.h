@@ -12,15 +12,19 @@
 #define Z_FLAG 0x02
 #define C_FLAG 0x01
 
+void CPU_Initialise(void);		/* used in the assembler version of cpu.c only */
 void CPU_GetStatus(void);
 void CPU_PutStatus(void);
 void CPU_Reset(void);
-void SetRAM(int addr1, int addr2);
-void SetROM(int addr1, int addr2);
-void SetHARDWARE(int addr1, int addr2);
 void NMI(void);
-void GenerateIRQ(void);
 int GO(int cycles);
+void GenerateIRQ(void);
+
+#ifdef CPUASS
+extern void CPU_INIT(void);
+extern void CPUGET(void);		/* put from CCR, N & Z FLAG into regP */
+extern void CPUPUT(void);		/* put from regP into CCR, N & Z FLAG */
+#endif
 
 extern UWORD regPC;
 extern UBYTE regA;
@@ -43,8 +47,6 @@ extern UBYTE regX;
 #define ClrZ regP&=(~Z_FLAG)
 #define SetC regP|=C_FLAG
 #define ClrC regP&=(~C_FLAG)
-
-extern UBYTE memory[65536];
 
 extern UBYTE IRQ;
 
